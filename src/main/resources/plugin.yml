@@ -1,0 +1,217 @@
+name: Login
+version: '1.0.0'
+main: me.login.Login
+api-version: '1.21'
+depend: [Vault, Citizens, Skript] # Hard dependencies
+softdepend: [Essentials, PlaceholderAPI, Citizens ] # PAPI is already here, perfect!
+
+commands:
+  order:
+    description: Manage item orders
+    usage: /order create | /order menu | /order manage
+    aliases: [orders]
+
+    # Discord integration
+  discord:
+    description: Link your Minecraft account with Discord
+    usage: /discord link
+  unlink:
+    description: UnLink your Minecraft account with Discord
+    usage: /unlink
+  adminunlink:
+    description: Admin Command to unlink a Minecraft account
+    usage: /adminunlink <player>
+
+    # Login system
+  register:
+    description: Register your account
+    usage: /register <password> <confirmPassword>
+  login:
+    description: Login to your account
+    usage: /login <password>
+  changepassword:
+    description: Change your account password
+    usage: /changepassword <oldPassword> <newPassword>
+  unregister:
+    description: Unregister a player (Admin)
+    usage: /unregister <player>
+  loginhistory:
+    description: Check a player's login history (Admin)
+    usage: /loginhistory <player>
+  checkalt:
+    description: Check for alternative accounts by IP (Admin)
+    usage: /checkalt <player>
+  adminchangepass:
+    description: Force change a player's password and DM them (Admin)
+    usage: /adminchangepass <player>
+
+  # Scoreboard
+  scoreboard:
+    description: Reloads the scoreboard configuration.
+    usage: /scoreboard reload
+    aliases: [sb]
+
+  # Coinflip
+  coinflip:
+    description: Manage coinflip games.
+    usage: /<command> create <heads/tails> <amount> | /<command> manage | /<command> help
+    aliases: [ cf ]
+
+  leaderboard:
+    description: Spawns or reloads leaderboards.
+    usage: /leaderboard <type|reload>
+    permission: leaderboards.admin
+    aliases: [ lb ]
+  killleaderboard:
+    description: Removes leaderboard displays of a specific type.
+    usage: /killleaderboard <type|all>
+    permission: leaderboards.admin
+    aliases: [ klb, removeleaderboard ]
+
+  # ADDED LAGCLEAR COMMAND
+  lagclear:
+    description: Manages the lag clearing utility.
+    usage: /lagclear <clean>
+    permission: lagclear.admin
+
+  # --- STAFF SYSTEM COMMANDS ---
+  mute:
+    description: Mutes a player for a specified duration.
+    usage: /mute <player> <duration> <reason>
+    permission: staff.mute
+  muteinfo:
+    description: Checks a player's active mute status.
+    usage: /muteinfo <player>
+    permission: staff.muteinfo
+  unmute:
+    description: Unmutes a player.
+    usage: /unmute <player>
+    permission: staff.unmute
+  ban:
+    description: Bans a player for a specified duration.
+    usage: /ban <player> <duration> <reason>
+    permission: staff.ban
+  ipban:
+    description: IP-Bans an online player for a specified duration.
+    usage: /ipban <player> <duration> <reason>
+    permission: staff.ipban
+  baninfo:
+    description: Checks a player's active ban status.
+    usage: /baninfo <player>
+    permission: staff.baninfo
+  unban:
+    description: Unbans a player (by name/UUID).
+    usage: /unban <player>
+    permission: staff.unban
+  unbanip:
+    description: Unbans an IP address.
+    usage: /unbanip <ip_address>
+    permission: staff.unbanip
+  checkinv:
+    description: Opens a read-only view of a player's inventory.
+    usage: /checkinv <player>
+    permission: staff.checkinv
+  admincheckinv:
+    description: Opens a view of a player's inventory, allowing item removal.
+    usage: /admincheckinv <player>
+    permission: staff.admincheckinv
+  # --- END STAFF SYSTEM COMMANDS ---
+
+  withdrawhearts:
+    description: Withdraws hearts as items.
+    usage: /withdrawhearts <amount>
+    permission: lifesteal.withdraw
+  lsgive:
+    description: (Admin) Gives you heart or beacon items.
+    usage: /lsgive <heart|revive_beacon> <amount>
+    permission: lifesteal.admin.give
+  sethearts:
+    description: (Admin) Sets a player's heart count.
+    usage: /sethearts <player> <amount>
+    permission: lifesteal.admin.set
+  checkhearts:
+    description: Checks a player's heart count.
+    usage: /checkhearts <player>
+    permission: lifesteal.check
+
+permissions:
+  logincore.admin:
+    description: Allows use of /unregister
+    default: op
+  logincore.loginhistory:
+    description: Allows use of /loginhistory
+    default: op
+  logincore.checkalt:
+    description: Allows use of /checkalt
+    default: op
+  logincore.adminchangepass:
+    description: Allows use of /adminchangepass
+    default: op
+
+  discord.unlink.admin:
+    description: Allows use of /adminunlink
+    default: op
+
+  login.scoreboard.reload:
+    description: Allows use of /scoreboard reload command.
+    default: op
+
+  leaderboards.admin:
+    description: Allows users to create and manage leaderboards.
+    default: op
+
+  # ADDED LAGCLEAR PERMISSION
+  lagclear.admin:
+    description: Allows use of the /lagclear command.
+    default: op
+
+  # --- STAFF SYSTEM PERMISSIONS ---
+  staff.staff:
+    description: Receives staff-wide broadcast messages.
+    default: op
+  staff.mute:
+    description: Allows muting players.
+    default: op
+  staff.muteinfo:
+    description: Allows checking mute status.
+    default: op
+  staff.unmute:
+    description: Allows unmuting players.
+    default: op
+  staff.ban:
+    description: Allows banning players.
+    default: op
+  staff.ipban:
+    description: Allows IP banning players.
+    default: op
+  staff.baninfo:
+    description: Allows checking ban status.
+    default: op
+  staff.unban:
+    description: Allows unbanning players.
+    default: op
+  staff.unbanip:
+    description: Allows unbanning IPs.
+    default: op
+  staff.checkinv:
+    description: Allows read-only inventory checks.
+    default: op
+  staff.admincheckinv:
+    description: Allows admin inventory checks (item removal).
+    default: op
+  # --- END STAFF SYSTEM PERMISSIONS ---
+  lifesteal.withdraw:
+    description: Allows player to withdraw hearts.
+    default: op
+  lifesteal.check:
+    description: Allows player to check heart counts.
+    default: op
+  lifesteal.revive:
+    description: Allows player to use the revive beacon.
+    default: op
+  lifesteal.admin.give:
+    description: Allows admin to get heart items.
+    default: op
+  lifesteal.admin.set:
+    description: Allows admin to set heart counts.
+    default: op

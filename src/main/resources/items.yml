@@ -1,0 +1,20 @@
+# items.yml
+# This file stores the display names and lores for custom lifesteal items.
+# You can use MiniMessage format for colors and styling.
+# <red>, <green>, <#FF00FF>, <gradient:#RRGGBB:#RRGGBB>, <bold>, <italic>, etc.
+
+heart-item:
+  name: "<red><b>Heart</b></red>"
+  lore:
+    - "<gray>A fragment of a player's life."
+    - ""
+    - "<yellow>Right-click to redeem</yellow>"
+    - "<yellow>and permanently gain one heart.</yellow>"
+
+revive-beacon:
+  name: "<aqua><b>Revive Beacon</b></aqua>"
+  lore:
+    - "<gray>A sacred artifact."
+    - ""
+    - "<yellow>Place this beacon</yellow>"
+    - "<yellow>to open the revive menu.</yellow>"

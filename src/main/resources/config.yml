@@ -1,0 +1,156 @@
+# ============================
+# Discord Link Configuration
+# ============================
+
+bot-token: "MTQzMDc2MjY4NTE2NjkxMTUyOA.GZt93l.l6s8UybUr6nWP1ihsyy1l3lc7kytaTXr9LjG_g"
+
+normal-bot-channel: 1434006801011048621
+staff-bot-channel: 1434006967357145168
+
+verification-channel-id: 1430953529463279696
+verified-role-id: 1430766504575635508
+unverified-role-id: 1430779094077014066
+
+ranks:
+  vip: 112233445566778899
+  elite: 223344556677889900
+  legend: 334455667788990011
+
+code-expiry-seconds: 60
+
+coinflip_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>§f: "
+server_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>: "
+server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
+
+discord-server-link: "your-discord.gg/invite"
+
+login-book:
+  enabled: true
+  title: "<green>Welcome!"
+  author: "<gold>MineAurora"
+  # Each line here will be a new line on the *first page* of the book.
+  # MiniMessage is supported.
+  pages:
+    - "Welcome to <server_prefix>!"
+    - "" # This creates a blank line
+    - "<blue><u>Gamemodes:</u></blue>"
+    - "<click:run_command:/server survival><hover:show_text:'Click to join Survival!'>[Survival]</click></hover>"
+    - "<click:run_command:/server creative><hover:show_text:'Click to join Creative!'>[Creative]</click></hover>"
+    -
+# ============================
+# Logging Configuration
+# ============================
+link-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+login-system-log-webhook: "https://discord.com/api/webhooks/1430931979855204385/vQm7ko_6IOuUPw0fhBcvDijuDMoM7JAbEKoC61BB47rfyRrV6vcaAc3IZ397P6w5zGbM"
+order-system-log-webhook: "https://discord.com/api/webhooks/1431235466828578941/6zfJ6mOi6AQl8o4IrHfu9RYiwjRPwIclWVWZWYraPypYNcouo24CeyE7iLWooi2TOYHD"
+coinflip-system-log-webhook: "https://discord.com/api/webhooks/1431926330605441108/fvd7L52B5E5Jyv2wqHqSewaVSWzbuyqoQ_EnOGdTlYVC0J2QkHAvzGc7kIsLN78_sm_P"
+# ============================
+# Order System Configuration
+# ============================
+order-duration-days: 4
+default-order-limit: 3
+elite-order-limit: 5
+ace-order-limit: 7
+overlord-order-limit: 9
+immortal-order-limit: 11
+supreme-order-limit: 13
+phantom-order-limit: 15
+
+# =======================================================
+# Scoreboard Configuration - Edit your scoreboards here!
+# =======================================================
+scoreboard:
+  # Scoreboard for the "hub" world
+  hub:
+    title: "&6&l✦ &e&lALPHA &b&lMC &7||  &a%server_online% &6&l✦"
+    # --- NEW: List of worlds where this scoreboard applies ---
+    worlds:
+      - "hub"
+    # --- END NEW ---
+    lines:
+      - '  &7⌚ %localtime_time_dd/MM/yyyy HH:mm%'
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+      - '&6&l╏ &fUser: &a%player_name%'
+      - '&6&l╏ &fRank: &r%vault_prefix%'
+      - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
+      - '&6&l╏ &fPing: &a%player_ping%'
+      - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
+      - '&r'
+      - '      &eplay.aplhamc.fun  '
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+
+  # Scoreboard for lifesteal and other worlds
+  lifesteal:
+    title: "&6&l✦ &e&lALPHA &b&lMC &7||  &a%server_online% &6&l✦"
+    # --- NEW: List of worlds where this scoreboard applies ---
+    worlds:
+      - "lifesteal"
+      - "arena"
+      - "world_nether" # Assuming default Nether world name
+      - "world_the_end" # Assuming default End world name
+      - "normal_world"
+    # --- END NEW ---
+    lines:
+      - '  &7⌚ %localtime_time_dd/MM/yyyy HH:mm%'
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+      - '&6Info &7: &a%player_name%'
+      - '&6&l╏ &fRank: &r%vault_prefix%'
+      - '&6&l╏ &fMoney: &a%vault_eco_balance_formatted%'
+      - "&6&l╏ &fLevel: &a{lifesteal_level_%player's uuid%}"
+      - '&6&l╏ &fHeart: &a%player_health_rounded%'
+      - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
+      - '&6&l╏ &fPing: &a%player_ping%'
+      - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
+      - '&r'
+      - '      &eplay.aplhamc.fun  '
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+
+leaderboards:
+  # The %nl% placeholder will be replaced with a newline.
+  # Placeholders: %rank%, %player%, %value%
+
+  # This value controls the footer text. 60s = 1 minute.
+  refresh-seconds: 60
+
+  kills:
+    # --- ADDED LINE BREAK AND DIVIDER ---
+    title: "<gradient:gold:yellow>⚡ Top Kills Lifetime ⚡</gradient>%nl%<gray>---------------</gray>"
+    line-format: "<yellow>#%rank%. <white>%player% <dark_gray>| <gold>%value%"
+    empty-line-format: "<yellow>#%rank%. <white>N/A <dark_gray>| <gold>N/A"
+    # --- ADDED DIVIDER AND LINE BREAK ---
+    footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+
+  deaths:
+    title: "<gradient:red:dark_red>☠ Top Deaths Lifetime ☠</gradient>%nl%<gray>---------------</gray>"
+    line-format: "<red>#%rank%. <white>%player% <dark_gray>| <gray>%value%"
+    empty-line-format: "<red>#%rank%. <white>N/A <dark_gray>| <gray>N/A"
+    footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+
+  playtime:
+    # --- CHANGE THIS ---
+    # title: "&#54DAF4B&#54C8EBi..." (This will NOT work anymore)
+    # --- TO THIS ---
+    title: "<gradient:aqua:white>Most Time Played</gradient>%nl%<gray>---------------</gray>"
+
+    line-format: "<gray>#%rank% <white>%player% | %value% Hours"
+    empty-line-format: "<gray>#%rank% <white>N/A | N/A Hours"
+    footer: "<gray>---------------</gray>%nl%<dark_gray>Refreshes every %refresh-seconds%s"
+    # ...
+
+  balance:
+    title: "<gradient:green:dark_green>Top Balance</gradient>%nl%<gray>---------------</gray>"
+    line-format: "<green>#%rank%. <white>%player% <dark_gray>| <green>%value%"
+    empty-line-format: "<green>#%rank%. <white>N/A <dark_gray>| <green>N/A"
+    footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+
+  credits:
+    title: "<gradient:blue:aqua>Top Credits</gradient>%nl%<gray>---------------</gray>"
+    line-format: "<blue>#%rank%. <white>%player% <dark_gray>| <aqua>%value%"
+    empty-line-format: "<blue>#%rank%. <white>N/A <dark_gray>| <aqua>N/A"
+    footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+
+  lifesteal:
+      title: "<gradient:red:purple>Top Lifesteal Level</gradient>%nl%<gray>---------------</gray>"
+      line-format: "<red>#%rank%. <white>%player% <dark_gray>| <light_purple>%value% ❤"
+      empty-line-format: "<red>#%rank%. <white>N/A <dark_gray>| <light_purple>N/A ❤"
+      footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
