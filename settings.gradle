@@ -1,0 +1,28 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        maven { name = "papermc-repo"; url = "https://repo.papermc.io/repository/maven-public/" }
+    }
+}
+
+rootProject.name = 'Login'
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral() // General dependencies, SignGUI
+        maven { name = "papermc-repo"; url = "https://repo.papermc.io/repository/maven-public/" } // Paper API
+        maven { url 'https://jitpack.io' } // Vault API
+        maven { name = "essentialsx-repo"; url = 'https://repo.essentialsx.net/releases/' } // EssentialsX API
+        maven { name = "placeholderapi-repo"; url = "https://repo.extendedclip.com/content/repositories/placeholderapi/" }
+        maven { name = "skript-repo"; url = "https://repo.skriptlang.org/releases" }
+        maven {
+            name = 'citizens-repo'
+            url = 'https://maven.citizensnpcs.co/repo'
+        }
+
+        // --- THIS IS THE REPO YOU NEED ---
+        maven { name = "kyori-repo"; url = "https://repo.kyori.net/releases" }
+    }
+}
