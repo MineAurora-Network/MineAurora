@@ -2,6 +2,13 @@ package me.login.discordlinking; // Correct package
 
 import club.minnced.discord.webhook.WebhookClient;
 import me.login.Login; // Import from base package
+// --- FIX: ADD IMPORTS ---
+import me.login.discordcommand.DiscordCommandManager;
+import me.login.discordcommand.DiscordCommandRegistrar;
+import me.login.discordcommand.DiscordModConfig;
+import me.login.discordcommand.DiscordModCommands;
+import me.login.discordcommand.DiscordRankCommand;
+// --- END IMPORTS ---
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -10,9 +17,12 @@ import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberJoinEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.exceptions.HierarchyException;
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.dv8tion.jda.api.utils.cache.CacheFlag; // <-- IMPORT ADDED
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
@@ -21,6 +31,7 @@ import org.bukkit.entity.Player;
 
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.EnumSet; // <-- IMPORT ADDED
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -34,16 +45,20 @@ public class DiscordLinking extends ListenerAdapter {
     private final Login plugin;
     private JDA jda;
     private final WebhookClient logWebhook;
+    private final DiscordModConfig modConfig; // <-- FIX: ADDED FIELD
 
     private final Map<String, UUID> verificationCodes = new ConcurrentHashMap<>();
     private final Map<UUID, Long> linkedAccounts = new ConcurrentHashMap<>();
     private final Map<Long, UUID> reverseLinkedAccounts = new ConcurrentHashMap<>();
     private final Map<UUID, Long> codeCooldowns = new ConcurrentHashMap<>();
 
-    public DiscordLinking(Login plugin, WebhookClient logWebhook) {
+    // --- FIX: UPDATED CONSTRUCTOR ---
+    public DiscordLinking(Login plugin, WebhookClient logWebhook, DiscordModConfig modConfig) {
         this.plugin = plugin;
         this.logWebhook = logWebhook;
+        this.modConfig = modConfig; // <-- Store this
     }
+    // --- END FIX ---
 
     public JDA getJDA() { return jda; }
 
@@ -57,26 +72,35 @@ public class DiscordLinking extends ListenerAdapter {
         }
     }
 
+    // --- **FIX: MODIFIED STARTBOT METHOD** ---
     public void startBot(String token) {
         try {
-            JDABuilder builder = JDABuilder.createDefault(token)
+            JDABuilder builder = JDABuilder.createLight(token)
                     .enableIntents(GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
-                    .addEventListeners(this);
-            jda = builder.build().awaitReady();
-            plugin.getLogger().info("Discord Bot is READY!");
+                    .disableCache(EnumSet.of(
+                            CacheFlag.ACTIVITY,
+                            CacheFlag.VOICE_STATE,
+                            CacheFlag.EMOJI,
+                            CacheFlag.STICKER,
+                            CacheFlag.CLIENT_STATUS,
+                            CacheFlag.ONLINE_STATUS,
+                            CacheFlag.SCHEDULED_EVENTS
+                    ))
+                    .addEventListeners(
+                            this,
+                            new DiscordCommandManager(plugin),
+                            new DiscordModCommands(plugin, modConfig),
+                            new DiscordRankCommand(plugin)
+                    );
 
-            // Use the correct DB instance via getter
+            jda = builder.build().awaitReady();
+            plugin.getLogger().info("Discord bot connected successfully and ready!");
+
             plugin.getDatabase().loadAllLinks().forEach((discordId, uuid) -> {
                 linkedAccounts.put(uuid, discordId);
-                // --- THIS IS THE FIX ---
                 reverseLinkedAccounts.put(discordId, uuid);
-                // --- END OF FIX ---
             });
             plugin.getLogger().info("Loaded " + linkedAccounts.size() + " links.");
-
-        } catch (InterruptedException e) {
-            plugin.getLogger().severe("JDA startup interrupted."); Thread.currentThread().interrupt();
-            plugin.getServer().getPluginManager().disablePlugin(plugin);
         } catch (Exception e) {
             plugin.getLogger().severe("Error during JDA startup: " + e.getMessage());
             e.printStackTrace();
@@ -84,12 +108,9 @@ public class DiscordLinking extends ListenerAdapter {
         }
     }
 
-    // --- This method allows Login.java to shut down the bot ---
-    public void shutdown() {
-        if (jda != null) {
-            jda.shutdown(); // Use graceful shutdown
-        }
-    }
+    // --- **END OF FIX** ---
+
+    public void shutdown() { if (jda != null) jda.shutdownNow(); }
 
     public String generateCode(UUID uuid, String playerName) {
         Random random = new Random(); String code;
@@ -235,7 +256,7 @@ public class DiscordLinking extends ListenerAdapter {
         if (reverseLinkedAccounts.containsKey(discordId)) {
             EmbedBuilder eb = new EmbedBuilder().setColor(Color.ORANGE).setTitle("⚠️ Verification Issue")
                     .setDescription(event.getAuthor().getAsMention() + ", Discord account already linked!");
-            channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(10, TimeUnit.SECONDS));
+            channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(15, TimeUnit.SECONDS));
             return;
         }
 

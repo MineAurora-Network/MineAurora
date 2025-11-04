@@ -47,12 +47,6 @@ shadowJar {
     relocate 'club.minnced.discord.webhook', 'me.login.libs.webhook'
     relocate 'org.xerial.sqlite', 'me.login.libs.sqlite'
     relocate 'org.mindrot.jbcrypt', 'me.login.libs.jbcrypt'
-    relocate 'net.dv8tion.jda', 'me.login.libs.jda'
-
-    // We also need to relocate JDA's dependencies
-    relocate 'com.fasterxml.jackson', 'me.login.libs.jackson'
-    relocate 'okio', 'me.login.libs.okio'
-    relocate 'okhttp3', 'me.login.libs.okhttp3'
     relocate 'gnu.trove', 'me.login.libs.trove'
 
     // --- SIMPLIFIED RELOCATION ---

@@ -115,7 +115,7 @@ public class Login extends JavaPlugin implements Listener {
 
     // --- NEW LAGCLEAR FIELD ---
     private LagClearConfig lagClearConfig;
-    private LagClearLogger lagClearLogger; // <-- 2. FIELD ADDED
+    private LagClearLogger lagClearLogger; // <-- FIELD ADDED
     // --- END NEW FIELD ---
 
     // --- LIFESTEAL FIELDS ---
@@ -132,18 +132,10 @@ public class Login extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        saveResource("items.yml", false); // <-- ADDED FOR LIFESTEAL
+        saveResource("items.yml", false);
 
-        // --- NEW LAGCLEAR CONFIG INIT ---
         this.lagClearConfig = new LagClearConfig(this);
-        this.lagClearConfig.saveDefaultConfig(); // Creates lagclear.yml if it doesn't exist
-        this.lagClearLogger = new LagClearLogger(this); // <-- 3. LOGGER INITIALIZED
-        // --- END INIT ---
-
-        // --- NEW DISCORD.YML INIT ---
         this.discordModConfig = new DiscordModConfig(this);
-        // --- END INIT ---
-
         loadCoinflipConfig();
 
         this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3);
@@ -153,7 +145,6 @@ public class Login extends JavaPlugin implements Listener {
             return;
         }
 
-        // --- LUCKPERMS HOOK (ADDED FOR LIFESTEAL) ---
         if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
             RegisteredServiceProvider<LuckPerms> provider = Bukkit.getServicesManager().getRegistration(LuckPerms.class);
             if (provider != null) {
@@ -164,92 +155,58 @@ public class Login extends JavaPlugin implements Listener {
             getLogger().warning("LuckPerms not found! /sethearts rank check will not work.");
             this.luckPermsApi = null;
         }
-        // --- END LUCKPERMS HOOK ---
 
-        this.discordLinkDatabase = new DiscordLinkDatabase(this); /*...*/ discordLinkDatabase.connect(); if (discordLinkDatabase.getConnection() == null) { disableWithError("Link DB failed."); return; }
-        this.loginDatabase = new LoginDatabase(this); /*...*/ loginDatabase.connect(); if (loginDatabase.getConnection() == null) { disableWithError("Login DB failed."); return; }
-        this.ordersDatabase = new OrdersDatabase(this); /*...*/ ordersDatabase.connect(); if (ordersDatabase.getConnection() == null) { disableWithError("Orders DB failed."); return; }
-        this.coinflipDatabase = new CoinflipDatabase(this); coinflipDatabase.connect(); if (coinflipDatabase.getConnection() == null) { disableWithError("Coinflip DB failed."); return; }
+        this.discordLinkDatabase = new DiscordLinkDatabase(this);
+        discordLinkDatabase.connect();
+        if (discordLinkDatabase.getConnection() == null) { disableWithError("Link DB failed."); return; }
 
-        // --- STAFF SYSTEM DB INIT ---
+        this.loginDatabase = new LoginDatabase(this);
+        loginDatabase.connect();
+        if (loginDatabase.getConnection() == null) { disableWithError("Login DB failed."); return; }
+
+        this.ordersDatabase = new OrdersDatabase(this);
+        ordersDatabase.connect();
+        if (ordersDatabase.getConnection() == null) { disableWithError("Orders DB failed."); return; }
+
+        this.coinflipDatabase = new CoinflipDatabase(this);
+        coinflipDatabase.connect();
+        if (coinflipDatabase.getConnection() == null) { disableWithError("Coinflip DB failed."); return; }
+
         this.moderationDatabase = new ModerationDatabase(this);
-        // --- END STAFF SYSTEM DB INIT ---
 
-        // --- LIFESTEAL DATABASE INITIALIZATION (MODIFIED) ---
         this.databaseManager = new DatabaseManager(this);
         if (!this.databaseManager.initializeDatabase()) {
             disableWithError("Failed to initialize Lifesteal database! Disabling plugin.");
             return;
         }
-        // --- FIX: Create tables *after* connecting ---
         this.databaseManager.createTables();
-        // --- END LIFESTEAL DATABASE INITIALIZATION ---
 
         this.linkWebhookClient = initializeWebhook("link-system-log-webhook", "Link-System");
         this.loginWebhookClient = initializeWebhook("login-system-log-webhook", "Login-System");
         this.orderWebhookClient = initializeWebhook("order-system-log-webhook", "Order-System");
         this.coinflipWebhookClient = initializeWebhook("coinflip-system-log-webhook", "Coinflip-System");
-
-        // --- STAFF SYSTEM WEBHOOK INIT ---
         this.staffWebhookClient = initializeWebhook("staff-system-log-webhook", "Staff-System");
-        // --- NEW WEBHOOK INIT ---
         this.discordStaffLogWebhook = initializeWebhook("discord-staff-log-webhook", "Discord-Staff-System");
-        // --- END STAFF SYSTEM WEBHOOK INIT ---
 
-        this.loginSystem = new LoginSystem(this, loginDatabase, discordLinkDatabase, loginWebhookClient); getServer().getPluginManager().registerEvents(loginSystem, this);
+        this.loginSystem = new LoginSystem(this, loginDatabase, discordLinkDatabase, loginWebhookClient);
+        getServer().getPluginManager().registerEvents(loginSystem, this);
 
-        this.discordLinking = new DiscordLinking(this, linkWebhookClient);
-        String botToken = getConfig().getString("bot-token");
-        if (isConfigValueInvalid(botToken, "YOUR_MAIN_BOT_TOKEN_HERE")) {
-            disableWithError("Bot token invalid.");
-            return;
-        }
-        discordLinking.startBot(botToken);
+        this.discordLinking = new DiscordLinking(this, linkWebhookClient, discordModConfig);
 
-        // --- REGISTER DISCORD COMMANDS (MODIFIED) ---
-        if (discordLinking.getJDA() != null) {
-            getLogger().info("Registering Discord slash commands...");
-            try {
-                // 1. Registers MC commands (/profile, /mcmute, etc)
-                discordLinking.getJDA().addEventListener(new DiscordCommandManager(this));
+        this.damageIndicator = new DamageIndicator(this);
+        getServer().getPluginManager().registerEvents(damageIndicator, this);
 
-                // 2. Registers Discord mod commands (/warn, /timeout, etc)
-                discordLinking.getJDA().addEventListener(new DiscordModCommands(this, discordModConfig));
-
-                // 3. Registers Admin commands (/rank)
-                discordLinking.getJDA().addEventListener(new DiscordRankCommand(this));
-
-                // 4. Registers all command definitions with Discord
-                DiscordCommandRegistrar.register(discordLinking.getJDA());
-
-                getLogger().info("Discord slash command listeners registered.");
-            } catch (Exception e) {
-                getLogger().severe("Could not register Discord commands! Error: " + e.getMessage());
-                e.printStackTrace();
-            }
-        } else {
-            getLogger().severe("Could not register Discord commands: JDA object is null! Bot might not have started correctly.");
-        }
-        // --- END DISCORD COMMAND REGISTRATION ---
-
-        this.damageIndicator = new DamageIndicator(this); getServer().getPluginManager().registerEvents(damageIndicator, this);
-
-        // --- ORDER SYSTEM INIT (Preserved) ---
         this.orderSystem = new OrderSystem(this, ordersDatabase, orderWebhookClient);
         this.orderFilling = new OrderFilling(this, orderSystem);
         this.orderMenu = new OrderMenu(this, orderSystem, orderFilling);
         this.orderManage = new OrderManage(this, orderSystem);
         this.orderAdminMenu = new OrderAdminMenu(this, orderSystem);
-        // --- END ---
 
-        // --- COINFLIP INIT (FIXED) ---
         this.coinflipMenu = new CoinflipMenu(this, coinflipDatabase, vaultEconomy);
         this.coinflipSystem = new CoinflipSystem(this, coinflipDatabase, vaultEconomy, coinflipWebhookClient, coinflipMenu.getPlayersChallengingSet());
         this.coinflipMenu.setCoinflipSystem(coinflipSystem);
         this.coinflipManageMenu = new CoinflipManageMenu(this, coinflipDatabase, vaultEconomy);
-        // --- END FIX ---
 
-        // --- Citizens Listener ---
         if (getServer().getPluginManager().getPlugin("Citizens") != null) {
             getServer().getPluginManager().registerEvents(new CoinflipNpcListener(this, coinflipMenu), this);
             getLogger().info("Citizens found, Coinflip NPC listener registered.");
@@ -258,56 +215,39 @@ public class Login extends JavaPlugin implements Listener {
         }
         getServer().getPluginManager().registerEvents(coinflipMenu, this);
         getServer().getPluginManager().registerEvents(coinflipManageMenu, this);
-        // --- End Citizens ---
 
-        // --- (Preserved) Register OrderAdminMenu listener ---
         getServer().getPluginManager().registerEvents(orderAdminMenu, this);
-        // --- END ---
-
-        // --- STAFF SYSTEM LISTENER ---
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
-        // --- END STAFF SYSTEM LISTENER ---
 
-        // --- LEADERBOARD INIT (Preserved) ---
         this.leaderboardManager = new LeaderboardDisplayManager(this);
         long delay = 20L * 10;
         long refreshTicks = 20L * getConfig().getLong("leaderboards.refresh-seconds", 60);
         this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(this, delay, refreshTicks);
 
-        // --- LIFESTEAL INITIALIZATION ---
-        // Database is already initialized and tables are created
         this.itemManager = new ItemManager(this);
         this.lifestealManager = new LifestealManager(this, itemManager, databaseManager);
-        this.deadPlayerManager = new DeadPlayerManager(this, databaseManager); // <-- This is line 276, it will no longer crash
+        this.deadPlayerManager = new DeadPlayerManager(this, databaseManager);
         this.reviveMenu = new ReviveMenu(this, itemManager, deadPlayerManager);
         this.combatLogManager = new CombatLogManager(this, itemManager, lifestealManager);
 
         getServer().getPluginManager().registerEvents(new LifestealListener(this, itemManager, lifestealManager, deadPlayerManager, reviveMenu), this);
         getServer().getPluginManager().registerEvents(combatLogManager, this);
-        // --- END LIFESTEAL INITIALIZATION ---
 
-        registerCommands(); // Register all commands
-
-        getServer().getPluginManager().registerEvents(this, this); // Register events for *this* class (Login.java)
-
-        // --- (Preserved) REGISTER LEADERBOARD PROTECTION LISTENER ---
+        registerCommands();
+        getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new LeaderboardProtectionListener(this.leaderboardManager), this);
 
-        // --- (Preserved) LAGCLEAR INIT ---
         getLogger().info("Initializing ClearLag components...");
-        getServer().getPluginManager().registerEvents(new HopperLimit(this), this); // <-- 4. LISTENER UPDATED
-        getServer().getPluginManager().registerEvents(new ArmorStandLimit(this), this); // <-- 4. LISTENER UPDATED
+        getServer().getPluginManager().registerEvents(new HopperLimit(this), this);
+        getServer().getPluginManager().registerEvents(new ArmorStandLimit(this), this);
         long countdownInterval = 20L;
-        // --- UPDATED CONSTRUCTOR ---
         new CleanupTask(this, this.lagClearConfig).runTaskTimer(this, countdownInterval, countdownInterval);
-        // --- END UPDATE ---
         long tpsCheckInterval = 200L;
         new TPSWatcher(this).runTaskTimer(this, tpsCheckInterval, tpsCheckInterval);
         getLogger().info("ClearLag components enabled.");
 
-        this.scoreboardManager = new ScoreboardManager(this); // Initialize scoreboard
+        this.scoreboardManager = new ScoreboardManager(this);
 
-        // --- (Preserved) Dependency Checks ---
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") == null) {
             getLogger().warning("PlaceholderAPI not found! Scoreboard placeholders will not work.");
         }
@@ -315,8 +255,63 @@ public class Login extends JavaPlugin implements Listener {
             getLogger().warning("Skript not found! Scoreboard variables via SkriptUtils will not work.");
         }
 
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (!isEnabled() || Bukkit.isStopping()) {
+                getLogger().warning("Plugin disabled before Discord startup. Skipping bot init.");
+                return;
+            }
+            Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+                try {
+                    String botToken = getConfig().getString("bot-token");
+                    if (isConfigValueInvalid(botToken, "YOUR_MAIN_BOT_TOKEN_HERE")) {
+                        disableWithError("Bot token invalid.");
+                        return;
+                    }
+
+                    discordLinking.startBot(botToken);
+                    getLogger().info("Discord bot connected successfully and ready.");
+
+                    if (!isEnabled() || Bukkit.isStopping()) {
+                        getLogger().warning("Plugin disabled during Discord startup. Shutting down JDA.");
+                        if (discordLinking.getJDA() != null) {
+                            discordLinking.getJDA().shutdownNow();
+                        }
+                        return;
+                    }
+
+                    Bukkit.getScheduler().runTask(this, () -> {
+                        try {
+                            if (!isEnabled() || Bukkit.isStopping()) {
+                                getLogger().warning("Plugin disabled before post-start steps. Aborting.");
+                                if (discordLinking.getJDA() != null) {
+                                    discordLinking.getJDA().shutdownNow();
+                                }
+                                return;
+                            }
+                            DiscordCommandRegistrar.register(discordLinking.getJDA());
+                            getLogger().info("Discord slash command listeners registered.");
+
+                            long lagClearChannelId = getConfig().getLong("lagclear-log-channel-id", 0);
+                            this.lagClearLogger = this.lagClearLogger = new LagClearLogger(this);
+                            getLogger().info("LagClear Logger wired to shared JDA.");
+                        } catch (Throwable postErr) {
+                            getLogger().severe("Post-start Discord steps failed: " + postErr.getMessage());
+                            postErr.printStackTrace();
+                            if (discordLinking.getJDA() != null) {
+                                discordLinking.getJDA().shutdownNow();
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    getLogger().severe("Async Discord startup failed: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            });
+        }, 20L);
+
         getLogger().info(getName() + " v" + getDescription().getVersion() + " Enabled Successfully!");
-    } // --- End onEnable() ---
+    }
+
 
     // --- Reload method for leaderboards (unchanged) ---
     public void reloadLeaderboards() {
@@ -470,50 +465,81 @@ public class Login extends JavaPlugin implements Listener {
         return false;
     } // --- End onCommand() ---
 
-    // --- onDisable (MODIFIED) ---
+    // --- onDisable (REVISED) ---
     @Override
     public void onDisable() {
-        if (scoreboardManager != null) {
-            if (Bukkit.getOnlinePlayers() != null && !Bukkit.getOnlinePlayers().isEmpty()) {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (player != null && player.isOnline() && player.getScoreboard() != Bukkit.getScoreboardManager().getMainScoreboard()) {
-                        player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+        try {
+            getLogger().info("Shutting down " + getName() + "...");
+
+            // --- Reset scoreboards safely ---
+            if (scoreboardManager != null) {
+                if (Bukkit.getOnlinePlayers() != null && !Bukkit.getOnlinePlayers().isEmpty()) {
+                    for (Player player : Bukkit.getOnlinePlayers()) {
+                        try {
+                            if (player != null && player.isOnline() &&
+                                    player.getScoreboard() != Bukkit.getScoreboardManager().getMainScoreboard()) {
+                                player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+                            }
+                        } catch (Exception ignored) {}
                     }
                 }
             }
+
+            // --- Stop scheduled tasks ---
+            if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
+                this.leaderboardUpdateTask.cancel();
+            }
+
+            // --- LIFESTEAL SHUTDOWN (SAVE DATA) ---
+            if (lifestealManager != null) {
+                lifestealManager.saveAllOnlinePlayerData();
+            }
+            if (combatLogManager != null) {
+                combatLogManager.shutdown();
+            }
+            // --- END LIFESTEAL SHUTDOWN ---
+
+            // --- Close DBs ---
+            if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
+            if (loginDatabase != null) loginDatabase.disconnect();
+            if (ordersDatabase != null) ordersDatabase.disconnect();
+            if (coinflipDatabase != null) coinflipDatabase.disconnect();
+            if (moderationDatabase != null) moderationDatabase.closeConnection(); // --- STAFF SYSTEM ADDITION ---
+            if (databaseManager != null) databaseManager.closeConnection(); // <-- LIFESTEAL DB CLOSE
+
+            // --- Stop JDA first (before webhooks) ---
+            if (discordLinking != null && discordLinking.getJDA() != null) {
+                getLogger().info("Shutting down Discord JDA...");
+                discordLinking.getJDA().shutdownNow();
+            }
+
+            // --- Detach lag logger (shared JDA) ---
+            if (lagClearLogger != null) {
+                lagClearLogger.shutdown(); // currently a no-op, but explicit
+            }
+
+            // --- Close webhooks ---
+            if(linkWebhookClient != null) linkWebhookClient.close();
+            if(loginWebhookClient != null) loginWebhookClient.close();
+            if(orderWebhookClient != null) orderWebhookClient.close();
+            if(coinflipWebhookClient != null) coinflipWebhookClient.close();
+            if(itemManager != null) itemManager.closeWebhook(); // <-- LIFESTEAL WEBHOOK CLOSE
+            if(staffWebhookClient != null) staffWebhookClient.close(); // --- STAFF SYSTEM ADDITION ---
+            if(discordStaffLogWebhook != null) discordStaffLogWebhook.close(); // <-- NEWLY ADDED
+
+            // --- Safety: kill OkHttp TaskRunner global executors ---
+            try {
+                Class<?> taskRunner = Class.forName("okhttp3.internal.concurrent.TaskRunner");
+                Object instance = taskRunner.getDeclaredField("INSTANCE").get(null);
+                taskRunner.getMethod("shutdown").invoke(instance);
+                getLogger().info("OkHttp TaskRunner shut down.");
+            } catch (Throwable ignored) {}
+
+            getLogger().info(getName() + " disabled cleanly.");
+        } catch (Throwable e) {
+            getLogger().severe("Error during onDisable: " + e.getMessage());
+            e.printStackTrace();
         }
-
-        if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
-            this.leaderboardUpdateTask.cancel();
-        }
-
-        // --- LIFESTEAL SHUTDOWN (SAVE DATA) ---
-        if (lifestealManager != null) {
-            lifestealManager.saveAllOnlinePlayerData();
-        }
-        if (combatLogManager != null) {
-            combatLogManager.shutdown();
-        }
-        // --- END LIFESTEAL SHUTDOWN ---
-
-        if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
-        if (loginDatabase != null) loginDatabase.disconnect();
-        if (ordersDatabase != null) ordersDatabase.disconnect();
-        if (coinflipDatabase != null) coinflipDatabase.disconnect();
-        if (moderationDatabase != null) moderationDatabase.closeConnection(); // --- STAFF SYSTEM ADDITION ---
-        if (databaseManager != null) databaseManager.closeConnection(); // <-- LIFESTEAL DB CLOSE
-
-        if(linkWebhookClient != null) linkWebhookClient.close();
-        if(loginWebhookClient != null) loginWebhookClient.close();
-        if(orderWebhookClient != null) orderWebhookClient.close();
-        if(coinflipWebhookClient != null) coinflipWebhookClient.close();
-        if(itemManager != null) itemManager.closeWebhook(); // <-- LIFESTEAL WEBHOOK CLOSE
-        if(staffWebhookClient != null) staffWebhookClient.close(); // --- STAFF SYSTEM ADDITION ---
-        if(discordStaffLogWebhook != null) discordStaffLogWebhook.close(); // <-- NEWLY ADDED
-
-        if (lagClearLogger != null) lagClearLogger.shutdown(); // <-- 5. LOGGER SHUTDOWN ADDED
-
-        getLogger().info(getName() + " Disabled.");
     } // --- End onDisable() ---
 
     // --- Getters (MODIFIED) ---
@@ -549,7 +575,7 @@ public class Login extends JavaPlugin implements Listener {
         return lagClearConfig;
     }
 
-    public LagClearLogger getLagClearLogger() { // <-- 6. GETTER ADDED
+    public LagClearLogger getLagClearLogger() { // <-- GETTER ADDED
         return this.lagClearLogger;
     }
     // --- END GETTER ---
