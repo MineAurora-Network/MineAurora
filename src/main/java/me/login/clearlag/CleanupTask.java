@@ -1,7 +1,11 @@
 package me.login.clearlag;
 
+import me.login.Login; // <-- ADDED
+import net.kyori.adventure.text.Component; // <-- ADDED
+import net.kyori.adventure.text.minimessage.MiniMessage; // <-- ADDED
+import net.kyori.adventure.text.format.NamedTextColor; // <-- ADDED
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
+// import org.bukkit.ChatColor; // <-- REMOVED
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -11,26 +15,35 @@ import java.time.Duration;
 
 public class CleanupTask extends BukkitRunnable {
     private final Plugin plugin;
-    private final LagClearConfig lagClearConfig; // <-- ADDED
+    private final LagClearConfig lagClearConfig;
     private int secondsUntilCleanup = 3 * 60;
 
-    // Titles (re-usable)
-    private final com.destroystokyo.paper.profile.PlayerProfile titleProfile;
+    // --- REPLACED/MODIFIED FIELDS ---
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final net.kyori.adventure.title.Title warningTitle;
     private final net.kyori.adventure.title.Title cleanupTitle;
+    private final Component warningMessage;
+    private final Component cleanupMessage;
+    private final Component doneMessagePrefix;
+    // --- END ---
 
-    // --- CONSTRUCTOR UPDATED ---
     public CleanupTask(Plugin plugin, LagClearConfig lagClearConfig) {
         this.plugin = plugin;
-        this.lagClearConfig = lagClearConfig; // <-- ADDED
+        this.lagClearConfig = lagClearConfig;
 
-        net.kyori.adventure.text.Component warningMain = net.kyori.adventure.text.Component.text("Cleaner", net.kyori.adventure.text.format.NamedTextColor.RED);
-        net.kyori.adventure.text.Component warningSub = net.kyori.adventure.text.Component.text("§fEntities removal in 60 seconds!", net.kyori.adventure.text.format.NamedTextColor.WHITE);
+        // --- Use LagClearConfig for prefixes ---
+        this.warningMessage = lagClearConfig.formatMessage("<white>Entities and dropped items will be cleared in 60 seconds!");
+        this.cleanupMessage = lagClearConfig.formatMessage("<white>Cleaning entities and dropped items now.....");
+        this.doneMessagePrefix = lagClearConfig.formatMessage("<green>Total entities removed: ");
+        // --- END ---
 
-        net.kyori.adventure.text.Component cleanupMain = net.kyori.adventure.text.Component.text("Cleaner", net.kyori.adventure.text.format.NamedTextColor.RED);
-        net.kyori.adventure.text.Component cleanupSub = net.kyori.adventure.text.Component.text("Dropped items and entities have been removed.", net.kyori.adventure.text.format.NamedTextColor.WHITE);
+        // Titles (re-usable, Adventure API)
+        net.kyori.adventure.text.Component warningMain = miniMessage.deserialize("<red>Cleaner</red>");
+        net.kyori.adventure.text.Component warningSub = miniMessage.deserialize("<white>Entities removal in 60 seconds!</white>"); // Legacy §f is fine here
 
-        // Title timings: 20 ticks fade-in, 50 ticks stay, 20 ticks fade-out
+        net.kyori.adventure.text.Component cleanupMain = miniMessage.deserialize("<red>Cleaner</red>");
+        net.kyori.adventure.text.Component cleanupSub = miniMessage.deserialize("<white>Dropped items and entities have been removed.</white>");
+
         net.kyori.adventure.title.Title.Times times = net.kyori.adventure.title.Title.Times.times(
                 Duration.ofMillis(1000), // 20 ticks
                 Duration.ofMillis(2500), // 50 ticks
@@ -39,53 +52,46 @@ public class CleanupTask extends BukkitRunnable {
 
         this.warningTitle = net.kyori.adventure.title.Title.title(warningMain, warningSub, times);
         this.cleanupTitle = net.kyori.adventure.title.Title.title(cleanupMain, cleanupSub, times);
-
-        // Deprecated Spigot API fallback (less ideal)
-        // Note: This part is just for reference; the Adventure API is preferred for 1.21.1
-        // We are fully using the Adventure API above.
-        this.titleProfile = null; // Not needed for Adventure API
     }
 
     @Override
     public void run() {
-        // Decrease timer
         secondsUntilCleanup--;
 
         if (secondsUntilCleanup == 60) {
-            String message = ChatColor.RED + "Cleaner" + ChatColor.WHITE + ": Entities and dropped items will be cleared in 60 seconds!";
-            broadcastToWorlds(message, warningTitle);
+            broadcastToWorlds(warningMessage, warningTitle); // <-- CHANGED
         }
 
         else if (secondsUntilCleanup <= 0) {
-            String message = ChatColor.RED + "Cleaner" + ChatColor.WHITE + ": Cleaning entities and dropped items now.....";
-            broadcastToWorlds(message, cleanupTitle);
+            broadcastToWorlds(cleanupMessage, cleanupTitle); // <-- CHANGED
 
-            // Run the actual cleanup (this must run on the main thread, which a BukkitRunnable does)
-            int removed = EntityCleanup.performCleanup(plugin);
+            // Cast plugin to Login to pass to static method
+            Login login = (Login) plugin;
+            int removed = EntityCleanup.performCleanup(login); // <-- CHANGED
 
-            String plural = removed == 1 ? "entity" : "entities";
-            String doneMessage = ChatColor.RED + "Cleaner§f:" + ChatColor.GREEN + " Total entities removed: " + removed + " " + plural + ".";
-            broadcastToWorlds(doneMessage, null);
+            String plural = removed == 1 ? " entity" : " entities";
+            // Build the final "done" message component
+            Component doneMessage = doneMessagePrefix.append(Component.text(removed + plural, NamedTextColor.GREEN));
+
+            broadcastToWorlds(doneMessage, null); // <-- CHANGED
             secondsUntilCleanup = 3 * 60;
         }
     }
 
-    // --- METHOD UPDATED ---
-    private void broadcastToWorlds(String chatMessage, net.kyori.adventure.title.Title title) {
+    // --- METHOD UPDATED to use Component ---
+    private void broadcastToWorlds(Component chatMessage, net.kyori.adventure.title.Title title) {
         for (String worldName : EntityCleanup.WORLDS_TO_CLEAN) {
             World world = Bukkit.getWorld(worldName);
             if (world != null) {
                 for (Player player : world.getPlayers()) {
-                    // --- NEW: Check player preference ---
                     if (lagClearConfig.getPlayerToggle(player.getUniqueId())) {
-                        if (chatMessage != null && !chatMessage.isEmpty()) {
-                            player.sendMessage(chatMessage);
+                        if (chatMessage != null) {
+                            player.sendMessage(chatMessage); // <-- CHANGED
                         }
                         if (title != null) {
                             player.showTitle(title);
                         }
                     }
-                    // --- END: Check ---
                 }
             }
         }

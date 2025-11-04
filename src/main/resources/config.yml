@@ -1,9 +1,7 @@
-# ============================
-# Discord Link Configuration
-# ============================
+bot-token: "MTQzMDc2MjY4NTE2NjkxMTUyOA.GdY1RK.aCP60jwkSwZXNY_jRstE2J-e-KRRffAe0RhImQ"
+logger-bot-token: "MTQwOTg1NTI5Mjk3NTYxNjAzMg.GoNTrT.re-45vBAnr383bgIihoDrRoAMJOn0JqC6FXedM"
 
-bot-token: "MTQzMDc2MjY4NTE2NjkxMTUyOA.GZt93l.l6s8UybUr6nWP1ihsyy1l3lc7kytaTXr9LjG_g"
-
+lagclear-log-channel-id: "1434707657633169611"
 normal-bot-channel: 1434006801011048621
 staff-bot-channel: 1434006967357145168
 
@@ -21,6 +19,9 @@ code-expiry-seconds: 60
 coinflip_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>§f: "
 server_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>: "
 server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
+cleaner_prefix: "<b><gradient:#F04747:#FF00F6>ᴄʟᴇᴀɴᴇʀ</gradient></b><white>:"
+cleaner_prefix_2: "&x&F&0&4&7&4&7&lᴄ&x&F&3&3&B&6&4&lʟ&x&F&5&2&F&8&1&lᴇ&x&F&8&2&4&9&F&lᴀ&x&F&A&1&8&B&C&lɴ&x&F&D&0&C&D&9&lᴇ&x&F&F&0&0&F&6&lʀ&f:"
+
 
 discord-server-link: "your-discord.gg/invite"
 
@@ -44,6 +45,8 @@ link-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/O
 login-system-log-webhook: "https://discord.com/api/webhooks/1430931979855204385/vQm7ko_6IOuUPw0fhBcvDijuDMoM7JAbEKoC61BB47rfyRrV6vcaAc3IZ397P6w5zGbM"
 order-system-log-webhook: "https://discord.com/api/webhooks/1431235466828578941/6zfJ6mOi6AQl8o4IrHfu9RYiwjRPwIclWVWZWYraPypYNcouo24CeyE7iLWooi2TOYHD"
 coinflip-system-log-webhook: "https://discord.com/api/webhooks/1431926330605441108/fvd7L52B5E5Jyv2wqHqSewaVSWzbuyqoQ_EnOGdTlYVC0J2QkHAvzGc7kIsLN78_sm_P"
+staff-system-log-webhook: "https://discord.com/api/webhooks/1434752732656435281/fJU9bLuiZYdoP6Kdp-gIu47ISsl4rhdrJ29DsCp3ZCvBQvfRU6JLF_53SaAxdcj_M29x"
+discord-staff-log-webhook: "https://discord.com/api/webhooks/1434753213017493588/20Xjj6CooaBc3eoZlcFVnh05fCmv4feIJ6b5A00cTI3rrxytzGKm4M_ATRUIvHKEDhbp"
 # ============================
 # Order System Configuration
 # ============================

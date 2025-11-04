@@ -20,6 +20,7 @@ import me.login.clearlag.LagClearCommand;
 import me.login.clearlag.TPSWatcher;
 import me.login.clearlag.ArmorStandLimit;
 import me.login.clearlag.LagClearConfig;
+import me.login.clearlag.LagClearLogger; // <-- 1. IMPORT ADDED
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -114,6 +115,7 @@ public class Login extends JavaPlugin implements Listener {
 
     // --- NEW LAGCLEAR FIELD ---
     private LagClearConfig lagClearConfig;
+    private LagClearLogger lagClearLogger; // <-- 2. FIELD ADDED
     // --- END NEW FIELD ---
 
     // --- LIFESTEAL FIELDS ---
@@ -135,6 +137,7 @@ public class Login extends JavaPlugin implements Listener {
         // --- NEW LAGCLEAR CONFIG INIT ---
         this.lagClearConfig = new LagClearConfig(this);
         this.lagClearConfig.saveDefaultConfig(); // Creates lagclear.yml if it doesn't exist
+        this.lagClearLogger = new LagClearLogger(this); // <-- 3. LOGGER INITIALIZED
         // --- END INIT ---
 
         // --- NEW DISCORD.YML INIT ---
@@ -292,8 +295,8 @@ public class Login extends JavaPlugin implements Listener {
 
         // --- (Preserved) LAGCLEAR INIT ---
         getLogger().info("Initializing ClearLag components...");
-        getServer().getPluginManager().registerEvents(new HopperLimit(), this);
-        getServer().getPluginManager().registerEvents(new ArmorStandLimit(), this);
+        getServer().getPluginManager().registerEvents(new HopperLimit(this), this); // <-- 4. LISTENER UPDATED
+        getServer().getPluginManager().registerEvents(new ArmorStandLimit(this), this); // <-- 4. LISTENER UPDATED
         long countdownInterval = 20L;
         // --- UPDATED CONSTRUCTOR ---
         new CleanupTask(this, this.lagClearConfig).runTaskTimer(this, countdownInterval, countdownInterval);
@@ -508,6 +511,8 @@ public class Login extends JavaPlugin implements Listener {
         if(staffWebhookClient != null) staffWebhookClient.close(); // --- STAFF SYSTEM ADDITION ---
         if(discordStaffLogWebhook != null) discordStaffLogWebhook.close(); // <-- NEWLY ADDED
 
+        if (lagClearLogger != null) lagClearLogger.shutdown(); // <-- 5. LOGGER SHUTDOWN ADDED
+
         getLogger().info(getName() + " Disabled.");
     } // --- End onDisable() ---
 
@@ -542,6 +547,10 @@ public class Login extends JavaPlugin implements Listener {
     // --- NEW GETTER ---
     public LagClearConfig getLagClearConfig() {
         return lagClearConfig;
+    }
+
+    public LagClearLogger getLagClearLogger() { // <-- 6. GETTER ADDED
+        return this.lagClearLogger;
     }
     // --- END GETTER ---
 

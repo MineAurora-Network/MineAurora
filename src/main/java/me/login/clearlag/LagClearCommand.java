@@ -1,6 +1,6 @@
 package me.login.clearlag;
 
-import org.bukkit.ChatColor;
+import me.login.Login; // <-- ADDED
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -16,11 +16,10 @@ import java.util.List;
 
 public class LagClearCommand implements CommandExecutor, TabCompleter {
 
-    private final Plugin plugin;
-    private final LagClearConfig lagClearConfig; // <-- ADDED
+    private final Login plugin; // <-- CHANGED
+    private final LagClearConfig lagClearConfig;
 
-    // --- CONSTRUCTOR UPDATED ---
-    public LagClearCommand(Plugin plugin, LagClearConfig lagClearConfig) {
+    public LagClearCommand(Login plugin, LagClearConfig lagClearConfig) { // <-- CHANGED
         this.plugin = plugin;
         this.lagClearConfig = lagClearConfig;
     }
@@ -32,36 +31,32 @@ public class LagClearCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // --- NEW: msgtoggle command for all players ---
         if (args[0].equalsIgnoreCase("msgtoggle")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage(ChatColor.RED + "This command can only be run by a player.");
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(lagClearConfig.formatMessage("<red>This command can only be run by a player.")); // <-- CHANGED
                 return true;
             }
 
-            Player player = (Player) sender;
             boolean currentSetting = lagClearConfig.getPlayerToggle(player.getUniqueId());
-            boolean newSetting = !currentSetting; // Toggle the value
+            boolean newSetting = !currentSetting;
             lagClearConfig.setPlayerToggle(player.getUniqueId(), newSetting);
 
-            String status = newSetting ? (ChatColor.GREEN + "ENABLED") : (ChatColor.RED + "DISABLED");
-            player.sendMessage(ChatColor.RED + "Cleaner" + ChatColor.WHITE + ": Your automatic lag clear messages are now " + status + ChatColor.WHITE + ".");
+            String status = newSetting ? "<green>ENABLED</green>" : "<red>DISABLED</red>";
+            player.sendMessage(lagClearConfig.formatMessage("Your automatic lag clear messages are now " + status + "<white>.")); // <-- CHANGED
             return true;
         }
-        // --- END: msgtoggle ---
 
-        // --- Admin 'clean' command ---
         if (!sender.hasPermission("lagclear.admin")) {
-            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
+            sender.sendMessage(lagClearConfig.formatMessage("<red>You do not have permission to use this command.</red>")); // <-- CHANGED
             return true;
         }
 
         if (args[0].equalsIgnoreCase("clean")) {
-            sender.sendMessage(ChatColor.RED + "Cleaner§7: Running manual cleanup...");
+            sender.sendMessage(lagClearConfig.formatMessage("<gray>Running manual cleanup...</gray>")); // <-- CHANGED
 
             // Run the cleanup and get the count
-            int removed = EntityCleanup.performCleanup(plugin);
-            sender.sendMessage(ChatColor.RED + "Cleaner§7: §aSuccessfully removed " + removed + " items and entities.");
+            int removed = EntityCleanup.performCleanup(plugin); // <-- CHANGED
+            sender.sendMessage(lagClearConfig.formatMessage("<green>Successfully removed " + removed + " items and entities.</green>")); // <-- CHANGED
             return true;
         }
 
@@ -70,21 +65,19 @@ public class LagClearCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "--- ClearLag Help ---");
-        // Check permission for admin help
+        // We can use MiniMessage for help, even for console
+        sender.sendMessage(lagClearConfig.formatMessage("<gold>--- ClearLag Help ---</gold>"));
         if (sender.hasPermission("lagclear.admin")) {
-            sender.sendMessage(ChatColor.AQUA + "/lagclear clean" + ChatColor.WHITE + " - Manually cleans all ground items, projectiles and entities.");
+            sender.sendMessage(lagClearConfig.formatMessage("<aqua>/lagclear clean</aqua><white> - Manually cleans all ground items, projectiles and entities.</white>"));
         }
-        sender.sendMessage(ChatColor.AQUA + "/lagclear msgtoggle" + ChatColor.WHITE + " - Toggles automatic cleanup messages for you.");
+        sender.sendMessage(lagClearConfig.formatMessage("<aqua>/lagclear msgtoggle</aqua><white> - Toggles automatic cleanup messages for you.</white>"));
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
             List<String> completions = new ArrayList<>();
-            // Add player command
             completions.add("msgtoggle");
-            // Add admin command if they have permission
             if (sender.hasPermission("lagclear.admin")) {
                 completions.add("clean");
             }

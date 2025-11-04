@@ -1,6 +1,9 @@
 package me.login.clearlag;
 
 import me.login.Login;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -10,7 +13,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Manages the lagclear.yml file for player message toggle preferences.
+ * Manages the lagclear.yml file and message formatting.
  */
 public class LagClearConfig {
 
@@ -18,11 +21,48 @@ public class LagClearConfig {
     private FileConfiguration config;
     private File configFile;
 
+    // --- NEW: Kyori Adventure fields ---
+    private final MiniMessage miniMessage;
+    private final Component serverPrefix;
+    private final String legacyPrefix; // Fallback
+
     public LagClearConfig(Login plugin) {
         this.plugin = plugin;
         this.configFile = new File(plugin.getDataFolder(), "lagclear.yml");
         saveDefaultConfig();
         reloadConfig();
+
+        // --- NEW: Initialize prefixes ---
+        this.miniMessage = MiniMessage.miniMessage();
+        String prefixString = plugin.getConfig().getString("cleaner_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>CLEANER</gradient></b><white>:");
+        String legacyPrefixString = plugin.getConfig().getString("cleaner_prefix_2", "&x&4&7&F&0&D&E&lC&x&4&2&A&C&F&1&lL&x&3&4&A&3&F&1&lE&x&2&6&9&9&F&0&lA&x&1&7&9&0&F&0&lN&x&0&9&8&6&E&F&lE&x&0&9&8&6&E&F&lR&f:");
+
+        Component parsedPrefix;
+        try {
+            parsedPrefix = this.miniMessage.deserialize(prefixString + " ");
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to parse 'cleaner_prefix' with MiniMessage. Using fallback 'cleaner_prefix_2'.");
+            parsedPrefix = LegacyComponentSerializer.legacyAmpersand().deserialize(legacyPrefixString + " ");
+        }
+        this.serverPrefix = parsedPrefix;
+        this.legacyPrefix = legacyPrefixString;
+        // --- END NEW ---
+    }
+
+    /**
+     * Formats a MiniMessage string with the server prefix.
+     * @param miniMessageString The MiniMessage string (e.g., "<red>Hello</red>")
+     * @return A formatted Component
+     */
+    public Component formatMessage(String miniMessageString) {
+        try {
+            return this.serverPrefix.append(this.miniMessage.deserialize(miniMessageString));
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to parse MiniMessage: " + miniMessageString + ". Using legacy.");
+            // Fallback to legacy
+            String legacyMessage = LegacyComponentSerializer.legacyAmpersand().serialize(this.miniMessage.deserialize(miniMessageString));
+            return LegacyComponentSerializer.legacyAmpersand().deserialize(this.legacyPrefix + " " + legacyMessage);
+        }
     }
 
     public FileConfiguration getConfig() {
@@ -67,21 +107,10 @@ public class LagClearConfig {
 
     // --- Player Toggle Methods ---
 
-    /**
-     * Gets a player's message toggle setting.
-     * @param uuid The player's UUID.
-     * @return true if messages are enabled, false otherwise. Defaults to true.
-     */
     public boolean getPlayerToggle(UUID uuid) {
-        // Defaults to true if not set
         return getConfig().getBoolean("players." + uuid.toString(), true);
     }
 
-    /**
-     * Sets a player's message toggle setting and saves the config.
-     * @param uuid The player's UUID.
-     * @param value The new setting.
-     */
     public void setPlayerToggle(UUID uuid, boolean value) {
         getConfig().set("players." + uuid.toString(), value);
         saveConfig();

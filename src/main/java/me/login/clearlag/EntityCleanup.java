@@ -1,24 +1,20 @@
 package me.login.clearlag;
 
+import me.login.Login; // <-- CHANGED
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
-import org.bukkit.entity.Minecart; // <-- CORRECT IMPORT
+import org.bukkit.entity.Minecart;
 import org.bukkit.entity.Projectile;
-import org.bukkit.plugin.Plugin;
+// import org.bukkit.plugin.Plugin; // <-- REMOVED
 
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Utility class to handle the actual entity cleanup logic.
- * This can be called from a command or a scheduled task.
- */
 public class EntityCleanup {
 
-    // List of worlds to clean. Made public static to be accessible by CleanupTask
     public static final List<String> WORLDS_TO_CLEAN = Arrays.asList(
             "lifesteal",
             "arena",
@@ -29,51 +25,38 @@ public class EntityCleanup {
 
     /**
      * Performs a cleanup of specified entities in the configured worlds.
-     * @param plugin The main plugin instance, used for logging.
+     * @param plugin The main Login plugin instance, used for logging. // <-- CHANGED
      * @return The total number of entities removed.
      */
-    public static int performCleanup(Plugin plugin) {
+    public static int performCleanup(Login plugin) { // <-- CHANGED
         int totalRemoved = 0;
+        LagClearLogger logger = plugin.getLagClearLogger(); // <-- NEW
+
         for (String worldName : WORLDS_TO_CLEAN) {
             World world = Bukkit.getWorld(worldName);
             if (world == null) {
-                plugin.getLogger().warning("Could not find world '" + worldName + "' for cleanup. Skipping.");
+                String warning = "Could not find world '" + worldName + "' for cleanup. Skipping.";
+                if (logger != null) logger.sendLog(warning); else plugin.getLogger().warning(warning); // <-- CHANGED
                 continue;
             }
 
             int removedInWorld = 0;
-            // We get a snapshot of the entities to avoid ConcurrentModificationException
             for (Entity entity : world.getEntities()) {
-
-                // 1. Clear Dropped Items
-                if (entity instanceof Item) {
-                    entity.remove();
-                    removedInWorld++;
-                }
-                // 2. Clear All Projectiles (Arrows, Snowballs, Eggs, etc.)
-                else if (entity instanceof Projectile) {
-                    entity.remove();
-                    removedInWorld++;
-                }
-                // 3. Clear Boats
-                else if (entity instanceof Boat) {
-                    entity.remove();
-                    removedInWorld++;
-                }
-                // 4. Clear All Minecart Types
-                else if (entity instanceof Minecart) {
+                if (entity instanceof Item || entity instanceof Projectile || entity instanceof Boat || entity instanceof Minecart) { // <-- Simplified
                     entity.remove();
                     removedInWorld++;
                 }
             }
 
             if (removedInWorld > 0) {
-                plugin.getLogger().info("Removed " + removedInWorld + " entities from world: " + worldName);
+                String info = "Removed " + removedInWorld + " entities from world: " + worldName;
+                if (logger != null) logger.sendLog(info); else plugin.getLogger().info(info); // <-- CHANGED
             }
             totalRemoved += removedInWorld;
         }
 
-        plugin.getLogger().info("Cleanup complete. Total entities removed: " + totalRemoved);
+        String completeMsg = "Cleanup complete. Total entities removed: " + totalRemoved;
+        if (logger != null) logger.sendLog(completeMsg); else plugin.getLogger().info(completeMsg); // <-- CHANGED
         return totalRemoved;
     }
 }

@@ -1,6 +1,7 @@
 package me.login.clearlag;
 
-import org.bukkit.ChatColor;
+import me.login.Login; // <-- ADDED
+// import org.bukkit.ChatColor; // <-- REMOVED
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
@@ -10,9 +11,15 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 
-
 public class ArmorStandLimit implements Listener {
     private final int ARMOR_STAND_LIMIT_PER_CHUNK = 3;
+    private final Login plugin; // <-- ADDED
+
+    // --- ADDED CONSTRUCTOR ---
+    public ArmorStandLimit(Login plugin) {
+        this.plugin = plugin;
+    }
+    // --- END ---
 
     @EventHandler
     public void onPlayerPlaceArmorStand(PlayerInteractEvent event) {
@@ -35,7 +42,11 @@ public class ArmorStandLimit implements Listener {
 
         if (armorStandCount >= ARMOR_STAND_LIMIT_PER_CHUNK) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage(ChatColor.RED + "You can't place more than §6" + ARMOR_STAND_LIMIT_PER_CHUNK + "§c armour stands in this chunk.");
+            // --- CHANGED ---
+            event.getPlayer().sendMessage(plugin.getLagClearConfig().formatMessage(
+                    "<red>You can't place more than <gold>" + ARMOR_STAND_LIMIT_PER_CHUNK + "</gold> <red>armour stands in this chunk.</red>"
+            ));
+            // --- END ---
         }
     }
 }

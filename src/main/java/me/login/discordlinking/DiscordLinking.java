@@ -68,7 +68,9 @@ public class DiscordLinking extends ListenerAdapter {
             // Use the correct DB instance via getter
             plugin.getDatabase().loadAllLinks().forEach((discordId, uuid) -> {
                 linkedAccounts.put(uuid, discordId);
+                // --- THIS IS THE FIX ---
                 reverseLinkedAccounts.put(discordId, uuid);
+                // --- END OF FIX ---
             });
             plugin.getLogger().info("Loaded " + linkedAccounts.size() + " links.");
 
@@ -82,7 +84,12 @@ public class DiscordLinking extends ListenerAdapter {
         }
     }
 
-    public void shutdown() { if (jda != null) jda.shutdownNow(); }
+    // --- This method allows Login.java to shut down the bot ---
+    public void shutdown() {
+        if (jda != null) {
+            jda.shutdown(); // Use graceful shutdown
+        }
+    }
 
     public String generateCode(UUID uuid, String playerName) {
         Random random = new Random(); String code;
@@ -108,11 +115,9 @@ public class DiscordLinking extends ListenerAdapter {
     public UUID getPlayerByCode(String code) { return verificationCodes.get(code); }
     public Long getLinkedDiscordId(UUID uuid) { return linkedAccounts.get(uuid); }
 
-    // --- THIS IS THE NEWLY ADDED METHOD ---
     public UUID getLinkedUuid(long discordId) {
         return reverseLinkedAccounts.get(discordId);
     }
-    // --- END OF NEW METHOD ---
 
     public List<Role> linkUser(UUID uuid, long discordId, Member member) {
         List<Role> assignedRoles = new ArrayList<>();
@@ -230,7 +235,7 @@ public class DiscordLinking extends ListenerAdapter {
         if (reverseLinkedAccounts.containsKey(discordId)) {
             EmbedBuilder eb = new EmbedBuilder().setColor(Color.ORANGE).setTitle("⚠️ Verification Issue")
                     .setDescription(event.getAuthor().getAsMention() + ", Discord account already linked!");
-            channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(15, TimeUnit.SECONDS));
+            channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(10, TimeUnit.SECONDS));
             return;
         }
 
