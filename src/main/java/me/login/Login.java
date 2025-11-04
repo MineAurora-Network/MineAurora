@@ -3,24 +3,21 @@ package me.login;
 import club.minnced.discord.webhook.WebhookClient;
 import club.minnced.discord.webhook.WebhookClientBuilder;
 import me.login.discordlinking.*;
-// --- MODIFIED IMPORTS ---
 import me.login.discordcommand.DiscordCommandManager;
 import me.login.discordcommand.DiscordCommandRegistrar;
 import me.login.discordcommand.DiscordModConfig;
 import me.login.discordcommand.DiscordModCommands;
 import me.login.discordcommand.DiscordRankCommand;
-// --- END MODIFIED IMPORTS ---
 import me.login.loginsystem.*;
 import me.login.ordersystem.*;
 import me.login.DamageIndicator;
 import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.CleanupTask;
-import me.login.clearlag.HopperLimit;
 import me.login.clearlag.LagClearCommand;
+import me.login.clearlag.PlacementLimitListener; // <-- IMPORT ADDED
 import me.login.clearlag.TPSWatcher;
-import me.login.clearlag.ArmorStandLimit;
 import me.login.clearlag.LagClearConfig;
-import me.login.clearlag.LagClearLogger; // <-- 1. IMPORT ADDED
+import me.login.clearlag.LagClearLogger; // <-- Your new import
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -42,7 +39,6 @@ import org.bukkit.scheduler.BukkitTask;
 import me.login.leaderboards.KillLeaderboardCommand;
 import me.login.leaderboards.LeaderboardProtectionListener;
 
-// --- ADDED FOR COINFLIP ---
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -50,24 +46,20 @@ import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.List;
-import java.util.Map; // --- STAFF SYSTEM ADDITION ---
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap; // --- STAFF SYSTEM ADDITION ---
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-// --- STAFF SYSTEM IMPORTS ---
 import me.login.moderation.ModerationDatabase;
 import me.login.moderation.ModerationListener;
 import me.login.moderation.BanCommand;
 import me.login.moderation.CheckInvCommand;
 import me.login.moderation.MuteCommand;
-// --- END STAFF SYSTEM IMPORTS ---
 
-// --- LIFESTEAL IMPORTS ---
 import me.login.lifesteal.*;
 import net.luckperms.api.LuckPerms;
-// --- END LIFESTEAL IMPORTS ---
 
 
 public class Login extends JavaPlugin implements Listener {
@@ -83,9 +75,7 @@ public class Login extends JavaPlugin implements Listener {
     private OrderMenu orderMenu;
     private OrderFilling orderFilling;
     private OrderManage orderManage;
-    // --- (This was in your file, preserving it) ---
     private OrderAdminMenu orderAdminMenu;
-    // --- END ---
     private DamageIndicator damageIndicator;
     private int defaultOrderLimit;
     private ScoreboardManager scoreboardManager;
@@ -100,25 +90,17 @@ public class Login extends JavaPlugin implements Listener {
 
     private String coinflipPrefixString;
 
-    // --- STAFF SYSTEM ADDITIONS ---
     private ModerationDatabase moderationDatabase;
     private WebhookClient staffWebhookClient;
-    // Maps to track who is viewing whose inventory
-    // Key: Staff UUID, Value: Target UUID
     private final Map<UUID, UUID> viewingInventories = new ConcurrentHashMap<>();
-    // Key: Staff UUID, Value: true (if admin)
     private final Map<UUID, Boolean> adminCheckMap = new ConcurrentHashMap<>();
 
-    // --- NEW DISCORD MOD FIELD ---
     private DiscordModConfig discordModConfig;
-    private WebhookClient discordStaffLogWebhook; // <-- NEW WEBHOOK
+    private WebhookClient discordStaffLogWebhook;
 
-    // --- NEW LAGCLEAR FIELD ---
     private LagClearConfig lagClearConfig;
-    private LagClearLogger lagClearLogger; // <-- FIELD ADDED
-    // --- END NEW FIELD ---
+    private LagClearLogger lagClearLogger;
 
-    // --- LIFESTEAL FIELDS ---
     private DatabaseManager databaseManager;
     private ItemManager itemManager;
     private LifestealManager lifestealManager;
@@ -126,7 +108,6 @@ public class Login extends JavaPlugin implements Listener {
     private ReviveMenu reviveMenu;
     private CombatLogManager combatLogManager;
     private LuckPerms luckPermsApi;
-    // --- END LIFESTEAL FIELDS ---
 
 
     @Override
@@ -238,8 +219,8 @@ public class Login extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new LeaderboardProtectionListener(this.leaderboardManager), this);
 
         getLogger().info("Initializing ClearLag components...");
-        getServer().getPluginManager().registerEvents(new HopperLimit(this), this);
-        getServer().getPluginManager().registerEvents(new ArmorStandLimit(this), this);
+        // Register the new consolidated listener
+        getServer().getPluginManager().registerEvents(new PlacementLimitListener(this), this);
         long countdownInterval = 20L;
         new CleanupTask(this, this.lagClearConfig).runTaskTimer(this, countdownInterval, countdownInterval);
         long tpsCheckInterval = 200L;
@@ -313,7 +294,6 @@ public class Login extends JavaPlugin implements Listener {
     }
 
 
-    // --- Reload method for leaderboards (unchanged) ---
     public void reloadLeaderboards() {
         reloadConfig();
         if (leaderboardManager != null) {
@@ -327,7 +307,6 @@ public class Login extends JavaPlugin implements Listener {
         this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(this, delay, refreshTicks);
     }
 
-    // --- setupEconomy (unchanged) ---
     private boolean setupEconomy() {
         if (getServer().getPluginManager().getPlugin("Vault") == null) {
             getLogger().severe("Vault plugin not found! Required for Orders and Coinflip.");
@@ -343,7 +322,6 @@ public class Login extends JavaPlugin implements Listener {
         return vaultEconomy != null;
     }
 
-    // --- initializeWebhook (unchanged) ---
     private WebhookClient initializeWebhook(String configKey, String systemName) {
         String url = getConfig().getString(configKey);
         if (!isConfigValueInvalid(url, "YOUR_" + systemName.toUpperCase().replace("-", "_") + "_WEBHOOK_URL_HERE") && url != null && url.startsWith("https://discord.com/api/webhooks/")) {
@@ -367,18 +345,14 @@ public class Login extends JavaPlugin implements Listener {
         return null;
     }
 
-    // --- Helper methods (unchanged) ---
     private boolean isConfigValueInvalid(String value, String placeholder) { return value == null || value.isEmpty() || value.equals(placeholder); }
     private void disableWithError(String message) { getLogger().severe(message + " Disabling plugin."); getServer().getPluginManager().disablePlugin(this); }
 
-    // --- Command Registration (unchanged) ---
     private void registerCommands() {
-        // --- MODIFIED NULL CHECK ---
         if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || coinflipSystem == null || coinflipMenu == null || coinflipManageMenu == null || leaderboardManager == null || moderationDatabase == null ||
-                databaseManager == null || itemManager == null || lifestealManager == null) { // <-- LIFESTEAL NULL CHECK
+                databaseManager == null || itemManager == null || lifestealManager == null) {
             getLogger().severe("Cannot register commands - one or more systems failed initialization!"); return;
         }
-        // --- END MODIFICATION ---
 
         DiscordLinkCmd discordCmd = new DiscordLinkCmd(this, discordLinking, discordLinkDatabase);
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase);
@@ -401,13 +375,10 @@ public class Login extends JavaPlugin implements Listener {
         getCommand("killleaderboard").setExecutor(killLeaderboardCmd);
         getCommand("killleaderboard").setTabCompleter(killLeaderboardCmd);
 
-        // --- UPDATED CONSTRUCTOR ---
         LagClearCommand lagClearCmd = new LagClearCommand(this, this.lagClearConfig);
-        // --- END UPDATE ---
         getCommand("lagclear").setExecutor(lagClearCmd);
         getCommand("lagclear").setTabCompleter(lagClearCmd);
 
-        // --- STAFF SYSTEM COMMANDS ---
         MuteCommand muteExecutor = new MuteCommand(this, moderationDatabase);
         setCommandExecutor("mute", muteExecutor);
         setCommandExecutor("muteinfo", muteExecutor);
@@ -423,26 +394,20 @@ public class Login extends JavaPlugin implements Listener {
         CheckInvCommand checkInvExecutor = new CheckInvCommand(this);
         setCommandExecutor("checkinv", checkInvExecutor);
         setCommandExecutor("admincheckinv", checkInvExecutor);
-        // --- END STAFF SYSTEM COMMANDS ---
 
-        // --- LIFESTEAL COMMANDS ---
         LifestealCommands lifestealCmds = new LifestealCommands(this, itemManager, lifestealManager, luckPermsApi);
         setCommandExecutor("withdrawhearts", lifestealCmds);
         setCommandExecutor("sethearts", lifestealCmds);
         setCommandExecutor("checkhearts", lifestealCmds);
-        // Register lsgive with tab completion
         getCommand("lsgive").setExecutor(lifestealCmds);
         getCommand("lsgive").setTabCompleter(lifestealCmds);
-        // --- END LIFESTEAL COMMANDS ---
 
-        setCommandExecutor("scoreboard", this); // This was after lagclear, moved it after staff commands
+        setCommandExecutor("scoreboard", this);
 
-    } // --- End registerCommands() ---
+    }
 
-    // --- Helper for setting executor (unchanged) ---
     private void setCommandExecutor(String commandName, org.bukkit.command.CommandExecutor executor) { org.bukkit.command.PluginCommand command = getCommand(commandName); if (command != null) { command.setExecutor(executor); } else { getLogger().severe("Failed register command '" + commandName + "'! In plugin.yml?"); } }
 
-    // --- onCommand for Scoreboard (unchanged) ---
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (command.getName().equalsIgnoreCase("scoreboard")) {
@@ -463,15 +428,13 @@ public class Login extends JavaPlugin implements Listener {
             return true;
         }
         return false;
-    } // --- End onCommand() ---
+    }
 
-    // --- onDisable (REVISED) ---
     @Override
     public void onDisable() {
         try {
             getLogger().info("Shutting down " + getName() + "...");
 
-            // --- Reset scoreboards safely ---
             if (scoreboardManager != null) {
                 if (Bukkit.getOnlinePlayers() != null && !Bukkit.getOnlinePlayers().isEmpty()) {
                     for (Player player : Bukkit.getOnlinePlayers()) {
@@ -485,49 +448,41 @@ public class Login extends JavaPlugin implements Listener {
                 }
             }
 
-            // --- Stop scheduled tasks ---
             if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
                 this.leaderboardUpdateTask.cancel();
             }
 
-            // --- LIFESTEAL SHUTDOWN (SAVE DATA) ---
             if (lifestealManager != null) {
                 lifestealManager.saveAllOnlinePlayerData();
             }
             if (combatLogManager != null) {
                 combatLogManager.shutdown();
             }
-            // --- END LIFESTEAL SHUTDOWN ---
 
-            // --- Close DBs ---
             if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
             if (loginDatabase != null) loginDatabase.disconnect();
             if (ordersDatabase != null) ordersDatabase.disconnect();
             if (coinflipDatabase != null) coinflipDatabase.disconnect();
-            if (moderationDatabase != null) moderationDatabase.closeConnection(); // --- STAFF SYSTEM ADDITION ---
-            if (databaseManager != null) databaseManager.closeConnection(); // <-- LIFESTEAL DB CLOSE
+            if (moderationDatabase != null) moderationDatabase.closeConnection();
+            if (databaseManager != null) databaseManager.closeConnection();
 
-            // --- Stop JDA first (before webhooks) ---
             if (discordLinking != null && discordLinking.getJDA() != null) {
                 getLogger().info("Shutting down Discord JDA...");
                 discordLinking.getJDA().shutdownNow();
             }
 
-            // --- Detach lag logger (shared JDA) ---
             if (lagClearLogger != null) {
-                lagClearLogger.shutdown(); // currently a no-op, but explicit
+                lagClearLogger.shutdown();
             }
 
-            // --- Close webhooks ---
             if(linkWebhookClient != null) linkWebhookClient.close();
             if(loginWebhookClient != null) loginWebhookClient.close();
             if(orderWebhookClient != null) orderWebhookClient.close();
             if(coinflipWebhookClient != null) coinflipWebhookClient.close();
-            if(itemManager != null) itemManager.closeWebhook(); // <-- LIFESTEAL WEBHOOK CLOSE
-            if(staffWebhookClient != null) staffWebhookClient.close(); // --- STAFF SYSTEM ADDITION ---
-            if(discordStaffLogWebhook != null) discordStaffLogWebhook.close(); // <-- NEWLY ADDED
+            if(itemManager != null) itemManager.closeWebhook();
+            if(staffWebhookClient != null) staffWebhookClient.close();
+            if(discordStaffLogWebhook != null) discordStaffLogWebhook.close();
 
-            // --- Safety: kill OkHttp TaskRunner global executors ---
             try {
                 Class<?> taskRunner = Class.forName("okhttp3.internal.concurrent.TaskRunner");
                 Object instance = taskRunner.getDeclaredField("INSTANCE").get(null);
@@ -540,9 +495,8 @@ public class Login extends JavaPlugin implements Listener {
             getLogger().severe("Error during onDisable: " + e.getMessage());
             e.printStackTrace();
         }
-    } // --- End onDisable() ---
+    }
 
-    // --- Getters (MODIFIED) ---
     public DiscordLinkDatabase getDatabase() { return discordLinkDatabase; }
     public LoginDatabase getLoginDatabase() { return loginDatabase; }
     public OrdersDatabase getOrdersDatabase() { return ordersDatabase; }
@@ -570,24 +524,19 @@ public class Login extends JavaPlugin implements Listener {
         return leaderboardManager;
     }
 
-    // --- NEW GETTER ---
     public LagClearConfig getLagClearConfig() {
         return lagClearConfig;
     }
 
-    public LagClearLogger getLagClearLogger() { // <-- GETTER ADDED
+    public LagClearLogger getLagClearLogger() {
         return this.lagClearLogger;
     }
-    // --- END GETTER ---
 
-    // --- NEW GETTER ---
     public DiscordModConfig getDiscordModConfig() {
         return discordModConfig;
     }
-    // --- END GETTER ---
 
-    // --- STAFF SYSTEM GETTERS ---
-    public ModerationDatabase getModerationDatabase() { // <-- ADDED GETTER
+    public ModerationDatabase getModerationDatabase() {
         return moderationDatabase;
     }
 
@@ -600,25 +549,18 @@ public class Login extends JavaPlugin implements Listener {
     public boolean isAdminChecking(UUID staffUUID) {
         return adminCheckMap.getOrDefault(staffUUID, false);
     }
-    // --- END STAFF SYSTEM GETTERS ---
 
-    // --- LIFESTEAL GETTERS ---
     public DatabaseManager getDatabaseManager() { return databaseManager; }
     public ItemManager getItemManager() { return itemManager; }
     public LifestealManager getLifestealManager() { return lifestealManager; }
     public DeadPlayerManager getDeadPlayerManager() { return deadPlayerManager; }
-    // --- END LIFESTEAL GETTERS ---
 
-    // --- End Getters ---
-
-    // --- onPlayerJoin (unchanged) ---
     @EventHandler public void onPlayerJoin(PlayerJoinEvent event) {
         if (scoreboardManager != null) {
             scoreboardManager.updateScoreboard(event.getPlayer());
         }
     }
 
-    // --- Coinflip Player Quit Handler (unchanged) ---
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
@@ -647,7 +589,7 @@ public class Login extends JavaPlugin implements Listener {
                     getLogger().severe("Error removing coinflips for " + player.getName() + " on quit: " + removalError.getMessage());
                 }
 
-                Bukkit.getScheduler().runTask(this, () -> { // Use 'this'
+                Bukkit.getScheduler().runTask(this, () -> {
                     EconomyResponse refundResp = vaultEconomy.depositPlayer(Bukkit.getOfflinePlayer(playerUUID), totalRefund);
                     if (refundResp.transactionSuccess()) {
                         getLogger().info("Refunded " + player.getName() + " " + vaultEconomy.format(totalRefund) + " for " + gameIds.size() + " cancelled coinflips on quit.");
@@ -659,7 +601,6 @@ public class Login extends JavaPlugin implements Listener {
         });
     }
 
-    // --- sendCoinflipLog (unchanged) ---
     public void sendCoinflipLog(String message) {
         getLogger().info("[Coinflip Log] " + ChatColor.stripColor(message.replace("`", "").replace("*", "")));
         if (coinflipWebhookClient != null) {
@@ -670,7 +611,6 @@ public class Login extends JavaPlugin implements Listener {
         }
     }
 
-    // --- STAFF SYSTEM LOG SENDER ---
     public void sendStaffLog(String message) {
         getLogger().info("[Staff Log] " + ChatColor.stripColor(message.replace("`", "").replace("*", "")));
         if (staffWebhookClient != null) {
@@ -680,9 +620,7 @@ public class Login extends JavaPlugin implements Listener {
             });
         }
     }
-    // --- END STAFF SYSTEM LOG SENDER ---
 
-    // --- NEW DISCORD STAFF LOG SENDER ---
     public void sendDiscordStaffLog(String message) {
         getLogger().info("[Discord Staff Log] " + ChatColor.stripColor(message.replace("`", "").replace("*", "")));
         if (discordStaffLogWebhook != null) {
@@ -692,9 +630,7 @@ public class Login extends JavaPlugin implements Listener {
             });
         }
     }
-    // --- END NEW LOG SENDER ---
 
-    // --- onAnimationInventoryClick (unchanged) ---
     @EventHandler
     public void onAnimationInventoryClick(InventoryClickEvent event) {
         if (event.getView().getTitle().equals(ChatColor.DARK_GRAY + "Coin Flipping...")) {
@@ -702,9 +638,8 @@ public class Login extends JavaPlugin implements Listener {
         }
     }
 
-    // --- Coinflip Config & Formatting (unchanged) ---
     public void loadCoinflipConfig() {
-        this.coinflipPrefixString = getConfig().getString("coinflip_prefix", "<#47D5F0>M<#49CBED>i<#4AC1E9>n<#4CB7E6>e<#4DADE2>A<#4FA2DF>u<#5098DB>r<#528ED8>o<#5384D4>r<V<#557AD1>a") + " "; // Removed legacy &r
+        this.coinflipPrefixString = getConfig().getString("coinflip_prefix", "<#47D5F0>M<#49CBED>i<#4AC1E9>n<#4CB7E6>e<#4DADE2>A<#4FA2DF>u<#5098DB>r<#528ED8>o<#5384D4>r<V<#557AD1>a") + " ";
     }
 
     public Component formatMessage(String legacyText) {
@@ -724,4 +659,4 @@ public class Login extends JavaPlugin implements Listener {
         return coinflipPrefixString;
     }
 
-} // --- End of Login class ---
+}

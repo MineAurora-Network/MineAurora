@@ -157,3 +157,13 @@ leaderboards:
       line-format: "<red>#%rank%. <white>%player% <dark_gray>| <light_purple>%value% ❤"
       empty-line-format: "<red>#%rank%. <white>N/A <dark_gray>| <light_purple>N/A ❤"
       footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+
+# ============================
+# NEW: ClearLag Limit Configuration
+# ============================
+clearlag-limits:
+  # Limits are per-chunk
+  armor-stand: 3
+  hopper: 10
+  repeater: 20
+  dispenser: 10
