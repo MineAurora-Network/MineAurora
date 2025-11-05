@@ -1,5 +1,5 @@
-bot-token: "MTQzMDc2MjY4NTE2NjkxMTUyOA.Gd9Qvd.d4ZdhUszSXNfTlc0h7Y7S-BCqUvA5fcFQiSWz8"
-logger-bot-token: "MTQwOTg1NTI5Mjk3NTYxNjAzMg.GqfMXq.zAXpHMzJRS1s9Qooj1O6vBEA2OsYlkKW619Oqk"
+bot-token: ""
+logger-bot-token: ""
 
 lagclear-log-channel-id: 1434707657633169611
 normal-bot-channel: 1434006801011048621
@@ -7,6 +7,7 @@ staff-bot-channel: 1434006967357145168
 
 coinflip-log-channel-id: 1431926295847243858
 coinflip-admin-log-channel-id: 1435165917779591218
+island-drop-channel-id: "YOUR_CHANNEL_ID_HERE"
 
 verification-channel-id: 1430953529463279696
 verified-role-id: 1430766504575635508

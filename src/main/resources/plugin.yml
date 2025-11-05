@@ -117,22 +117,17 @@ commands:
     permission: staff.admincheckinv
   # --- END STAFF SYSTEM COMMANDS ---
 
+  # --- LIFESTEAL COMMANDS (MODIFIED) ---
   withdrawhearts:
     description: Withdraws hearts as items.
     usage: /withdrawhearts <amount>
     permission: lifesteal.withdraw
-  lsgive:
-    description: (Admin) Gives you heart or beacon items.
-    usage: /lsgive <heart|revive_beacon> <amount>
-    permission: lifesteal.admin.give
-  sethearts:
-    description: (Admin) Sets a player's heart count.
-    usage: /sethearts <player> <amount>
-    permission: lifesteal.admin.set
-  checkhearts:
-    description: Checks a player's heart count.
-    usage: /checkhearts <player>
-    permission: lifesteal.check
+
+  lifesteal:
+    description: Lifesteal main command.
+    usage: /lifesteal <give|sethearts|checkhearts|revive>
+    aliases: [ls]
+  # --- END LIFESTEAL COMMANDS ---
 
   # --- ISLAND COMMANDS ---
   csummon:
@@ -211,21 +206,27 @@ permissions:
     description: Allows admin inventory checks (item removal).
     default: op
   # --- END STAFF SYSTEM PERMISSIONS ---
+
+  # --- LIFESTEAL PERMISSIONS (MODIFIED) ---
   lifesteal.withdraw:
     description: Allows player to withdraw hearts.
     default: op
   lifesteal.check:
-    description: Allows player to check heart counts.
+    description: Allows player to use /ls checkhearts.
     default: op
   lifesteal.revive:
     description: Allows player to use the revive beacon.
     default: op
   lifesteal.admin.give:
-    description: Allows admin to get heart items.
+    description: Allows admin to use /ls give.
     default: op
   lifesteal.admin.set:
-    description: Allows admin to set heart counts.
+    description: Allows admin to use /ls sethearts.
     default: op
+  lifesteal.admin.revive:
+    description: Allows admin to use /ls revive.
+    default: op
+  # --- END LIFESTEAL PERMISSIONS ---
 
   # --- ISLAND PERMISSIONS ---
   mineaurora.island.summon:
@@ -235,3 +236,4 @@ permissions:
     description: Allows use of the /ckill command.
     default: op
   # --- END ISLAND PERMISSIONS ---
+}

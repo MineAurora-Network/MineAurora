@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set; // <-- IMPORT ADDED
 import java.util.UUID;
 
 public class LifestealManager {
@@ -18,7 +19,17 @@ public class LifestealManager {
     private final Map<UUID, Integer> heartCache = new HashMap<>();
     private final int MAX_HEARTS = 25;
     private final int MIN_HEARTS = 1;
-    private final int DEFAULT_HEARTS = 10;
+    public final int DEFAULT_HEARTS = 10; // Made public for revive command
+
+    // --- MODIFICATION (Request 2) ---
+    private final Set<String> lifestealWorlds = Set.of(
+            "lifesteal",
+            "normal_world",
+            "end",
+            "nether",
+            "arena"
+    );
+    // --- END MODIFICATION ---
 
     public LifestealManager(Login plugin, ItemManager itemManager, DatabaseManager databaseManager) {
         this.plugin = plugin;
@@ -46,6 +57,11 @@ public class LifestealManager {
             // Remove from cache
             heartCache.remove(uuid);
         }
+        // --- MODIFICATION (Request 2) ---
+        // Ensure player health is reset to default if they log out from a non-lifesteal world
+        // (This is a safeguard, as updatePlayerHealth should handle it on next join)
+        player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(DEFAULT_HEARTS * 2.0);
+        // --- END MODIFICATION ---
     }
 
     public void saveAllOnlinePlayerData() {
@@ -97,8 +113,19 @@ public class LifestealManager {
         return setHearts(uuid, currentHearts - amount);
     }
 
+    // --- MODIFICATION (Request 2) ---
     public void updatePlayerHealth(Player player) {
-        int hearts = getHearts(player.getUniqueId());
+        String worldName = player.getWorld().getName();
+        int hearts;
+
+        if (lifestealWorlds.contains(worldName)) {
+            // Player is in a lifesteal world, use their stored hearts
+            hearts = getHearts(player.getUniqueId());
+        } else {
+            // Player is in a non-lifesteal world, use default hearts
+            hearts = DEFAULT_HEARTS;
+        }
+
         // Max health is hearts * 2
         player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(hearts * 2.0);
 
@@ -107,6 +134,7 @@ public class LifestealManager {
             player.setHealth(hearts * 2.0);
         }
     }
+    // --- END MODIFICATION ---
 
     public int getMaxHearts() {
         return MAX_HEARTS;

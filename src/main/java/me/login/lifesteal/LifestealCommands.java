@@ -6,6 +6,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.model.user.User;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -26,31 +27,75 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
     private final Login plugin;
     private final ItemManager itemManager;
     private final LifestealManager lifestealManager;
+    private final DeadPlayerManager deadPlayerManager; // --- ADD THIS FIELD ---
     private final LuckPerms luckPermsApi;
 
-    public LifestealCommands(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, LuckPerms luckPermsApi) {
+    // --- CONSTRUCTOR UPDATED ---
+    public LifestealCommands(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager, LuckPerms luckPermsApi) {
         this.plugin = plugin;
         this.itemManager = itemManager;
         this.lifestealManager = lifestealManager;
+        this.deadPlayerManager = deadPlayerManager; // --- STORE THE INSTANCE ---
         this.luckPermsApi = luckPermsApi; // Can be null if LuckPerms is not found
+        // removed: this.deadPlayerManager = plugin.getDeadPlayerManager();
     }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         String cmdName = command.getName().toLowerCase();
 
-        switch (cmdName) {
-            case "withdrawhearts":
-                return handleWithdraw(sender, args);
-            case "lsgive":
-                return handleLsGive(sender, args);
-            case "sethearts":
-                return handleSet(sender, args);
-            case "checkhearts":
-                return handleCheck(sender, args);
+        // Handle the standalone /withdrawhearts command
+        if (cmdName.equals("withdrawhearts")) {
+            return handleWithdraw(sender, args);
+        }
+
+        // Handle the base /lifesteal and /ls commands
+        if (cmdName.equals("lifesteal") || cmdName.equals("ls")) {
+            if (args.length == 0) {
+                sendUsage(sender); // Send help/usage message
+                return true;
+            }
+
+            String subCommand = args[0].toLowerCase();
+            // Create new array for subcommand arguments
+            String[] subArgs = Arrays.copyOfRange(args, 1, args.length);
+
+            switch (subCommand) {
+                case "give":
+                    return handleLsGive(sender, subArgs);
+                case "sethearts":
+                    return handleSet(sender, subArgs);
+                case "checkhearts":
+                    return handleCheck(sender, subArgs);
+                case "revive":
+                    return handleRevive(sender, subArgs); // This will now use the class field
+                default:
+                    sendUsage(sender);
+                    return true;
+            }
         }
         return false;
     }
+
+    private void sendUsage(CommandSender sender) {
+        sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<gold>--- Lifesteal Commands ---")));
+        if (sender.hasPermission("lifesteal.admin.give")) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<yellow>/ls give <heart|revive_beacon> <amount>")));
+        }
+        if (sender.hasPermission("lifesteal.admin.set")) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<yellow>/ls sethearts <player> <amount>")));
+        }
+        if (sender.hasPermission("lifesteal.admin.revive")) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<yellow>/ls revive <player>")));
+        }
+        if (sender.hasPermission("lifesteal.check")) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<yellow>/ls checkhearts <player>")));
+        }
+        if (sender.hasPermission("lifesteal.withdraw")) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<yellow>/withdrawhearts <amount>")));
+        }
+    }
+
 
     private boolean handleWithdraw(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
@@ -96,7 +141,7 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
         }
 
         if (args.length != 2) {
-            player.sendMessage(itemManager.formatMessage("<red>Usage: /lsgive <heart | revive_beacon> <amount>"));
+            player.sendMessage(itemManager.formatMessage("<red>Usage: /ls give <heart | revive_beacon> <amount>"));
             return true;
         }
 
@@ -142,7 +187,7 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
         }
 
         if (args.length != 2) {
-            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>Usage: /sethearts <player> <amount>")));
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>Usage: /ls sethearts <player> <amount>")));
             return true;
         }
 
@@ -201,7 +246,7 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
         }
 
         if (args.length != 1) {
-            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>Usage: /checkhearts <player>")));
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>Usage: /ls checkhearts <player>")));
             return true;
         }
 
@@ -221,6 +266,47 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean handleRevive(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("lifesteal.admin.revive")) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>You do not have permission to use this command.")));
+            return true;
+        }
+
+        if (args.length != 1) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>Usage: /ls revive <player>")));
+            return true;
+        }
+
+        OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
+        if (!target.hasPlayedBefore() && !target.isOnline()) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>Player '" + args[0] + "' not found.")));
+            return true;
+        }
+
+        // --- Use the class field ---
+        if (!this.deadPlayerManager.isDead(target.getUniqueId())) {
+            sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>That player is not dead.")));
+            return true;
+        }
+
+        // Revive the player
+        this.deadPlayerManager.removeDeadPlayer(target.getUniqueId());
+        // Reset hearts to default
+        int newHearts = lifestealManager.setHearts(target.getUniqueId(), lifestealManager.DEFAULT_HEARTS);
+
+        sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<green>You have revived " + target.getName() + " and set their hearts to " + newHearts + ".")));
+        itemManager.sendLog(sender.getName() + " revived " + target.getName() + ".");
+
+        Player onlineTarget = target.getPlayer();
+        if (onlineTarget != null && onlineTarget.isOnline()) {
+            onlineTarget.setGameMode(GameMode.SURVIVAL);
+            onlineTarget.sendMessage(itemManager.formatMessage("<green>You have been revived by an admin!</green>"));
+            // Manually update health here as they were likely in spectator
+            lifestealManager.updatePlayerHealth(onlineTarget);
+        }
+        return true;
+    }
+
     private int getWeight(User user) {
         // Get weight from meta key "weight"
         String weightString = user.getCachedData().getMetaData().getMetaValue("weight");
@@ -237,21 +323,47 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
     @Nullable
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
-        if (command.getName().equalsIgnoreCase("lsgive")) {
+
+        // Tab complete for /ls and /lifesteal
+        if (command.getName().equalsIgnoreCase("lifesteal") || command.getName().equalsIgnoreCase("ls")) {
             if (args.length == 1) {
-                return Arrays.asList("heart", "revive_beacon").stream()
+                List<String> subcommands = new ArrayList<>();
+                if (sender.hasPermission("lifesteal.admin.give")) subcommands.add("give");
+                if (sender.hasPermission("lifesteal.admin.set")) subcommands.add("sethearts");
+                if (sender.hasPermission("lifesteal.check")) subcommands.add("checkhearts");
+                if (sender.hasPermission("lifesteal.admin.revive")) subcommands.add("revive");
+
+                return subcommands.stream()
                         .filter(s -> s.startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
             }
-            if (args.length == 2) {
-                return Arrays.asList("1", "10", "32", "64");
+
+            if (args.length > 0) {
+                String subCmd = args[0].toLowerCase();
+                if (subCmd.equals("give")) {
+                    if (args.length == 2) {
+                        return Arrays.asList("heart", "revive_beacon").stream()
+                                .filter(s -> s.startsWith(args[1].toLowerCase()))
+                                .collect(Collectors.toList());
+                    }
+                    if (args.length == 3) {
+                        return Arrays.asList("1", "10", "32", "64");
+                    }
+                }
+
+                if (subCmd.equals("sethearts") || subCmd.equals("checkhearts") || subCmd.equals("revive")) {
+                    if (args.length == 2) {
+                        // Suggest online player names
+                        return null;
+                    }
+                }
             }
         }
 
-        if (command.getName().equalsIgnoreCase("sethearts") || command.getName().equalsIgnoreCase("checkhearts")) {
+        // Tab complete for /withdrawhearts
+        if (command.getName().equalsIgnoreCase("withdrawhearts")) {
             if (args.length == 1) {
-                // Suggest online player names
-                return null;
+                return Arrays.asList("1", "2", "5");
             }
         }
 

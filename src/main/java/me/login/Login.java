@@ -8,7 +8,6 @@ import me.login.discordcommand.DiscordCommandRegistrar;
 import me.login.discordcommand.DiscordModConfig;
 import me.login.discordcommand.DiscordModCommands;
 import me.login.discordcommand.DiscordRankCommand;
-import me.login.island.IslandModule; // <-- ADDED IMPORT
 import me.login.loginsystem.*;
 import me.login.ordersystem.*;
 import me.login.DamageIndicator;
@@ -61,7 +60,16 @@ import me.login.moderation.BanCommand;
 import me.login.moderation.CheckInvCommand;
 import me.login.moderation.MuteCommand;
 
-import me.login.lifesteal.*;
+// --- LIFESTEAL REFACTOR ---
+// Import the new module
+import me.login.lifesteal.LifestealModule;
+// Import the specific types for the public getters
+import me.login.lifesteal.DatabaseManager;
+import me.login.lifesteal.ItemManager;
+import me.login.lifesteal.LifestealManager;
+import me.login.lifesteal.DeadPlayerManager;
+// --- END LIFESTEAL REFACTOR ---
+
 import net.luckperms.api.LuckPerms;
 
 
@@ -109,15 +117,12 @@ public class Login extends JavaPlugin implements Listener {
     private LagClearConfig lagClearConfig;
     private LagClearLogger lagClearLogger;
 
-    private DatabaseManager databaseManager;
-    private ItemManager itemManager;
-    private LifestealManager lifestealManager;
-    private DeadPlayerManager deadPlayerManager;
-    private ReviveMenu reviveMenu;
-    private CombatLogManager combatLogManager;
     private LuckPerms luckPermsApi;
 
-    private IslandModule islandModule; // <-- ADDED FIELD
+    // --- LIFESTEAL REFACTOR ---
+    // Remove individual component fields
+    private LifestealModule lifestealModule; // Add the module field
+    // --- END LIFESTEAL REFACTOR ---
 
 
     @Override
@@ -163,12 +168,9 @@ public class Login extends JavaPlugin implements Listener {
 
         this.moderationDatabase = new ModerationDatabase(this);
 
-        this.databaseManager = new DatabaseManager(this);
-        if (!this.databaseManager.initializeDatabase()) {
-            disableWithError("Failed to initialize Lifesteal database! Disabling plugin.");
-            return;
-        }
-        this.databaseManager.createTables();
+        // --- LIFESTEAL REFACTOR ---
+        // Remove individual Lifesteal database initialization
+        // --- END LIFESTEAL REFACTOR ---
 
         this.linkWebhookClient = initializeWebhook("link-system-log-webhook", "Link-System");
         this.loginWebhookClient = initializeWebhook("login-system-log-webhook", "Login-System");
@@ -201,14 +203,17 @@ public class Login extends JavaPlugin implements Listener {
         long refreshTicks = 20L * getConfig().getLong("leaderboards.refresh-seconds", 60);
         this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(this, delay, refreshTicks);
 
-        this.itemManager = new ItemManager(this);
-        this.lifestealManager = new LifestealManager(this, itemManager, databaseManager);
-        this.deadPlayerManager = new DeadPlayerManager(this, databaseManager);
-        this.reviveMenu = new ReviveMenu(this, itemManager, deadPlayerManager);
-        this.combatLogManager = new CombatLogManager(this, itemManager, lifestealManager);
-
-        getServer().getPluginManager().registerEvents(new LifestealListener(this, itemManager, lifestealManager, deadPlayerManager, reviveMenu), this);
-        getServer().getPluginManager().registerEvents(combatLogManager, this);
+        // --- LIFESTEAL REFACTOR ---
+        // Initialize the entire module
+        this.lifestealModule = new LifestealModule(this, luckPermsApi);
+        if (!this.lifestealModule.init()) {
+            // init() already logs the error
+            disableWithError("Failed to initialize Lifesteal Module! Disabling plugin.");
+            return;
+        }
+        // All individual lifesteal component inits are removed
+        // All lifesteal listener registrations are removed (handled by module)
+        // --- END LIFESTEAL REFACTOR ---
 
         registerCommands(); // Coinflip command is registered later
         getServer().getPluginManager().registerEvents(this, this);
@@ -267,14 +272,6 @@ public class Login extends JavaPlugin implements Listener {
                             }
                             DiscordCommandRegistrar.register(discordLinking.getJDA());
                             getLogger().info("Discord slash command listeners registered.");
-
-                            // --- [NEW] Initialize Island Module ---
-                            getLogger().info("Initializing Island Module...");
-                            this.islandModule = new IslandModule(this);
-                            this.islandModule.init();
-                            getLogger().info("Island Module enabled.");
-                            // --- End Island Module ---
-
                             // --- [FIX] START OF COINFLIP INIT FIX ---
 
                             // 1. Create the logger. This will start its async JDA build.
@@ -410,10 +407,13 @@ public class Login extends JavaPlugin implements Listener {
     private void disableWithError(String message) { getLogger().severe(message + " Disabling plugin."); getServer().getPluginManager().disablePlugin(this); }
 
     private void registerCommands() {
+        // --- LIFESTEAL REFACTOR ---
+        // Updated the null check
         if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || /* coinflipSystem == null || coinflipMenu == null || coinflipManageMenu == null || */ leaderboardManager == null || moderationDatabase == null ||
-                databaseManager == null || itemManager == null || lifestealManager == null) {
+                lifestealModule == null) { // Check for the module
             getLogger().severe("Cannot register commands - one or more systems failed initialization!"); return;
         }
+        // --- END LIFESTEAL REFACTOR ---
 
         DiscordLinkCmd discordCmd = new DiscordLinkCmd(this, discordLinking, discordLinkDatabase);
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase);
@@ -456,12 +456,9 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("checkinv", checkInvExecutor);
         setCommandExecutor("admincheckinv", checkInvExecutor);
 
-        LifestealCommands lifestealCmds = new LifestealCommands(this, itemManager, lifestealManager, luckPermsApi);
-        setCommandExecutor("withdrawhearts", lifestealCmds);
-        setCommandExecutor("sethearts", lifestealCmds);
-        setCommandExecutor("checkhearts", lifestealCmds);
-        getCommand("lsgive").setExecutor(lifestealCmds);
-        getCommand("lsgive").setTabCompleter(lifestealCmds);
+        // --- LIFESTEAL REFACTOR ---
+        // Remove Lifesteal command registration (handled by module)
+        // --- END LIFESTEAL REFACTOR ---
 
         setCommandExecutor("scoreboard", this);
 
@@ -513,25 +510,20 @@ public class Login extends JavaPlugin implements Listener {
                 this.leaderboardUpdateTask.cancel();
             }
 
-            if (lifestealManager != null) {
-                lifestealManager.saveAllOnlinePlayerData();
+            // --- LIFESTEAL REFACTOR ---
+            // Call the module's shutdown method
+            if (lifestealModule != null) {
+                lifestealModule.shutdown();
             }
-            if (combatLogManager != null) {
-                combatLogManager.shutdown();
-            }
-
-            // --- [NEW] Disable Island Module ---
-            if (islandModule != null) {
-                islandModule.disable();
-            }
-            // --- End Island Module ---
+            // Remove individual component shutdowns
+            // --- END LIFESTEAL REFACTOR ---
 
             if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
             if (loginDatabase != null) loginDatabase.disconnect();
             if (ordersDatabase != null) ordersDatabase.disconnect();
             if (coinflipDatabase != null) coinflipDatabase.disconnect();
             if (moderationDatabase != null) moderationDatabase.closeConnection();
-            if (databaseManager != null) databaseManager.closeConnection();
+            // if (databaseManager != null) databaseManager.closeConnection(); // Handled by module
 
             if (discordLinking != null && discordLinking.getJDA() != null) {
                 getLogger().info("Shutting down Discord JDA...");
@@ -546,7 +538,7 @@ public class Login extends JavaPlugin implements Listener {
             if(loginWebhookClient != null) loginWebhookClient.close();
             if(orderWebhookClient != null) orderWebhookClient.close();
             // if(coinflipWebhookClient != null) coinflipWebhookClient.close(); // [REMOVED] Req 9
-            if(itemManager != null) itemManager.closeWebhook();
+            // if(itemManager != null) itemManager.closeWebhook(); // Handled by module
             if(staffWebhookClient != null) staffWebhookClient.close();
             if(discordStaffLogWebhook != null) discordStaffLogWebhook.close();
 
@@ -616,10 +608,21 @@ public class Login extends JavaPlugin implements Listener {
         return adminCheckMap.getOrDefault(staffUUID, false);
     }
 
-    public DatabaseManager getDatabaseManager() { return databaseManager; }
-    public ItemManager getItemManager() { return itemManager; }
-    public LifestealManager getLifestealManager() { return lifestealManager; }
-    public DeadPlayerManager getDeadPlayerManager() { return deadPlayerManager; }
+    // --- LIFESTEAL REFACTOR ---
+    // Update getters to delegate to the module
+    public DatabaseManager getDatabaseManager() {
+        return (lifestealModule != null) ? lifestealModule.getDatabaseManager() : null;
+    }
+    public ItemManager getItemManager() {
+        return (lifestealModule != null) ? lifestealModule.getItemManager() : null;
+    }
+    public LifestealManager getLifestealManager() {
+        return (lifestealModule != null) ? lifestealModule.getLifestealManager() : null;
+    }
+    public DeadPlayerManager getDeadPlayerManager() {
+        return (lifestealModule != null) ? lifestealModule.getDeadPlayerManager() : null;
+    }
+    // --- END LIFESTEAL REFACTOR ---
 
     @EventHandler public void onPlayerJoin(PlayerJoinEvent event) {
         if (scoreboardManager != null) {
@@ -695,8 +698,4 @@ public class Login extends JavaPlugin implements Listener {
         }
     }
 
-    // --- [NEW] Getter for Island Module ---
-    public IslandModule getIslandModule() {
-        return islandModule;
-    }
 }

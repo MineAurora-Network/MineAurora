@@ -2,11 +2,12 @@ package me.login.lifesteal;
 
 import me.login.Login;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.Material; // <-- MISSING IMPORT ADDED
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -28,15 +29,18 @@ public class CombatLogManager implements Listener {
     private final Login plugin;
     private final ItemManager itemManager;
     private final LifestealManager lifestealManager;
+    private final DeadPlayerManager deadPlayerManager; // --- ADD THIS FIELD ---
 
     private static final long COMBAT_TIME_MS = 10 * 1000; // 10 seconds
     private final Map<UUID, CombatData> combatMap = new HashMap<>();
     private final BukkitTask combatTimerTask;
 
-    public CombatLogManager(Login plugin, ItemManager itemManager, LifestealManager lifestealManager) {
+    // --- CONSTRUCTOR UPDATED ---
+    public CombatLogManager(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager) {
         this.plugin = plugin;
         this.itemManager = itemManager;
         this.lifestealManager = lifestealManager;
+        this.deadPlayerManager = deadPlayerManager; // --- STORE THE INSTANCE ---
 
         this.combatTimerTask = new BukkitRunnable() {
             @Override
@@ -108,9 +112,17 @@ public class CombatLogManager implements Listener {
 
             itemManager.sendLog(victim.getName() + " combat logged! Attacker: " + data.lastAttackerUUID);
 
-            // Punish victim: lose 1 heart
-            // This is an offline change, so LifestealManager's file-based system is perfect
-            lifestealManager.removeHearts(victimUUID, 1);
+            // Punish victim:
+            int currentHearts = lifestealManager.getHearts(victimUUID);
+            if (currentHearts <= lifestealManager.getMinHearts()) {
+                // Player is at min hearts, they die
+                // --- UPDATE THIS LINE ---
+                this.deadPlayerManager.addDeadPlayer(victimUUID, victim.getName());
+                itemManager.sendLog(victim.getName() + " combat logged at " + currentHearts + " heart(s) and is now dead.");
+            } else {
+                // Remove 1 heart (this is an offline-safe async DB update)
+                lifestealManager.removeHearts(victimUUID, 1);
+            }
 
             // Reward attacker: gain 1 heart
             lifestealManager.addHearts(data.lastAttackerUUID, 1);
@@ -132,14 +144,22 @@ public class CombatLogManager implements Listener {
             }
             // Clear inventory (so they don't have it on rejoin)
             victim.getInventory().clear();
+
+            // Drop XP
+            int xp = victim.getTotalExperience();
+            if (xp > 0) {
+                world.spawn(dropLocation, ExperienceOrb.class).setExperience(xp);
+                victim.setTotalExperience(0); // Clear their XP
+            }
         }
     }
 
     // If a dead player logs in, make sure they are still in spectator
     @EventHandler
     public void onDeadPlayerJoin(PlayerJoinEvent event) {
-        if (plugin.getDeadPlayerManager() != null && plugin.getDeadPlayerManager().isDead(event.getPlayer().getUniqueId())) {
-            event.getPlayer().setGameMode(org.bukkit.GameMode.SPECTATOR);
+        // --- UPDATE THIS LINE ---
+        if (this.deadPlayerManager != null && this.deadPlayerManager.isDead(event.getPlayer().getUniqueId())) {
+            event.getPlayer().setGameMode(GameMode.SPECTATOR);
         }
     }
 

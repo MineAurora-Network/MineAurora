@@ -10,6 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent; // <-- IMPORT ADDED
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -36,6 +37,7 @@ public class LifestealListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
+        // This will load data AND apply world-specific health
         lifestealManager.loadPlayerData(player);
 
         if (deadPlayerManager.isDead(player.getUniqueId())) {
@@ -44,6 +46,14 @@ public class LifestealListener implements Listener {
             player.sendMessage(itemManager.formatMessage("<red>You are dead! A player must revive you using a Revive Beacon."));
         }
     }
+
+    // --- MODIFICATION (Request 2) ---
+    @EventHandler
+    public void onWorldChange(PlayerChangedWorldEvent event) {
+        // Update player's max health based on the world they entered
+        lifestealManager.updatePlayerHealth(event.getPlayer());
+    }
+    // --- END MODIFICATION ---
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {

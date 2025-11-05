@@ -39,8 +39,10 @@ public class ItemManager {
 
         loadItemsConfig();
 
-        // Load prefix from main config.yml
-        String prefixString = plugin.getConfig().getString("server-prefix", "<gray>[Lifesteal]</gray> ");
+        // --- MODIFICATION (Request 1) ---
+        // Load prefix from main config.yml using the correct key
+        String prefixString = plugin.getConfig().getString("server_prefix", "<gray>[Lifesteal]</gray> ");
+        // --- END MODIFICATION ---
         this.serverPrefix = miniMessage.deserialize(prefixString);
 
         // Load webhook

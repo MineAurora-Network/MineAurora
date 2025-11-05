@@ -19,16 +19,20 @@ public class DatabaseManager {
 
     private final int DEFAULT_HEARTS = 10;
 
+    // --- MODIFICATION: Updated Constructor ---
     public DatabaseManager(Login plugin) {
         this.plugin = plugin;
 
-        File dataFolder = plugin.getDataFolder();
-        if (!dataFolder.exists()) {
-            dataFolder.mkdirs();
+        // Create database subfolder
+        File dbFolder = new File(plugin.getDataFolder(), "database");
+        if (!dbFolder.exists()) {
+            dbFolder.mkdirs();
         }
 
-        this.dbFile = new File(dataFolder, "lifesteal_data.db");
+        // Set the file path to be inside the database folder
+        this.dbFile = new File(dbFolder, "lifesteal.db");
     }
+    // --- END MODIFICATION ---
 
     // --- Connection Management ---
 
@@ -44,7 +48,9 @@ public class DatabaseManager {
 
             Class.forName("org.sqlite.JDBC");
             connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getPath());
-            plugin.getLogger().info("SQLite database connection established.");
+            // --- MODIFICATION: Updated log message to show correct path ---
+            plugin.getLogger().info("Lifesteal SQLite database connected successfully (at " + dbFile.getAbsolutePath() + ").");
+            // --- END MODIFICATION ---
 
             return true;
 
