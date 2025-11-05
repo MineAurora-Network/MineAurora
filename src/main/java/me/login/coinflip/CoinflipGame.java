@@ -13,17 +13,19 @@ public class CoinflipGame {
     private final CoinSide chosenSide;
     private final double amount;
     private final long creationTime;
+    private final String status; // [Req 8] Added status field
 
     private UUID challengerUUID;
     private String challengerName;
 
-    public CoinflipGame(long gameId, UUID creatorUUID, String creatorName, CoinSide chosenSide, double amount, long creationTime) {
+    public CoinflipGame(long gameId, UUID creatorUUID, String creatorName, CoinSide chosenSide, double amount, long creationTime, String status) {
         this.gameId = gameId;
         this.creatorUUID = creatorUUID;
         this.creatorName = creatorName;
         this.chosenSide = chosenSide;
         this.amount = amount;
         this.creationTime = creationTime;
+        this.status = status; // [Req 8]
     }
 
     // Getters
@@ -33,7 +35,7 @@ public class CoinflipGame {
     public CoinSide getChosenSide() { return chosenSide; }
     public double getAmount() { return amount; }
     public long getCreationTime() { return creationTime; }
-
+    public String getStatus() { return status; } // [Req 8]
 
     public void setChallenger(Player challenger) {
         this.challengerUUID = challenger.getUniqueId();
@@ -42,5 +44,9 @@ public class CoinflipGame {
 
     public UUID getChallengerUUID() {
         return this.challengerUUID;
+    }
+
+    public String getChallengerName() {
+        return this.challengerName;
     }
 }

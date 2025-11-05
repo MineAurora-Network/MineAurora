@@ -14,10 +14,10 @@ import me.login.DamageIndicator;
 import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.CleanupTask;
 import me.login.clearlag.LagClearCommand;
-import me.login.clearlag.PlacementLimitListener; // <-- IMPORT ADDED
+import me.login.clearlag.PlacementLimitListener;
 import me.login.clearlag.TPSWatcher;
 import me.login.clearlag.LagClearConfig;
-import me.login.clearlag.LagClearLogger; // <-- Your new import
+import me.login.clearlag.LagClearLogger;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -29,6 +29,8 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import me.login.coinflip.*;
+import net.dv8tion.jda.api.JDA;
+import org.bukkit.scheduler.BukkitRunnable;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.ChatColor;
@@ -83,12 +85,17 @@ public class Login extends JavaPlugin implements Listener {
     private CoinflipSystem coinflipSystem;
     private CoinflipMenu coinflipMenu;
     private CoinflipManageMenu coinflipManageMenu;
-    private WebhookClient coinflipWebhookClient;
     private Economy vaultEconomy = null;
     private LeaderboardDisplayManager leaderboardManager;
     private BukkitTask leaderboardUpdateTask;
 
-    private String coinflipPrefixString;
+    // private String coinflipPrefixString; // [REMOVED] Req 1
+
+    // --- [NEW] Coinflip Fields ---
+    private CoinflipAdminMenu coinflipAdminMenu; // [NEW] Req 8
+    private CoinflipLogger coinflipLogger; // [NEW] Req 9
+    private MessageManager coinflipMessageManager; // [NEW] Req 1
+    // --- End Coinflip Fields ---
 
     private ModerationDatabase moderationDatabase;
     private WebhookClient staffWebhookClient;
@@ -117,8 +124,6 @@ public class Login extends JavaPlugin implements Listener {
 
         this.lagClearConfig = new LagClearConfig(this);
         this.discordModConfig = new DiscordModConfig(this);
-        loadCoinflipConfig();
-
         this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3);
 
         if (!setupEconomy()) {
@@ -149,7 +154,7 @@ public class Login extends JavaPlugin implements Listener {
         ordersDatabase.connect();
         if (ordersDatabase.getConnection() == null) { disableWithError("Orders DB failed."); return; }
 
-        this.coinflipDatabase = new CoinflipDatabase(this);
+        this.coinflipDatabase = new CoinflipDatabase(this); // [MODIFIED] Req 3 (Path logic is in its constructor)
         coinflipDatabase.connect();
         if (coinflipDatabase.getConnection() == null) { disableWithError("Coinflip DB failed."); return; }
 
@@ -165,7 +170,7 @@ public class Login extends JavaPlugin implements Listener {
         this.linkWebhookClient = initializeWebhook("link-system-log-webhook", "Link-System");
         this.loginWebhookClient = initializeWebhook("login-system-log-webhook", "Login-System");
         this.orderWebhookClient = initializeWebhook("order-system-log-webhook", "Order-System");
-        this.coinflipWebhookClient = initializeWebhook("coinflip-system-log-webhook", "Coinflip-System");
+        // this.coinflipWebhookClient = initializeWebhook("coinflip-system-log-webhook", "Coinflip-System"); // [REMOVED] Req 9
         this.staffWebhookClient = initializeWebhook("staff-system-log-webhook", "Staff-System");
         this.discordStaffLogWebhook = initializeWebhook("discord-staff-log-webhook", "Discord-Staff-System");
 
@@ -183,19 +188,7 @@ public class Login extends JavaPlugin implements Listener {
         this.orderManage = new OrderManage(this, orderSystem);
         this.orderAdminMenu = new OrderAdminMenu(this, orderSystem);
 
-        this.coinflipMenu = new CoinflipMenu(this, coinflipDatabase, vaultEconomy);
-        this.coinflipSystem = new CoinflipSystem(this, coinflipDatabase, vaultEconomy, coinflipWebhookClient, coinflipMenu.getPlayersChallengingSet());
-        this.coinflipMenu.setCoinflipSystem(coinflipSystem);
-        this.coinflipManageMenu = new CoinflipManageMenu(this, coinflipDatabase, vaultEconomy);
-
-        if (getServer().getPluginManager().getPlugin("Citizens") != null) {
-            getServer().getPluginManager().registerEvents(new CoinflipNpcListener(this, coinflipMenu), this);
-            getLogger().info("Citizens found, Coinflip NPC listener registered.");
-        } else {
-            getLogger().warning("Citizens plugin not found! Coinflip NPC click will not work.");
-        }
-        getServer().getPluginManager().registerEvents(coinflipMenu, this);
-        getServer().getPluginManager().registerEvents(coinflipManageMenu, this);
+        // --- [MOVED] Coinflip setup is deferred until after JDA is ready ---
 
         getServer().getPluginManager().registerEvents(orderAdminMenu, this);
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
@@ -214,7 +207,7 @@ public class Login extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new LifestealListener(this, itemManager, lifestealManager, deadPlayerManager, reviveMenu), this);
         getServer().getPluginManager().registerEvents(combatLogManager, this);
 
-        registerCommands();
+        registerCommands(); // Coinflip command is registered later
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new LeaderboardProtectionListener(this.leaderboardManager), this);
 
@@ -272,9 +265,67 @@ public class Login extends JavaPlugin implements Listener {
                             DiscordCommandRegistrar.register(discordLinking.getJDA());
                             getLogger().info("Discord slash command listeners registered.");
 
-                            long lagClearChannelId = getConfig().getLong("lagclear-log-channel-id", 0);
-                            this.lagClearLogger = this.lagClearLogger = new LagClearLogger(this);
-                            getLogger().info("LagClear Logger wired to shared JDA.");
+                            // --- [FIX] START OF COINFLIP INIT FIX ---
+
+                            // 1. Create the logger. This will start its async JDA build.
+                            this.lagClearLogger = new LagClearLogger(this);
+                            getLogger().info("LagClear Logger initialization requested...");
+
+                            // 2. Create a new task to check when the logger bot is ready.
+                            new BukkitRunnable() {
+                                int attempts = 0;
+                                final int maxAttempts = 10; // Wait 10 seconds (10 * 20 ticks)
+
+                                @Override
+                                public void run() {
+                                    if (!isEnabled()) { // Plugin disabled
+                                        this.cancel();
+                                        return;
+                                    }
+
+                                    // Check if the logger's JDA is ready
+                                    if (lagClearLogger != null && lagClearLogger.getJDA() != null && lagClearLogger.getJDA().getStatus() == JDA.Status.CONNECTED) {
+                                        // --- IT'S READY! NOW INITIALIZE COINFLIP ---
+                                        getLogger().info("LagClear Logger JDA is now connected. Initializing Coinflip system...");
+
+                                        coinflipMessageManager = new MessageManager(Login.this); // [NEW] Req 1
+                                        coinflipLogger = new CoinflipLogger(Login.this); // [NEW] Req 9
+
+                                        coinflipMenu = new CoinflipMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger); // [MODIFIED] Req 1, 9
+                                        coinflipSystem = new CoinflipSystem(Login.this, coinflipDatabase, vaultEconomy, coinflipLogger, coinflipMessageManager, coinflipMenu.getPlayersChallengingSet()); // [MODIFIED] Req 1, 9
+                                        coinflipMenu.setCoinflipSystem(coinflipSystem);
+                                        coinflipManageMenu = new CoinflipManageMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger); // [MODIFIED] Req 1, 9
+                                        coinflipAdminMenu = new CoinflipAdminMenu(Login.this, coinflipDatabase, coinflipSystem, vaultEconomy, coinflipMessageManager, coinflipLogger); // [NEW] Req 8
+
+                                        if (getServer().getPluginManager().getPlugin("Citizens") != null) {
+                                            getServer().getPluginManager().registerEvents(new CoinflipNpcListener(Login.this, coinflipMenu), Login.this); // [MODIFIED] Req 7 (Handled in NpcListener)
+                                            getLogger().info("Citizens found, Coinflip NPC listener registered.");
+                                        } else {
+                                            getLogger().warning("Citizens plugin not found! Coinflip NPC click will not work.");
+                                        }
+                                        getServer().getPluginManager().registerEvents(coinflipMenu, Login.this); // [MODIFIED] Req 2 (Handled in Menu)
+                                        getServer().getPluginManager().registerEvents(coinflipManageMenu, Login.this); // [MODIFIED] Req 2 (Handled in Menu)
+                                        getServer().getPluginManager().registerEvents(coinflipAdminMenu, Login.this); // [NEW] Req 8
+
+                                        // Register coinflip command
+                                        CoinflipCmd coinflipCmd = new CoinflipCmd(Login.this, coinflipDatabase, vaultEconomy, coinflipMenu, coinflipManageMenu, coinflipAdminMenu, coinflipSystem, coinflipMessageManager, coinflipLogger); // [MODIFIED] Req 4, 8, 10
+                                        setCommandExecutor("coinflip", coinflipCmd);
+                                        getCommand("coinflip").setTabCompleter(coinflipCmd);
+                                        getLogger().info("Coinflip system enabled.");
+
+                                        this.cancel(); // Stop this checking task
+                                        return;
+                                    }
+
+                                    // Check for timeout
+                                    attempts++;
+                                    if (attempts >= maxAttempts) {
+                                        getLogger().severe("LagClear Logger JDA did not connect after 10 seconds. Coinflip system will be disabled.");
+                                        this.cancel();
+                                    }
+                                }
+                            }.runTaskTimer(Login.this, 20L, 20L); // <-- [FIXED] Changed 'plugin' to 'Login.this'
+
                         } catch (Throwable postErr) {
                             getLogger().severe("Post-start Discord steps failed: " + postErr.getMessage());
                             postErr.printStackTrace();
@@ -349,7 +400,7 @@ public class Login extends JavaPlugin implements Listener {
     private void disableWithError(String message) { getLogger().severe(message + " Disabling plugin."); getServer().getPluginManager().disablePlugin(this); }
 
     private void registerCommands() {
-        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || coinflipSystem == null || coinflipMenu == null || coinflipManageMenu == null || leaderboardManager == null || moderationDatabase == null ||
+        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || /* coinflipSystem == null || coinflipMenu == null || coinflipManageMenu == null || */ leaderboardManager == null || moderationDatabase == null ||
                 databaseManager == null || itemManager == null || lifestealManager == null) {
             getLogger().severe("Cannot register commands - one or more systems failed initialization!"); return;
         }
@@ -357,7 +408,7 @@ public class Login extends JavaPlugin implements Listener {
         DiscordLinkCmd discordCmd = new DiscordLinkCmd(this, discordLinking, discordLinkDatabase);
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase);
         OrderCmd orderCmd = new OrderCmd(this, orderSystem, orderMenu, orderManage, orderAdminMenu);
-        CoinflipCmd coinflipCmd = new CoinflipCmd(this, coinflipDatabase, vaultEconomy, coinflipManageMenu, coinflipSystem, coinflipMenu);
+        // CoinflipCmd coinflipCmd = new CoinflipCmd(this, coinflipDatabase, vaultEconomy, coinflipManageMenu, coinflipSystem, coinflipMenu); // [MOVED]
 
         setCommandExecutor("discord", discordCmd); setCommandExecutor("unlink", discordCmd); setCommandExecutor("adminunlink", discordCmd);
         setCommandExecutor("register", loginCmd); setCommandExecutor("login", loginCmd);
@@ -365,7 +416,7 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("unregister", loginCmd); setCommandExecutor("loginhistory", loginCmd); setCommandExecutor("checkalt", loginCmd);
         setCommandExecutor("adminchangepass", loginCmd);
         setCommandExecutor("order", orderCmd);
-        setCommandExecutor("coinflip", coinflipCmd);
+        // setCommandExecutor("coinflip", coinflipCmd); // [MOVED]
 
         LeaderboardCommand leaderboardCmd = new LeaderboardCommand(this, this.leaderboardManager);
         getCommand("leaderboard").setExecutor(leaderboardCmd);
@@ -478,7 +529,7 @@ public class Login extends JavaPlugin implements Listener {
             if(linkWebhookClient != null) linkWebhookClient.close();
             if(loginWebhookClient != null) loginWebhookClient.close();
             if(orderWebhookClient != null) orderWebhookClient.close();
-            if(coinflipWebhookClient != null) coinflipWebhookClient.close();
+            // if(coinflipWebhookClient != null) coinflipWebhookClient.close(); // [REMOVED] Req 9
             if(itemManager != null) itemManager.closeWebhook();
             if(staffWebhookClient != null) staffWebhookClient.close();
             if(discordStaffLogWebhook != null) discordStaffLogWebhook.close();
@@ -516,7 +567,6 @@ public class Login extends JavaPlugin implements Listener {
     }
     public CoinflipDatabase getCoinflipDatabase() { return coinflipDatabase; }
     public Economy getVaultEconomy() { return vaultEconomy; }
-    public WebhookClient getCoinflipWebhookClient() { return coinflipWebhookClient; }
     public CoinflipMenu getCoinflipMenu() {
         return coinflipMenu;
     }
@@ -601,16 +651,6 @@ public class Login extends JavaPlugin implements Listener {
         });
     }
 
-    public void sendCoinflipLog(String message) {
-        getLogger().info("[Coinflip Log] " + ChatColor.stripColor(message.replace("`", "").replace("*", "")));
-        if (coinflipWebhookClient != null) {
-            coinflipWebhookClient.send("[Coinflip] " + message).exceptionally(error -> {
-                getLogger().warning("Failed send coinflip webhook: ".concat(error.getMessage()));
-                return null;
-            });
-        }
-    }
-
     public void sendStaffLog(String message) {
         getLogger().info("[Staff Log] " + ChatColor.stripColor(message.replace("`", "").replace("*", "")));
         if (staffWebhookClient != null) {
@@ -633,30 +673,9 @@ public class Login extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onAnimationInventoryClick(InventoryClickEvent event) {
-        if (event.getView().getTitle().equals(ChatColor.DARK_GRAY + "Coin Flipping...")) {
+        Component title = event.getView().title();
+        if (title.equals(CoinflipSystem.ANIMATION_TITLE)) {
             event.setCancelled(true);
         }
     }
-
-    public void loadCoinflipConfig() {
-        this.coinflipPrefixString = getConfig().getString("coinflip_prefix", "<#47D5F0>M<#49CBED>i<#4AC1E9>n<#4CB7E6>e<#4DADE2>A<#4FA2DF>u<#5098DB>r<#528ED8>o<#5384D4>r<V<#557AD1>a") + " ";
-    }
-
-    public Component formatMessage(String legacyText) {
-        Component prefix = Component.empty();
-        try {
-            prefix = MiniMessage.miniMessage().deserialize(this.coinflipPrefixString);
-        } catch (Exception e) {
-            getLogger().warning("Failed to parse coinflip_prefix with MiniMessage. Falling back to legacy. Error: " + e.getMessage());
-            prefix = LegacyComponentSerializer.legacyAmpersand().deserialize(this.coinflipPrefixString);
-        }
-
-        Component message = LegacyComponentSerializer.legacyAmpersand().deserialize(legacyText);
-        return prefix.append(message);
-    }
-
-    public String getCoinflipPrefix() {
-        return coinflipPrefixString;
-    }
-
 }

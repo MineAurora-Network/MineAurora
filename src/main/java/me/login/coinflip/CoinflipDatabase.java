@@ -2,15 +2,7 @@ package me.login.coinflip;
 
 import me.login.Login;
 import org.bukkit.Bukkit;
-import org.bukkit.inventory.ItemStack; // Keep for potential future item flips
-import org.bukkit.util.io.BukkitObjectInputStream;
-import org.bukkit.util.io.BukkitObjectOutputStream;
-import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,9 +18,13 @@ public class CoinflipDatabase {
 
     public CoinflipDatabase(Login plugin) {
         this.plugin = plugin;
-        File dataFolder = plugin.getDataFolder();
-        if (!dataFolder.exists()) dataFolder.mkdirs();
-        this.url = "jdbc:sqlite:" + dataFolder.getAbsolutePath() + File.separator + "coinflips.db";
+
+        // [Req 3] Create database folder and update path
+        File dbFolder = new File(plugin.getDataFolder(), "database");
+        if (!dbFolder.exists()) {
+            dbFolder.mkdirs();
+        }
+        this.url = "jdbc:sqlite:" + dbFolder.getAbsolutePath() + File.separator + "coinflips.db";
     }
 
     public void connect() {
@@ -59,10 +55,7 @@ public class CoinflipDatabase {
                     )""");
                 // Index for faster lookups
                 stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_coinflips_status ON coinflips (status)");
-                // --- ADDED Index for player lookups ---
                 stmt.executeUpdate("CREATE INDEX IF NOT EXISTS idx_coinflips_creator ON coinflips (creator_uuid, status)");
-                // --- END ADD ---
-
             }
             plugin.getLogger().info("Coinflip DB Connected.");
         } catch (Exception e) {
@@ -81,7 +74,6 @@ public class CoinflipDatabase {
     }
 
     public void disconnect() {
-        // ... (unchanged) ...
         try {
             if (connection != null && !connection.isClosed()) {
                 connection.close();
@@ -95,7 +87,6 @@ public class CoinflipDatabase {
     // --- Game Management ---
 
     public CompletableFuture<Long> createCoinflip(UUID creatorUUID, String creatorName, CoinflipGame.CoinSide side, double amount) {
-        // ... (unchanged) ...
         CompletableFuture<Long> future = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             Connection conn = getConnection();
@@ -124,8 +115,36 @@ public class CoinflipDatabase {
         return future;
     }
 
+    /**
+     * Loads all PENDING or ACTIVE coinflips.
+     * Used by Admin menu.
+     * @return A list of all ongoing games.
+     */
+    public CompletableFuture<List<CoinflipGame>> loadAllGames() {
+        CompletableFuture<List<CoinflipGame>> future = new CompletableFuture<>();
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<CoinflipGame> games = new ArrayList<>();
+            Connection conn = getConnection();
+            if (conn == null) { future.complete(games); return; }
+            String query = "SELECT * FROM coinflips WHERE status = 'PENDING' OR status = 'ACTIVE' ORDER BY creation_time ASC";
+            try (PreparedStatement ps = conn.prepareStatement(query);
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    try {
+                        games.add(parseGameFromResult(rs));
+                    } catch (IllegalArgumentException e) {
+                        plugin.getLogger().warning("Failed parse coinflip game ID " + rs.getLong("game_id") + ": Invalid side - " + e.getMessage());
+                    }
+                }
+                future.complete(games);
+            } catch (SQLException e) {
+                future.completeExceptionally(e);
+            }
+        });
+        return future;
+    }
+
     public CompletableFuture<List<CoinflipGame>> loadPendingCoinflips() {
-        // ... (unchanged) ...
         CompletableFuture<List<CoinflipGame>> future = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             List<CoinflipGame> games = new ArrayList<>();
@@ -149,7 +168,6 @@ public class CoinflipDatabase {
         return future;
     }
 
-    // --- ADDED: Load only player's PENDING coinflips ---
     public CompletableFuture<List<CoinflipGame>> loadPlayerPendingCoinflips(UUID playerUUID) {
         CompletableFuture<List<CoinflipGame>> future = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -175,10 +193,8 @@ public class CoinflipDatabase {
         });
         return future;
     }
-    // --- END ADD ---
 
     public CompletableFuture<Boolean> activateCoinflip(long gameId) {
-        // ... (unchanged) ...
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             Connection conn = getConnection();
@@ -197,7 +213,6 @@ public class CoinflipDatabase {
     }
 
     public CompletableFuture<Boolean> removeCoinflip(long gameId) {
-        // ... (unchanged) ...
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             Connection conn = getConnection();
@@ -214,20 +229,21 @@ public class CoinflipDatabase {
     }
 
     private CoinflipGame parseGameFromResult(ResultSet rs) throws SQLException {
-        // ... (unchanged) ...
         long id = rs.getLong("game_id");
         UUID creatorUUID = UUID.fromString(rs.getString("creator_uuid"));
         String creatorName = rs.getString("creator_name");
         CoinflipGame.CoinSide side = CoinflipGame.CoinSide.valueOf(rs.getString("chosen_side"));
         double amount = rs.getDouble("amount");
         long creationTime = rs.getLong("creation_time");
-        // Status might be useful later, but CoinflipGame only represents pending ones for now
-        return new CoinflipGame(id, creatorUUID, creatorName, side, amount, creationTime);
+        // [Req 8] Add status to CoinflipGame object
+        String status = rs.getString("status");
+
+        return new CoinflipGame(id, creatorUUID, creatorName, side, amount, creationTime, status);
     }
 
 
     // --- Stats Management ---
-    // ... (loadPlayerStats, updatePlayerStats unchanged) ...
+
     public CompletableFuture<CoinflipStats> loadPlayerStats(UUID playerUUID) {
         CompletableFuture<CoinflipStats> future = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -249,6 +265,7 @@ public class CoinflipDatabase {
         });
         return future;
     }
+
     public CompletableFuture<Void> updatePlayerStats(UUID playerUUID, String playerName, boolean won) {
         CompletableFuture<Void> future = new CompletableFuture<>();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {

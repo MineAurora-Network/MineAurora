@@ -3,49 +3,61 @@ package me.login.coinflip;
 import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Level;
 
-public class CoinflipCmd implements CommandExecutor {
+public class CoinflipCmd implements CommandExecutor, TabCompleter {
 
     private final Login plugin;
-    private final CoinflipDatabase database;
-    private final Economy economy;
+    private final CoinflipDatabase database; // Added back
+    private final Economy economy; // Added back
     private final CoinflipManageMenu manageMenu;
     private final CoinflipSystem coinflipSystem;
     private final CoinflipMenu coinflipMenu;
+    private final CoinflipAdminMenu adminMenu; // [Req 8]
+    private final MessageManager msg; // [Req 4]
+    private final CoinflipLogger logger; // [Req 9]
 
-    public CoinflipCmd(Login plugin, CoinflipDatabase database, Economy economy, CoinflipManageMenu manageMenu, CoinflipSystem coinflipSystem, CoinflipMenu coinflipMenu) {
+    // Constructor updated to include database and economy
+    public CoinflipCmd(Login plugin, CoinflipDatabase database, Economy economy, CoinflipMenu coinflipMenu, CoinflipManageMenu manageMenu, CoinflipAdminMenu adminMenu, CoinflipSystem coinflipSystem, MessageManager msg, CoinflipLogger logger) {
         this.plugin = plugin;
-        this.database = database;
-        this.economy = economy;
-        this.manageMenu = manageMenu;
-        this.coinflipSystem = coinflipSystem;
+        this.database = database; // Added back
+        this.economy = economy; // Added back
         this.coinflipMenu = coinflipMenu;
+        this.manageMenu = manageMenu;
+        this.adminMenu = adminMenu;
+        this.coinflipSystem = coinflipSystem;
+        this.msg = msg;
+        this.logger = logger;
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Players only command!.", NamedTextColor.RED));
+            sender.sendMessage("This command can only be run by a player.");
             return true;
         }
 
-        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-            sendUsage(player);
+        if (args.length == 0) {
+            coinflipMenu.openMainMenu(player, 0);
             return true;
         }
 
         String subCommand = args[0].toLowerCase();
 
         switch (subCommand) {
+            // [FIX] Added 'create' case back
             case "create":
                 handleCreate(player, args);
                 return true;
@@ -55,29 +67,35 @@ public class CoinflipCmd implements CommandExecutor {
             case "menu":
                 coinflipMenu.openMainMenu(player, 0);
                 return true;
-            case "reload":
-                handleReload(sender);
+            case "adminmenu": // [Req 8]
+                if (player.hasPermission("login.coinflip.admin")) {
+                    adminMenu.openAdminMenu(player, 0);
+                } else {
+                    msg.send(player, "&cYou do not have permission to use this command.");
+                }
                 return true;
+            case "msgtoggle": // [Req 4]
+            case "toggle":
+                boolean currentToggle = msg.getToggle(player.getUniqueId());
+                boolean newToggle = !currentToggle;
+                msg.saveToggle(player.getUniqueId(), newToggle);
+                if (newToggle) {
+                    msg.send(player, "&aCoinflip broadcast messages enabled.");
+                } else {
+                    msg.send(player, "&cCoinflip broadcast messages disabled.");
+                }
+                return true;
+            case "help":
             default:
-                sendUsage(player);
+                sendHelpMessage(player);
                 return true;
         }
     }
 
-    private void handleReload(CommandSender sender) {
-        if (!sender.hasPermission("coinflip.admin.reload")) {
-            sender.sendMessage(plugin.formatMessage("&cYou do not have permission to use this command."));
-            return;
-        }
-        plugin.reloadConfig();
-        // Assuming you have a method in Login.java to reload the prefix
-        // plugin.loadCoinflipConfig();
-        sender.sendMessage(plugin.formatMessage("&aConfiguration and prefix reloaded."));
-    }
-
+    // [FIX] Added handleCreate method back
     private void handleCreate(Player player, String[] args) {
         if (args.length != 3) {
-            player.sendMessage(plugin.formatMessage("&cUsage: /coinflip create <heads/tails> <amount>"));
+            msg.send(player, "&cUsage: /coinflip create <heads/tails> <amount>");
             return;
         }
 
@@ -85,7 +103,7 @@ public class CoinflipCmd implements CommandExecutor {
         try {
             chosenSide = CoinflipGame.CoinSide.valueOf(args[1].toUpperCase());
         } catch (IllegalArgumentException e) {
-            player.sendMessage(plugin.formatMessage("&cInvalid side. Choose 'heads' or 'tails'."));
+            msg.send(player, "&cInvalid side. Choose 'heads' or 'tails'.");
             return;
         }
 
@@ -93,26 +111,26 @@ public class CoinflipCmd implements CommandExecutor {
         try {
             amount = parseDoubleWithSuffix(args[2]);
             if (amount <= 0) {
-                player.sendMessage(plugin.formatMessage("&cAmount must be positive."));
+                msg.send(player, "&cAmount must be positive.");
                 return;
             }
         } catch (NumberFormatException e) {
             if (e.getMessage() != null && e.getMessage().contains("Decimals")) {
-                player.sendMessage(plugin.formatMessage("&cDecimal amounts are not allowed."));
+                msg.send(player, "&cDecimal amounts are not allowed.");
             } else {
-                player.sendMessage(plugin.formatMessage("&c'" + args[2] + "' is not a valid amount. Use whole numbers (e.g., 100, 2k, 1m)."));
+                msg.send(player, "&c'" + args[2] + "' is not a valid amount. Use whole numbers (e.g., 100, 2k, 1m).");
             }
             return;
         }
 
         if (!economy.has(player, amount)) {
-            player.sendMessage(plugin.formatMessage("&cYou do not have enough money to create this coinflip."));
+            msg.send(player, "&cYou do not have enough money to create this coinflip.");
             return;
         }
 
         EconomyResponse withdrawResp = economy.withdrawPlayer(player, amount);
         if (!withdrawResp.transactionSuccess()) {
-            player.sendMessage(plugin.formatMessage("&cFailed to withdraw funds: " + withdrawResp.errorMessage));
+            msg.send(player, "&cFailed to withdraw funds: " + withdrawResp.errorMessage);
             return;
         }
 
@@ -120,17 +138,22 @@ public class CoinflipCmd implements CommandExecutor {
                 .whenCompleteAsync((gameId, error) -> {
                     plugin.getServer().getScheduler().runTask(plugin, () -> {
                         if (error != null) {
-                            player.sendMessage(plugin.formatMessage("&cAn error occurred creating the coinflip. Your money has been refunded."));
+                            msg.send(player, "&cAn error occurred creating the coinflip. Your money has been refunded.");
                             plugin.getLogger().log(Level.SEVERE, "Failed to save coinflip for " + player.getName(), error);
                             economy.depositPlayer(player, amount);
                         } else {
-                            player.sendMessage(plugin.formatMessage("&aCoinflip created for " + economy.format(amount) + " on " + chosenSide.name().toLowerCase() + "!"));
-                            plugin.sendCoinflipLog(player.getName() + " created a coinflip (ID: " + gameId + ") for `" + economy.format(amount) + "` on `" + chosenSide.name() + "`");
+                            msg.send(player, "&aCoinflip created for " + economy.format(amount) + " on " + chosenSide.name().toLowerCase() + "!");
+
+                            // [Req 4] & [Req 9] Broadcast and Log
+                            String broadcastMsg = "<yellow>" + player.getName() + "</yellow> created a coinflip for <gold>" + economy.format(amount) + "</gold>!";
+                            msg.broadcast(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(broadcastMsg));
+                            logger.logGame(player.getName() + " created a coinflip (ID: " + gameId + ") for `" + economy.format(amount) + "` on `" + chosenSide.name() + "`");
                         }
                     });
                 });
     }
 
+    // [FIX] Added parseDoubleWithSuffix method back
     private double parseDoubleWithSuffix(String input) throws NumberFormatException {
         input = input.trim().toLowerCase();
         if (input.isEmpty()) {
@@ -168,35 +191,37 @@ public class CoinflipCmd implements CommandExecutor {
         return value;
     }
 
+    // [FIX] Renamed and re-added 'create' command to help
+    private void sendHelpMessage(Player player) {
+        msg.send(player, "&b&lCoinflip Help Menu");
+        msg.send(player, "&e/cf create <heads/tails> <amount> &7- Create a new coinflip.");
+        msg.send(player, "&e/cf menu &7- Opens the main coinflip menu.");
+        msg.send(player, "&e/cf manage &7- Manage your pending coinflips.");
+        msg.send(player, "&e/cf msgtoggle &7- Toggles coinflip broadcast messages.");
+        if (player.hasPermission("login.coinflip.admin")) {
+            msg.send(player, "&c/cf adminmenu &7- Opens the admin menu to cancel games.");
+        }
+    }
 
-    private void sendUsage(CommandSender sender) {
-        sender.sendMessage(Component.text("--- Coinflip Commands ---", NamedTextColor.AQUA));
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("/coinflip create <heads/tails> <amount>", NamedTextColor.YELLOW))
-                .append(Component.text(" - Create a new coinflip (use k/m).", NamedTextColor.GRAY))
-                .build());
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("/coinflip manage", NamedTextColor.YELLOW))
-                .append(Component.text(" - View and cancel your pending coinflips.", NamedTextColor.GRAY))
-                .build());
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("/coinflip menu", NamedTextColor.YELLOW))
-                .append(Component.text(" - Open the main coinflip menu.", NamedTextColor.GRAY))
-                .build());
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("/coinflip help", NamedTextColor.YELLOW))
-                .append(Component.text(" - Shows this help message.", NamedTextColor.GRAY))
-                .build());
-
-        sender.sendMessage(Component.text()
-                .append(Component.text("/coinflip reload", NamedTextColor.YELLOW))
-                .append(Component.text(" - (Admin) Reloads the config prefix.", NamedTextColor.GRAY))
-                .build());
-
-        sender.sendMessage(Component.text("(You can also open the menu by clicking the NPC)", NamedTextColor.GRAY));
+    @Override
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        if (args.length == 1) {
+            List<String> completions = new ArrayList<>(Arrays.asList("help", "manage", "msgtoggle", "menu", "create")); // [FIX] Added 'create' and 'menu'
+            if (sender.hasPermission("login.coinflip.admin")) {
+                completions.add("adminmenu");
+            }
+            return completions.stream()
+                    .filter(s -> s.startsWith(args[0].toLowerCase()))
+                    .toList();
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("create")) {
+            return Arrays.asList("heads", "tails").stream()
+                    .filter(s -> s.startsWith(args[1].toLowerCase()))
+                    .toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("create")) {
+            return Arrays.asList("1k", "10k", "100k", "1m");
+        }
+        return new ArrayList<>();
     }
 }

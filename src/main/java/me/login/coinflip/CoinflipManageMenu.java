@@ -4,10 +4,10 @@ import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor; // Keep for legacy title check
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -33,19 +33,23 @@ public class CoinflipManageMenu implements Listener {
     private final Login plugin;
     private final CoinflipDatabase database;
     private final Economy economy;
+    private final MessageManager msg; // [Req 1]
+    private final CoinflipLogger logger; // [Req 9]
 
     private static final int GUI_SIZE = 54;
     private static final int GAMES_PER_PAGE = 45;
     private final NamespacedKey gameIdKey;
     private final NamespacedKey gameAmountKey;
-    private final Set<UUID> playersCancelling = new HashSet<>();
+    private final Set<UUID> playersCancelling = new HashSet<>(); // [Req 2]
     public static final String GUI_MANAGE_METADATA = "CoinflipManageMenu";
 
 
-    public CoinflipManageMenu(Login plugin, CoinflipDatabase database, Economy economy) {
+    public CoinflipManageMenu(Login plugin, CoinflipDatabase database, Economy economy, MessageManager msg, CoinflipLogger logger) {
         this.plugin = plugin;
         this.database = database;
         this.economy = economy;
+        this.msg = msg; // [Req 1]
+        this.logger = logger; // [Req 9]
         this.gameIdKey = new NamespacedKey(plugin, "cf_manage_game_id");
         this.gameAmountKey = new NamespacedKey(plugin, "cf_manage_game_amount");
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
@@ -55,13 +59,13 @@ public class CoinflipManageMenu implements Listener {
         database.loadPlayerPendingCoinflips(player.getUniqueId()).whenCompleteAsync((games, error) -> {
             if (error != null) {
                 plugin.getLogger().log(Level.SEVERE, "Error loading player coinflips for " + player.getName(), error);
-                Bukkit.getScheduler().runTask(plugin, () -> player.sendMessage(plugin.formatMessage("&cError loading your coinflips.")));
+                Bukkit.getScheduler().runTask(plugin, () -> msg.send(player, "&cError loading your coinflips."));
                 return;
             }
 
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (games.isEmpty()) {
-                    player.sendMessage(plugin.formatMessage("&eYou have no pending coinflips."));
+                    msg.send(player, "&eYou have no pending coinflips.");
                     return;
                 }
 
@@ -69,9 +73,9 @@ public class CoinflipManageMenu implements Listener {
                 int totalPages = Math.max(1, (int) Math.ceil((double) totalGames / GAMES_PER_PAGE));
                 int finalPage = Math.max(0, Math.min(page, totalPages - 1));
 
-                // --- FIX: Changed title color ---
-                Inventory gui = Bukkit.createInventory(null, GUI_SIZE, ChatColor.DARK_GRAY + "Manage Coinflips (Page " + (finalPage + 1) + "/" + totalPages + ")");
-                // --- END FIX ---
+                // [Req 5] & [Req 6] Use Component title
+                Component title = Component.text("Manage Coinflips (Page " + (finalPage + 1) + "/" + totalPages + ")", NamedTextColor.DARK_GRAY);
+                Inventory gui = Bukkit.createInventory(null, GUI_SIZE, LegacyComponentSerializer.legacySection().serialize(title));
 
                 int startIndex = finalPage * GAMES_PER_PAGE;
                 int endIndex = Math.min(startIndex + GAMES_PER_PAGE, totalGames);
@@ -95,6 +99,7 @@ public class CoinflipManageMenu implements Listener {
         }, runnable -> Bukkit.getScheduler().runTaskAsynchronously(plugin, runnable));
     }
 
+    // [Req 6]
     private ItemStack createManageDisplayItem(CoinflipGame game) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
@@ -114,7 +119,7 @@ public class CoinflipManageMenu implements Listener {
             lore.add(Component.text("Side: ", NamedTextColor.GRAY).append(side).decoration(TextDecoration.ITALIC, false));
 
             lore.add(Component.text("Created: " + new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date(game.getCreationTime())), NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
-            lore.add(Component.empty().decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.empty());
             lore.add(Component.text("▶ Shift+Click to Cancel", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
 
             meta.lore(lore);
@@ -131,13 +136,22 @@ public class CoinflipManageMenu implements Listener {
     public void onInventoryClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
         if (!player.hasMetadata(GUI_MANAGE_METADATA)) return;
-        // --- FIX: Check for correct title color ---
-        if (!event.getView().getTitle().startsWith(ChatColor.DARK_GRAY + "Manage Coinflips")) return;
-        // --- END FIX ---
+
+        // [Req 5] & [Req 6] Use Component comparison
+        Component title = event.getView().title();
+        String legacyTitle = LegacyComponentSerializer.legacySection().serialize(title);
+        if (!legacyTitle.startsWith(LegacyComponentSerializer.legacySection().serialize(Component.text("Manage Coinflips", NamedTextColor.DARK_GRAY)))) {
+            return;
+        }
 
         event.setCancelled(true);
         ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null || clickedItem.getType() == Material.AIR) return;
+
+        // [Req 2] Prevent double clicks
+        if (playersCancelling.contains(player.getUniqueId())) {
+            return;
+        }
 
         int currentPage = player.getMetadata(GUI_MANAGE_METADATA).getFirst().asInt();
         int slot = event.getRawSlot();
@@ -159,7 +173,7 @@ public class CoinflipManageMenu implements Listener {
                     });
                 }
             } else if (type == Material.CLOCK && slot == 50) {
-                player.sendMessage(plugin.formatMessage("&aRefreshing list..."));
+                msg.send(player, "&aRefreshing list...");
                 openManageMenu(player, currentPage);
             }
         } else {
@@ -169,7 +183,7 @@ public class CoinflipManageMenu implements Listener {
                     long gameId = meta.getPersistentDataContainer().get(gameIdKey, PersistentDataType.LONG);
 
                     if (!meta.getPersistentDataContainer().has(gameAmountKey, PersistentDataType.DOUBLE)) {
-                        player.sendMessage(plugin.formatMessage("&cError: Could not read amount from item. Please refresh."));
+                        msg.send(player, "&cError: Could not read amount from item. Please refresh.");
                         return;
                     }
                     double amount = meta.getPersistentDataContainer().get(gameAmountKey, PersistentDataType.DOUBLE);
@@ -181,44 +195,42 @@ public class CoinflipManageMenu implements Listener {
     }
 
     private void handleCancelCoinflip(Player player, long gameId, double amount, int currentPage) {
-        if (playersCancelling.contains(player.getUniqueId())) {
-            player.sendMessage(plugin.formatMessage("&ePlease wait, cancellation in progress..."));
-            return;
-        }
-        playersCancelling.add(player.getUniqueId());
+        playersCancelling.add(player.getUniqueId()); // [Req 2] Add lock
 
         database.removeCoinflip(gameId).whenCompleteAsync((success, error) -> {
             UUID playerUUID = player.getUniqueId();
 
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                playersCancelling.remove(playerUUID);
-
-                if (error != null) {
-                    player.sendMessage(plugin.formatMessage("&cAn error occurred cancelling the coinflip."));
-                    plugin.getLogger().log(Level.SEVERE, "Failed to remove coinflip " + gameId + " for " + player.getName(), error);
-                    return;
-                }
-
-                if (success) {
-                    EconomyResponse refundResp = economy.depositPlayer(player, amount);
-                    if (refundResp.transactionSuccess()) {
-                        player.sendMessage(plugin.formatMessage("&aCoinflip cancelled and " + economy.format(amount) + " refunded."));
-                        plugin.sendCoinflipLog(player.getName() + " cancelled coinflip ID " + gameId + " (Refunded " + economy.format(amount) + ")");
-                    } else {
-                        player.sendMessage(plugin.formatMessage("&cCoinflip cancelled, but refund failed: " + refundResp.errorMessage));
-                        plugin.getLogger().severe("CRITICAL: Failed refund for cancelled coinflip " + gameId + " for player " + player.getName());
-                        plugin.sendCoinflipLog(player.getName() + " cancelled coinflip ID " + gameId + " (REFUND FAILED)");
+                try {
+                    if (error != null) {
+                        msg.send(player, "&cAn error occurred cancelling the coinflip.");
+                        plugin.getLogger().log(Level.SEVERE, "Failed to remove coinflip " + gameId + " for " + player.getName(), error);
+                        return;
                     }
-                } else {
-                    player.sendMessage(plugin.formatMessage("&cCould not cancel coinflip (it might have been accepted already)."));
-                }
 
-                openManageMenu(player, currentPage);
+                    if (success) {
+                        EconomyResponse refundResp = economy.depositPlayer(player, amount);
+                        if (refundResp.transactionSuccess()) {
+                            msg.send(player, "&aCoinflip cancelled and " + economy.format(amount) + " refunded.");
+                            // [Req 9]
+                            logger.logGame(player.getName() + " cancelled coinflip ID " + gameId + " (Refunded " + economy.format(amount) + ")");
+                        } else {
+                            msg.send(player, "&cCoinflip cancelled, but refund failed: " + refundResp.errorMessage);
+                            plugin.getLogger().severe("CRITICAL: Failed refund for cancelled coinflip " + gameId + " for player " + player.getName());
+                            logger.logGame(player.getName() + " cancelled coinflip ID " + gameId + " (REFUND FAILED)");
+                        }
+                    } else {
+                        msg.send(player, "&cCould not cancel coinflip (it might have been accepted already).");
+                    }
+                } finally {
+                    playersCancelling.remove(playerUUID); // [Req 2] Remove lock
+                    openManageMenu(player, currentPage); // Refresh menu
+                }
             });
         });
     }
 
-    // Helper to create a GUI item with Adventure Components
+    // [Req 6]
     private ItemStack createGuiItem(Material material, Component name, Component... lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();

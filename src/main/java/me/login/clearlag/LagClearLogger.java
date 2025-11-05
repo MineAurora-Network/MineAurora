@@ -78,4 +78,12 @@ public class LagClearLogger {
             plugin.getLogger().info("LagClear Logger Bot has been shut down.");
         }
     }
+
+    /**
+     * Returns the JDA instance for this logger bot.
+     * @return The JDA instance, or null if not connected.
+     */
+    public JDA getJDA() {
+        return this.jda;
+    }
 }

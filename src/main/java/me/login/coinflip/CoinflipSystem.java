@@ -1,6 +1,5 @@
 package me.login.coinflip;
 
-import club.minnced.discord.webhook.WebhookClient;
 import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -8,7 +7,6 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -31,7 +29,8 @@ public class CoinflipSystem {
     private final Login plugin;
     private final CoinflipDatabase database;
     private final Economy economy;
-    private final WebhookClient webhookClient;
+    private final CoinflipLogger logger; // [Req 9]
+    private final MessageManager msg; // [Req 1]
 
     private final Map<UUID, BukkitTask> activeAnimations = new ConcurrentHashMap<>();
     private final Random random = ThreadLocalRandom.current();
@@ -41,28 +40,33 @@ public class CoinflipSystem {
     private static final int ANIMATION_DURATION_TICKS = 5 * 20;
     private static final int ANIMATION_SLIDE_SPEED_TICKS = 4;
 
-    // Store the Adventure Component for the title
-    private static final Component ANIMATION_TITLE = Component.text("Coin Flipping...", NamedTextColor.DARK_GRAY);
+    // [Req 5] & [Req 6]
+    public static final Component ANIMATION_TITLE = Component.text("Coin Flipping...", NamedTextColor.DARK_GRAY);
 
-    public CoinflipSystem(Login plugin, CoinflipDatabase database, Economy economy, WebhookClient webhookClient, Set<UUID> playersChallenging) {
+    public CoinflipSystem(Login plugin, CoinflipDatabase database, Economy economy, CoinflipLogger logger, MessageManager msg, Set<UUID> playersChallenging) {
         this.plugin = plugin;
         this.database = database;
         this.economy = economy;
-        this.webhookClient = webhookClient;
+        this.logger = logger; // [Req 9]
+        this.msg = msg; // [Req 1]
         this.playersChallenging = playersChallenging;
     }
 
+    // [Req 8] Getter for admin menu
+    public Map<UUID, BukkitTask> getActiveAnimations() {
+        return activeAnimations;
+    }
 
     public void startCoinflipGame(Player challenger, CoinflipGame game) {
         Player creator = Bukkit.getPlayer(game.getCreatorUUID());
         if (creator == null || !creator.isOnline()) {
-            challenger.sendMessage(plugin.formatMessage("&c" + game.getCreatorName() + " is no longer online."));
+            msg.send(challenger, "&c" + game.getCreatorName() + " is no longer online.");
             playersChallenging.remove(challenger.getUniqueId());
             return;
         }
 
         if (challenger.getUniqueId().equals(creator.getUniqueId())) {
-            challenger.sendMessage(plugin.formatMessage("&cYou cannot challenge your own coinflip!"));
+            msg.send(challenger, "&cYou cannot challenge your own coinflip!");
             playersChallenging.remove(challenger.getUniqueId());
             return;
         }
@@ -70,7 +74,7 @@ public class CoinflipSystem {
         double amount = game.getAmount();
 
         if (!economy.has(challenger, amount)) {
-            challenger.sendMessage(plugin.formatMessage("&cYou do not have enough money (" + economy.format(amount) + ") to join this coinflip."));
+            msg.send(challenger, "&cYou do not have enough money (" + economy.format(amount) + ") to join this coinflip.");
             playersChallenging.remove(challenger.getUniqueId());
             return;
         }
@@ -81,55 +85,35 @@ public class CoinflipSystem {
             if (error != null) {
                 plugin.getLogger().log(Level.SEVERE, "Error activating coinflip game " + game.getGameId(), error);
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    challenger.sendMessage(plugin.formatMessage("&cAn error occurred trying to start the game. Please try again."));
-                    playersChallenging.remove(challenger.getUniqueId());
+                    msg.send(challenger, "&cAn error occurred trying to start the game. Please try again.");
+                    playersChallenging.remove(challenger.getUniqueId()); // [Req 2] Remove lock on fail
                 });
                 return;
             }
 
             if (!success) {
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    challenger.sendMessage(plugin.formatMessage("&cThis coinflip is no longer available."));
-                    playersChallenging.remove(challenger.getUniqueId());
-                    // Don't re-open the menu here, the message is enough.
-                    // This fixes the bug where the "no longer available" message shows *and* the animation opens.
-                    // The client is already in the animation-opening flow.
+                    msg.send(challenger, "&cThis coinflip is no longer available.");
+                    playersChallenging.remove(challenger.getUniqueId()); // [Req 2] Remove lock on fail
                 });
-                // IMPORTANT: We return here *but* the client-side 'playersChallenging' set
-                // is NOT removed if the activation was successful, only if it failed.
-                // This is INTENTIONAL. We want the message to send, but the animation to continue.
-                // The bug was that the *challenger* was being told it wasn't available.
-                // The player who got the game first will continue. The player who was second will get the message.
-
-                // --- NEW FIX ---
-                // The check for `success` tells us if we won the database race.
-                // If `success` is FALSE, it means someone *else* (or us, in a double-click) already activated it.
-                // In this case, we MUST tell the player and remove them from the set.
-                if (!success) { // Re-check, this is the logic for the "loser" of the race
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        challenger.sendMessage(plugin.formatMessage("&cThis coinflip is no longer available."));
-                        playersChallenging.remove(challenger.getUniqueId());
-                    });
-                    return; // Stop here.
-                }
-                // If `success` is TRUE, we are the "winner" of the race. Proceed.
-                // --- END NEW FIX ---
+                return;
             }
 
             // Success!
             Bukkit.getScheduler().runTask(plugin, () -> {
                 EconomyResponse withdrawResp = economy.withdrawPlayer(challenger, amount);
                 if (!withdrawResp.transactionSuccess()) {
-                    challenger.sendMessage(plugin.formatMessage("&cFailed to withdraw funds: " + withdrawResp.errorMessage));
+                    msg.send(challenger, "&cFailed to withdraw funds: " + withdrawResp.errorMessage);
                     plugin.getLogger().warning("Failed to withdraw from challenger " + challenger.getName() + " for coinflip " + game.getGameId() + " after activating it. Attempting to remove game.");
                     database.removeCoinflip(game.getGameId()); // Rollback
-                    playersChallenging.remove(challenger.getUniqueId());
+                    playersChallenging.remove(challenger.getUniqueId()); // [Req 2] Remove lock on fail
                     return;
                 }
 
-                challenger.sendMessage(plugin.formatMessage("&eYou challenged " + creator.getName() + "'s coinflip for " + economy.format(amount) + "!"));
-                creator.sendMessage(plugin.formatMessage("&e" + challenger.getName() + " challenged your coinflip for " + economy.format(amount) + "!"));
-                plugin.sendCoinflipLog(challenger.getName() + " challenged " + creator.getName() + "'s coinflip (ID: " + game.getGameId() + ") for `" + economy.format(amount) + "`");
+                msg.send(challenger, "&eYou challenged " + creator.getName() + "'s coinflip for " + economy.format(amount) + "!");
+                msg.send(creator, "&e" + challenger.getName() + " challenged your coinflip for " + economy.format(amount) + "!");
+                // [Req 9]
+                logger.logGame(challenger.getName() + " challenged " + creator.getName() + "'s coinflip (ID: " + game.getGameId() + ") for `" + economy.format(amount) + "`");
 
                 new BukkitRunnable() {
                     @Override
@@ -140,6 +124,7 @@ public class CoinflipSystem {
                         if (creatorOnline != null && creatorOnline.isOnline() && challengerOnline != null && challengerOnline.isOnline()) {
                             openAnimationGUI(creatorOnline, challengerOnline, game);
                         } else {
+                            // One player logged off in the 5 ticks, handle disconnect
                             handlePlayerDisconnect(creatorOnline, challengerOnline, game);
                         }
                     }
@@ -149,6 +134,7 @@ public class CoinflipSystem {
     }
 
     private void openAnimationGUI(Player p1, Player p2, CoinflipGame game) {
+        // [Req 6] Use Component title
         final Inventory gui = Bukkit.createInventory(null, ANIMATION_GUI_SIZE, ANIMATION_TITLE);
 
         ItemStack grayPane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, Component.empty());
@@ -188,7 +174,8 @@ public class CoinflipSystem {
                     return;
                 }
 
-                if (ticksElapsed > 5) {
+                // Check if players closed the GUI
+                if (ticksElapsed > 5) { // Give time for GUI to open
                     InventoryView p1View = p1Online.getOpenInventory();
                     InventoryView p2View = p2Online.getOpenInventory();
 
@@ -240,15 +227,17 @@ public class CoinflipSystem {
         UUID p1UUID = game.getCreatorUUID();
         UUID p2UUID = game.getChallengerUUID();
 
+        // [Req 8] Remove task from map
         BukkitTask task = activeAnimations.remove(p1UUID);
         if (p2UUID != null) activeAnimations.remove(p2UUID);
 
         if (task == null) {
-            return; // Already handled
+            return; // Already handled (e.g., by admin cancel)
         }
+        // Don't cancel task, it's already finished
 
-        playersChallenging.remove(p1UUID);
-        if (p2UUID != null) playersChallenging.remove(p2UUID);
+        playersChallenging.remove(p1UUID); // [Req 2]
+        if (p2UUID != null) playersChallenging.remove(p2UUID); // [Req 2]
 
         CoinflipGame.CoinSide winningSide = random.nextBoolean() ? CoinflipGame.CoinSide.HEADS : CoinflipGame.CoinSide.TAILS;
         boolean creatorChoseWinningSide = game.getChosenSide() == winningSide;
@@ -258,131 +247,193 @@ public class CoinflipSystem {
 
         double totalPot = game.getAmount() * 2;
 
-        plugin.sendCoinflipLog("Game ID: " + game.getGameId() + " | Creator: " + p1.getName() + " (" + game.getChosenSide() + ") | Challenger: " + p2.getName() + " | Winning Side: " + winningSide + " | Winner: " + winner.getName());
+        // [Req 9]
+        logger.logGame("Game ID: " + game.getGameId() + " | Creator: " + p1.getName() + " (" + game.getChosenSide().name() + ") | Challenger: " + p2.getName() + " | Result: " + winningSide.name() + " | Winner: " + winner.getName() + " | Pot: " + economy.format(totalPot));
 
-        if (winner == null || !winner.isOnline()) {
-            plugin.getLogger().severe("CRITICAL: Coinflip winner " + (winner != null ? winner.getName() : "UNKNOWN") + " is offline! Refunding both players for game " + game.getGameId());
-            plugin.sendCoinflipLog("Winner offline for game " + game.getGameId() + ". Refunding " + p1.getName() + " and " + p2.getName() + " `"+ economy.format(game.getAmount()) +"` each.");
-            economy.depositPlayer(Bukkit.getOfflinePlayer(p1UUID), game.getAmount());
-            if(p2UUID != null) economy.depositPlayer(Bukkit.getOfflinePlayer(p2UUID), game.getAmount());
-            if (p1.isOnline()) p1.sendMessage(plugin.formatMessage("&cCoinflip cancelled due to an issue during payout. Your bet was refunded."));
-            if (p2.isOnline()) p2.sendMessage(plugin.formatMessage("&cCoinflip cancelled due to an issue during payout. Your bet was refunded."));
-
-        } else {
-            EconomyResponse depositResp = economy.depositPlayer(winner, totalPot);
-            if (!depositResp.transactionSuccess()) {
-                plugin.getLogger().severe("CRITICAL: Failed to pay coinflip winner " + winner.getName() + " amount " + totalPot + " for game " + game.getGameId() + ": " + depositResp.errorMessage);
-                plugin.sendCoinflipLog("PAYOUT FAILED for game " + game.getGameId() + ". Winner: " + winner.getName() + ", Amount: `" + economy.format(totalPot) + "`. Refunding bets.");
-                economy.depositPlayer(Bukkit.getOfflinePlayer(p1UUID), game.getAmount());
-                if(p2UUID != null) economy.depositPlayer(Bukkit.getOfflinePlayer(p2UUID), game.getAmount());
-                if (p1.isOnline()) p1.sendMessage(plugin.formatMessage("&cA critical error occurred during payout! Your bet has been refunded."));
-                if (p2.isOnline()) p2.sendMessage(plugin.formatMessage("&cA critical error occurred during payout! Your bet has been refunded."));
-            } else {
-                winner.sendMessage(plugin.formatMessage("&aYou won the coinflip against " + loser.getName() + " and received " + economy.format(totalPot) + "!"));
-                if(loser != null && loser.isOnline()) loser.sendMessage(plugin.formatMessage("&cYou lost the coinflip against " + winner.getName()));
-                winner.playSound(winner.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
-                if(loser != null && loser.isOnline()) loser.playSound(loser.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
-
-                plugin.sendCoinflipLog(winner.getName() + " won `"+ economy.format(totalPot) +"` against " + loser.getName() + " (Game ID: " + game.getGameId() + ")");
-
-                database.updatePlayerStats(winner.getUniqueId(), winner.getName(), true);
-                if (loser != null) {
-                    database.updatePlayerStats(loser.getUniqueId(), loser.getName(), false);
-                }
-            }
-        }
-
-        ItemStack grayPane = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, Component.empty());
-        for (int i = 0; i < 9; i++) gui.setItem(i, grayPane);
-        for (int i = 18; i < 27; i++) gui.setItem(i, grayPane);
-
-        for(int i = 9; i < 18; i++) gui.setItem(i, null);
-        if (winner != null) {
-            gui.setItem(13, getPlayerHead(winner.getName()));
-        } else {
-            gui.setItem(13, createGuiItem(Material.BARRIER, Component.text("Error Determining Winner", NamedTextColor.RED)));
-        }
-
+        // Update database (remove game, update stats)
         database.removeCoinflip(game.getGameId());
+        database.updatePlayerStats(winner.getUniqueId(), winner.getName(), true);
+        database.updatePlayerStats(loser.getUniqueId(), loser.getName(), false);
 
+        // GUI result display
+        ItemStack winnerTrophy = createGuiItem(Material.GOLD_BLOCK, Component.text(winner.getName() + " Wins!", NamedTextColor.GOLD));
+        ItemStack loserBlock = createGuiItem(Material.REDSTONE_BLOCK, Component.text(loser.getName() + " Lost.", NamedTextColor.RED));
+
+        gui.setItem(13, winningSide == CoinflipGame.CoinSide.HEADS ?
+                createGuiItem(Material.GOLD_BLOCK, Component.text("Result: HEADS", NamedTextColor.AQUA)) :
+                createGuiItem(Material.GOLD_BLOCK, Component.text("Result: TAILS", NamedTextColor.LIGHT_PURPLE))
+        );
+
+        if (creatorChoseWinningSide) {
+            gui.setItem(10, winnerTrophy);
+            gui.setItem(16, loserBlock);
+        } else {
+            gui.setItem(10, loserBlock);
+            gui.setItem(16, winnerTrophy);
+        }
+
+        // Payout and messaging
+        EconomyResponse depositResp = economy.depositPlayer(winner, totalPot);
+        if (!depositResp.transactionSuccess()) {
+            plugin.getLogger().severe("CRITICAL: Failed payout for Coinflip game " + game.getGameId() + " to " + winner.getName() + " for " + economy.format(totalPot));
+            msg.send(winner, "&cCRITICAL: FAILED TO PAYOUT YOUR COINFLIP WINNINGS! Contact staff immediately.");
+            msg.send(loser, "&cCRITICAL: FAILED TO PAYOUT " + winner.getName() + "'s WINNINGS. Contact staff immediately.");
+            logger.logAdmin("CRITICAL: FAILED PAYOUT for CF Game " + game.getGameId() + ". Winner: " + winner.getName() + ", Pot: " + economy.format(totalPot));
+        }
+
+        // [Req 4] Broadcast winner
+        String broadcastMsg = "<yellow>" + winner.getName() + "</yellow> won a coinflip against <yellow>" + loser.getName() + "</yellow> for <gold>" + economy.format(totalPot) + "</gold>!";
+        msg.broadcast(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(broadcastMsg));
+
+        winner.playSound(winner.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.2f);
+        loser.playSound(loser.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 1.0f);
+
+        // Close inventories after 3 seconds
         new BukkitRunnable() {
             @Override
             public void run() {
                 Player p1Online = Bukkit.getPlayer(p1UUID);
                 Player p2Online = Bukkit.getPlayer(p2UUID);
-                if(p1Online != null && p1Online.isOnline() && ANIMATION_TITLE.equals(p1Online.getOpenInventory().title())) p1Online.closeInventory();
-                if(p2Online != null && p2Online.isOnline() && ANIMATION_TITLE.equals(p2Online.getOpenInventory().title())) p2Online.closeInventory();
+                if (p1Online != null && p1Online.isOnline() && ANIMATION_TITLE.equals(p1Online.getOpenInventory().title())) p1Online.closeInventory();
+                if (p2Online != null && p2Online.isOnline() && ANIMATION_TITLE.equals(p2Online.getOpenInventory().title())) p2Online.closeInventory();
             }
-        }.runTaskLater(plugin, 60L);
+        }.runTaskLater(plugin, 3 * 20L);
+    }
+
+    // [Req 8] Admin function to cancel a game
+    public void adminCancelGame(CoinflipGame game, String adminName) {
+        UUID p1UUID = game.getCreatorUUID();
+        UUID p2UUID = game.getChallengerUUID();
+        double amount = game.getAmount();
+
+        // Check if game is 'ACTIVE' (in an animation)
+        if (activeAnimations.containsKey(p1UUID) || (p2UUID != null && activeAnimations.containsKey(p2UUID))) {
+            BukkitTask task = activeAnimations.remove(p1UUID);
+            if (task == null && p2UUID != null) task = activeAnimations.remove(p2UUID);
+
+            if (task != null) task.cancel();
+
+            playersChallenging.remove(p1UUID); // [Req 2]
+            if (p2UUID != null) playersChallenging.remove(p2UUID); // [Req 2]
+
+            // Both players are in the game, refund both
+            Player p1 = Bukkit.getPlayer(p1UUID);
+            Player p2 = Bukkit.getPlayer(p2UUID);
+
+            if (p1 != null && p1.isOnline()) {
+                economy.depositPlayer(p1, amount);
+                msg.send(p1, "&eYour coinflip (ID: " + game.getGameId() + ") was cancelled by an admin. Your " + economy.format(amount) + " was refunded.");
+                if (ANIMATION_TITLE.equals(p1.getOpenInventory().title())) p1.closeInventory();
+            } else {
+                plugin.getLogger().warning("Player " + game.getCreatorName() + " (P1) was offline for admin CF cancel, refunding.");
+                economy.depositPlayer(Bukkit.getOfflinePlayer(p1UUID), amount);
+            }
+
+            if (p2 != null && p2.isOnline()) {
+                economy.depositPlayer(p2, amount);
+                msg.send(p2, "&eYour coinflip (ID: " + game.getGameId() + ") was cancelled by an admin. Your " + economy.format(amount) + " was refunded.");
+                if (ANIMATION_TITLE.equals(p2.getOpenInventory().title())) p2.closeInventory();
+            } else {
+                plugin.getLogger().warning("Player " + game.getChallengerName() + " (P2) was offline for admin CF cancel, refunding.");
+                economy.depositPlayer(Bukkit.getOfflinePlayer(p2UUID), amount);
+            }
+
+            logger.logAdmin(adminName + " cancelled ACTIVE game ID " + game.getGameId() + " (" + game.getCreatorName() + " vs " + game.getChallengerName() + "). Both players refunded " + economy.format(amount) + ".");
+
+        } else if (game.getStatus().equals("PENDING")) {
+            // Game is 'PENDING', only refund creator
+            Player p1 = Bukkit.getPlayer(p1UUID);
+            if (p1 != null && p1.isOnline()) {
+                economy.depositPlayer(p1, amount);
+                msg.send(p1, "&eYour coinflip (ID: " + game.getGameId() + ") was cancelled by an admin. Your " + economy.format(amount) + " was refunded.");
+            } else {
+                plugin.getLogger().warning("Player " + game.getCreatorName() + " (P1) was offline for admin CF cancel, refunding.");
+                economy.depositPlayer(Bukkit.getOfflinePlayer(p1UUID), amount);
+            }
+            logger.logAdmin(adminName + " cancelled PENDING game ID " + game.getGameId() + " (" + game.getCreatorName() + "). Refunded " + economy.format(amount) + ".");
+        }
+
+        // Remove from DB regardless of state
+        database.removeCoinflip(game.getGameId());
     }
 
     private void handlePlayerDisconnect(Player p1, Player p2, CoinflipGame game) {
         UUID p1UUID = game.getCreatorUUID();
         UUID p2UUID = game.getChallengerUUID();
+        double totalPot = game.getAmount() * 2;
 
-        BukkitTask task = activeAnimations.remove(p1UUID);
+        // [Req 8] Remove task from map
+        activeAnimations.remove(p1UUID);
         if (p2UUID != null) activeAnimations.remove(p2UUID);
 
-        if (task == null) {
-            return; // Already handled
-        }
-        task.cancel();
+        playersChallenging.remove(p1UUID); // [Req 2]
+        if (p2UUID != null) playersChallenging.remove(p2UUID); // [Req 2]
 
-        playersChallenging.remove(p1UUID);
-        if (p2UUID != null) playersChallenging.remove(p2UUID);
-
-        plugin.getLogger().warning("Coinflip game " + game.getGameId() + " cancelled due to player disconnect or closing GUI.");
-        plugin.sendCoinflipLog("Game ID: " + game.getGameId() + " cancelled prematurely. Refunding bets.");
-
-        Player stillInGuiPlayer = null;
-
-        if (p1 != null && p1.isOnline() && ANIMATION_TITLE.equals(p1.getOpenInventory().title())) {
-            stillInGuiPlayer = p1;
-        } else if (p2 != null && p2.isOnline() && ANIMATION_TITLE.equals(p2.getOpenInventory().title())) {
-            stillInGuiPlayer = p2;
-        }
-
-        // Refund creator
-        EconomyResponse refund1 = economy.depositPlayer(Bukkit.getOfflinePlayer(p1UUID), game.getAmount());
-        if (!refund1.transactionSuccess()) {
-            plugin.getLogger().severe("Failed to refund player " + game.getCreatorName() + " (UUID: " + p1UUID +") for cancelled coinflip " + game.getGameId());
-        }
-
-        // Refund challenger
-        if (p2UUID != null) {
-            EconomyResponse refund2 = economy.depositPlayer(Bukkit.getOfflinePlayer(p2UUID), game.getAmount());
-            if (refund2 != null && !refund2.transactionSuccess()) {
-                plugin.getLogger().severe("Failed to refund challenger (UUID: " + p2UUID + ") for cancelled coinflip " + game.getGameId());
-            }
-        } else {
-            plugin.getLogger().warning("Could not determine challenger UUID for refund in game " + game.getGameId());
-        }
-
-        if (stillInGuiPlayer != null) {
-            stillInGuiPlayer.sendMessage(plugin.formatMessage("&cCoinflip cancelled because the other player left or closed the menu. Your bet was refunded."));
-            stillInGuiPlayer.closeInventory();
-        }
-
+        // Remove from DB
         database.removeCoinflip(game.getGameId());
+
+        Player winner = null;
+        Player loser = null;
+
+        if (p1 == null || !p1.isOnline()) {
+            // P1 (Creator) disconnected
+            winner = p2;
+            loser = p1;
+        } else if (p2 == null || !p2.isOnline()) {
+            // P2 (Challenger) disconnected
+            winner = p1;
+            loser = p2;
+        } else {
+            // Both are online but closed GUI, refund both and cancel game
+            economy.depositPlayer(p1, game.getAmount());
+            economy.depositPlayer(p2, game.getAmount());
+            msg.send(p1, "&eCoinflip (ID: " + game.getGameId() + ") cancelled as one of you closed the window. Money refunded.");
+            msg.send(p2, "&eCoinflip (ID: " + game.getGameId() + ") cancelled as one of you closed the window. Money refunded.");
+            logger.logGame("Game ID " + game.getGameId() + " cancelled (GUI closed). Refunded " + economy.format(game.getAmount()) + " to both " + p1.getName() + " and " + p2.getName() + ".");
+            return;
+        }
+
+        String loserName = (loser == p1) ? game.getCreatorName() : game.getChallengerName();
+
+        if (winner != null) {
+            // Payout winner
+            EconomyResponse depositResp = economy.depositPlayer(winner, totalPot);
+            if (!depositResp.transactionSuccess()) {
+                plugin.getLogger().severe("CRITICAL: Failed payout for Coinflip game " + game.getGameId() + " (due to disconnect) to " + winner.getName() + " for " + economy.format(totalPot));
+                msg.send(winner, "&cCRITICAL: FAILED TO PAYOUT YOUR COINFLIP WINNINGS! Contact staff immediately.");
+                logger.logAdmin("CRITICAL: FAILED PAYOUT (Disconnect) for CF Game " + game.getGameId() + ". Winner: " + winner.getName() + ", Pot: " + economy.format(totalPot));
+            }
+
+            // Update stats
+            database.updatePlayerStats(winner.getUniqueId(), winner.getName(), true);
+            UUID loserUUID = (loser == p1) ? game.getCreatorUUID() : game.getChallengerUUID();
+            database.updatePlayerStats(loserUUID, loserName, false);
+
+            // Send message and log
+            msg.send(winner, "&a" + loserName + " disconnected from the coinflip. You win " + economy.format(totalPot) + "!");
+            logger.logGame("Game ID: " + game.getGameId() + " | " + loserName + " disconnected. | Winner: " + winner.getName() + " | Pot: " + economy.format(totalPot));
+
+            // [Req 4] Broadcast winner
+            String broadcastMsg = "<yellow>" + winner.getName() + "</yellow> won a coinflip against <yellow>" + loserName + "</yellow> (who disconnected) for <gold>" + economy.format(totalPot) + "</gold>!";
+            msg.broadcast(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(broadcastMsg));
+        }
     }
 
-    private ItemStack getPlayerHead(String playerName) {
+
+    // [Req 6]
+    private ItemStack getPlayerHead(String ownerName) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
         if (meta != null) {
-            Player owner = Bukkit.getPlayerExact(playerName);
-            if (owner != null) {
-                meta.setOwningPlayer(owner);
-            } else {
-                meta.setOwner(playerName);
-            }
-            meta.displayName(Component.text(playerName).decoration(TextDecoration.ITALIC, false));
+            meta.setOwner(ownerName);
+            meta.displayName(Component.text(ownerName, NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             head.setItemMeta(meta);
         }
         return head;
     }
 
-    // Helper to create a GUI item with Adventure Components
+    // [Req 6]
     private ItemStack createGuiItem(Material material, Component name, Component... lore) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();

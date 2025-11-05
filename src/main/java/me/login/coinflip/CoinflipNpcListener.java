@@ -11,11 +11,13 @@ public class CoinflipNpcListener implements Listener {
 
     private final Login plugin;
     private final CoinflipMenu coinflipMenu;
-    private final int npcId = 2; // The ID of your coinflip NPC
+    private final int npcId; // [Req 7]
 
     public CoinflipNpcListener(Login plugin, CoinflipMenu coinflipMenu) {
         this.plugin = plugin;
         this.coinflipMenu = coinflipMenu;
+        // [Req 7] Load NPC ID from config
+        this.npcId = plugin.getConfig().getInt("coinflip-npc-id", 2); // Default to 2
     }
 
     @EventHandler

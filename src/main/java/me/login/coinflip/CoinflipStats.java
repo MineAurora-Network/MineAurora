@@ -2,6 +2,7 @@ package me.login.coinflip;
 
 import java.util.UUID;
 
+// This file remains unchanged from the original.
 public class CoinflipStats {
     private final UUID playerUUID;
     private final int wins;
