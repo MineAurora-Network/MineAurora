@@ -134,6 +134,17 @@ commands:
     usage: /checkhearts <player>
     permission: lifesteal.check
 
+  # --- ISLAND COMMANDS ---
+  csummon:
+    description: Spawns a custom mob.
+    usage: /csummon <mob_name>
+    permission: mineaurora.island.summon
+  ckill:
+    description: Kills nearby custom mobs.
+    usage: /ckill
+    permission: mineaurora.island.kill
+  # --- END ISLAND COMMANDS ---
+
 permissions:
   logincore.admin:
     description: Allows use of /unregister
@@ -215,3 +226,12 @@ permissions:
   lifesteal.admin.set:
     description: Allows admin to set heart counts.
     default: op
+
+  # --- ISLAND PERMISSIONS ---
+  mineaurora.island.summon:
+    description: Allows use of the /csummon command.
+    default: op
+  mineaurora.island.kill:
+    description: Allows use of the /ckill command.
+    default: op
+  # --- END ISLAND PERMISSIONS ---

@@ -154,18 +154,20 @@ public class CoinflipMenu implements Listener {
             if (owner != null) meta.setOwningPlayer(owner);
             else meta.setOwner(game.getCreatorName());
 
-            meta.displayName(Component.text(game.getCreatorName(), NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            // --- FIX: Removed bold ---
+            meta.displayName(Component.text(game.getCreatorName(), NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
 
             List<Component> lore = new ArrayList<>();
-            lore.add(Component.text("Amount: ", NamedTextColor.GRAY).append(Component.text(economy.format(game.getAmount()), NamedTextColor.GOLD)).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("Amount: ", NamedTextColor.GRAY).append(Component.text(economy.format(game.getAmount()), NamedTextColor.GOLD)).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
 
             Component side = game.getChosenSide() == CoinflipGame.CoinSide.HEADS ?
                     Component.text("Heads", NamedTextColor.AQUA) :
                     Component.text("Tails", NamedTextColor.LIGHT_PURPLE);
-            lore.add(Component.text("Side: ", NamedTextColor.GRAY).append(side).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("Side: ", NamedTextColor.GRAY).append(side).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
 
             lore.add(Component.empty()); // Empty line
-            lore.add(Component.text("► Click to Challenge!", NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("► Click to Challenge!", NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
+            // --- END FIX ---
 
             meta.lore(lore);
             meta.getPersistentDataContainer().set(gameIdKey, PersistentDataType.LONG, game.getGameId());
@@ -179,10 +181,12 @@ public class CoinflipMenu implements Listener {
         ItemStack paper = new ItemStack(Material.PAPER);
         ItemMeta meta = paper.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text(player.getName() + "'s Stats", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            // --- FIX: Removed bold ---
+            meta.displayName(Component.text(player.getName() + "'s Stats", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
             List<Component> lore = new ArrayList<>();
-            lore.add(Component.text("Wins: ", NamedTextColor.GREEN).append(Component.text(stats.getWins(), NamedTextColor.WHITE)).decoration(TextDecoration.ITALIC, false));
-            lore.add(Component.text("Losses: ", NamedTextColor.RED).append(Component.text(stats.getLosses(), NamedTextColor.WHITE)).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("Wins: ", NamedTextColor.GREEN).append(Component.text(stats.getWins(), NamedTextColor.WHITE)).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
+            lore.add(Component.text("Losses: ", NamedTextColor.RED).append(Component.text(stats.getLosses(), NamedTextColor.WHITE)).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
+            // --- END FIX ---
             meta.lore(lore);
             paper.setItemMeta(meta);
         }
@@ -228,8 +232,13 @@ public class CoinflipMenu implements Listener {
                 );
             } else if (type == Material.OAK_SIGN && slot == 29) {
                 playersCreating.add(player.getUniqueId()); // [Req 2] Add lock
-                player.closeInventory();
-                openSideSignInput(player);
+
+                // --- FIX: 1-TICK DELAY ---
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    player.closeInventory();
+                    openSideSignInput(player);
+                }, 1L);
+                // --- END FIX ---
             }
         } else { // Clicked on a game
             ItemMeta meta = clickedItem.getItemMeta();
@@ -246,8 +255,13 @@ public class CoinflipMenu implements Listener {
 
                 if (gameToJoin != null) {
                     playersChallenging.add(player.getUniqueId()); // [Req 2] Add lock
-                    player.closeInventory();
-                    coinflipSystem.startCoinflipGame(player, gameToJoin);
+
+                    // --- FIX: 1-TICK DELAY ---
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        player.closeInventory();
+                        coinflipSystem.startCoinflipGame(player, gameToJoin);
+                    }, 1L);
+                    // --- END FIX ---
                 } else {
                     msg.send(player, "&cThis coinflip is no longer available. Refreshing...");
                     getPendingGames(true).thenRun(() ->
@@ -442,11 +456,13 @@ public class CoinflipMenu implements Listener {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(name.decoration(TextDecoration.ITALIC, false));
+            // --- FIX: Removed bold ---
+            meta.displayName(name.decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
             List<Component> loreList = new ArrayList<>();
             for (Component line : lore) {
-                loreList.add(line.decoration(TextDecoration.ITALIC, false));
+                loreList.add(line.decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
             }
+            // --- END FIX ---
             meta.lore(loreList);
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             item.setItemMeta(meta);

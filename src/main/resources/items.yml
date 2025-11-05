@@ -18,3 +18,169 @@ revive-beacon:
     - ""
     - "<yellow>Place this beacon</yellow>"
     - "<yellow>to open the revive menu.</yellow>"
+    -
+
+      # ... (keep your existing heart-item and revive-beacon) ...
+
+island-drops:
+  # Mob "display" items (used for /csummon name)
+  corrupted_zombie:
+    material: ZOMBIE_HEAD
+    name: "<green>Corrupted Zombie</green>"
+  infernal_zombie:
+    material: ZOMBIE_HEAD
+    name: "<gold>Infernal Zombie</gold>"
+  celestial_zombie:
+    material: ZOMBIE_HEAD
+    name: "<aqua>Celestial Zombie</aqua>"
+  godly_zombie:
+    material: ZOMBIE_HEAD
+    name: "<dark_purple>Godly Zombie</dark_purple>"
+  wild_pig:
+    material: PORKCHOP
+    name: "<light_purple>Wild Pig</light_purple>"
+
+  # Corrupted Zombie Heads (for equipment)
+  corrupted_zombie-head:
+    material: PLAYER_HEAD
+    name: "<green>Corrupted Head</green>"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTAxNGJmOGY2YjAyMDlkZGYwOTNmMWQ1YTA3YjgwNzViMzczMmFhYjI0NjJkYTA3Njc2MmRjZDI1MGIxZTU1YSJ9fX0="
+  # Infernal Zombie Head
+  infernal_zombie-head:
+    material: PLAYER_HEAD
+    name: "<gold>Infernal Head</gold>"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZDI3OTc3ZDg2NTIxNTU0ZmZjZTZiOTI2N2MwMzRkNjBjMGFhMzRiYTgyY2VmMzAzMmZmMjBlMmYwZWZjZWRlIn19fQ=="
+  # Celestial Zombie Head
+  celestial_zombie-head:
+    material: PLAYER_HEAD
+    name: "<aqua>Celestial Head</aqua>"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOTliYWVjNWZiNGNkOWRjNTk2ZDYxMGI2YzZiZDM4YWI5OTAxYjY4Yzk1OTQ5ZTJkNzFiOTI1MzE3MjcwZDAxMSJ9fX0="
+  # Godly Zombie Head
+  godly_zombie-head:
+    material: PLAYER_HEAD
+    name: "<dark_purple>Godly Head</dark_purple>"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNGMxNWE1OGRmMDJlOTg0NDJmNzk0MGRhNDhjNGUwNTU3ZTA4MzVmMWZmMjM1MGNiNDIzNzlkOWE4ZWFjMDEwYiJ9fX0="
+
+  # Corrupted Zombie Drops
+  corrupted-flesh:
+    material: ROTTEN_FLESH
+    name: "<green>Corrupted Flesh</green>"
+    lore:
+      - "<gray>Tastes... stringy.</gray>"
+  string-bundle-head:
+    material: PLAYER_HEAD
+    name: "&bString Bundle"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzFhNzk3M2YyNWNiYmIwNzhmNTk1YzA0MzQ5ZmM1NDFhYzFkZjlhNDRiOGMxYTE2YzUyODU4MWFhNDE3MDgifX19"
+    lore:
+      - "<gray>A bundle of mysterious strings.</gray>"
+      - "<dark_gray>Legendary</dark_gray>"
+
+  # Infernal Zombie Drops
+  infernal-flesh:
+    material: ROTTEN_FLESH
+    name: "<gold>Infernal Flesh</gold>"
+    lore:
+      - "<gray>Smells like brimstone.</gray>"
+  rs-bank-note-2.5k:
+    material: PAPER
+    name: "<green>RS Bank Note</green>"
+    lore:
+      - "<white>Value: <gold>2,500</gold></white>"
+      - "<dark_gray>Rare</dark_gray>"
+  infernal-bone:
+    material: BONE
+    name: "<red>Infernal Bone</red>"
+    lore:
+      - "<gray>Still glowing with embers.</gray>"
+      - "<dark_gray>Legendary</dark_gray>"
+
+  # Celestial Zombie Drops
+  celestial-flesh:
+    material: ROTTEN_FLESH
+    name: "<aqua>Celestial Flesh</aqua>"
+    lore:
+      - "<gray>It's oddly light.</gray>"
+  rs-bank-note-5k:
+    material: PAPER
+    name: "<green>RS Bank Note</green>"
+    lore:
+      - "<white>Value: <gold>5,000</gold></white>"
+      - "<dark_gray>Rare</dark_gray>"
+  bottle-of-soul:
+    material: PLAYER_HEAD
+    name: "&aBottle of Soul"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNTYxMjhlM2VjNDQwZDBjZmU1MjQxYTQyZjI3NjFmM2U1Yjg0NjZiOGY5MTM4YzRiZGQyYmQzN2E2Njg4MzY0NiJ9fX0="
+    lore:
+      - "<gray>A swirling, captured soul.</gray>"
+      - "<dark_gray>Legendary</dark_gray>"
+  celestial-handle:
+    material: AMETHYST_SHARD
+    name: "&dCelestial Handle"
+    lore:
+      - "<gray>Shines with the light of stars.</gray>"
+      - "<dark_gray>Mythic</dark_gray>"
+  celestial-heart:
+    material: PLAYER_HEAD
+    name: "&bCelestial Heart"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZDQ1ZjRkMTM5YzllODkyNjJlYzA2YjI3YWFhZDczZmE0ODhhYjQ5MjkwZDJjY2Q2ODVhMjU1NDcyNTM3M2M5YiJ9fX0="
+    lore:
+      - "<gray>Beats with a soft, cosmic pulse.</gray>"
+      - "<dark_gray>Mythic</dark_gray>"
+
+  # Godly Zombie Drops
+  godly-flesh:
+    material: ROTTEN_FLESH
+    name: "<dark_purple>Godly Flesh</dark_purple>"
+    lore:
+      - "<gray>Heavy with unknown power.</gray>"
+  bottle-of-blood:
+    material: PLAYER_HEAD
+    name: "&cBottle of Blood"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYWMxYjE3Y2M2YzljNzYwZDc4NjE5MjUzYmE0ZjZjY2ZmNDE1MjRhZWMxMDViMWQyNjQxYTc0ZjM1Njk2NzgzMSJ9fX0="
+    lore:
+      - "<gray>Whose blood is this?</gray>"
+      - "<dark_gray>Legendary</dark_gray>"
+  godly-handle:
+    material: NETHER_STAR
+    name: "&6Godly Handle"
+    lore:
+      - "<gray>Pulsates with immense energy.</gray>"
+      - "<dark_gray>Mythic</dark_gray>"
+  bag-of-leather:
+    material: PLAYER_HEAD
+    name: "&aBag of Leather"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYmQ4OTViMjllOWJkYTQ1NjE2NGUxM2I0ZDQ1Yzc3YjY0ZGY4MzY4OGEzNTk2NWVjYjJlNjIxNzZkMjQ5M2IzNCJ9fX0="
+    lore:
+      - "<gray>A surprisingly heavy bag.</gray>"
+      - "<dark_gray>Mythic</dark_gray>"
+
+  # Wild Pig Drops
+  wild-porkchop:
+    material: PORKCHOP
+    name: "<light_purple>Wild Porkchop</light_purple>"
+    lore:
+      - "<gray>Tastes... gamy.</gray>"
+  bottle-of-protein:
+    material: PLAYER_HEAD
+    name: "&aBottle of Protein"
+    texture: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMThjMjhjMzg5MzViYzZmYmFiZTgyMjc4ZDE1ZWQ5MzU5Mjg4MmZjODBmYjVkNWMwY2JiYzYyZjViNDJkOTcwMSJ9fX0="
+    lore:
+      - "<gray>GAINS!</gray>"
+      - "<dark_gray>Legendary</dark_gray>"
+
+  # Normal Drops (for correct naming)
+  diamond:
+    material: DIAMOND
+    name: "<aqua>Diamond</aqua>"
+    lore:
+      - "<dark_gray>Rare</dark_gray>"
+  netherite-upgrade:
+    material: NETHERITE_UPGRADE_SMITHING_TEMPLATE
+    name: "<dark_gray>Netherite Upgrade</dark_gray>"
+    lore:
+      - "<dark_gray>Legendary</dark_gray>"
+  silence-armor-trim:
+    material: SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE
+    name: "<dark_gray>Silence Armor Trim</dark_gray>"
+    lore:
+      - "<dark_gray>Legendary</dark_gray>"

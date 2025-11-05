@@ -108,19 +108,21 @@ public class CoinflipManageMenu implements Listener {
             if (owner != null) meta.setOwningPlayer(owner);
             else meta.setOwner(game.getCreatorName());
 
-            meta.displayName(Component.text("Your Coinflip", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+            // --- FIX: Removed bold ---
+            meta.displayName(Component.text("Your Coinflip", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
 
             List<Component> lore = new ArrayList<>();
-            lore.add(Component.text("Amount: ", NamedTextColor.GRAY).append(Component.text(economy.format(game.getAmount()), NamedTextColor.GOLD)).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("Amount: ", NamedTextColor.GRAY).append(Component.text(economy.format(game.getAmount()), NamedTextColor.GOLD)).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
 
             Component side = game.getChosenSide() == CoinflipGame.CoinSide.HEADS ?
                     Component.text("Heads", NamedTextColor.AQUA) :
                     Component.text("Tails", NamedTextColor.LIGHT_PURPLE);
-            lore.add(Component.text("Side: ", NamedTextColor.GRAY).append(side).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("Side: ", NamedTextColor.GRAY).append(side).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
 
-            lore.add(Component.text("Created: " + new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date(game.getCreationTime())), NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("Created: " + new SimpleDateFormat("yyyy-MM-dd HH:mm").format(new Date(game.getCreationTime())), NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
             lore.add(Component.empty());
-            lore.add(Component.text("▶ Shift+Click to Cancel", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.text("▶ Shift+Click to Cancel", NamedTextColor.RED).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
+            // --- END FIX ---
 
             meta.lore(lore);
             meta.getPersistentDataContainer().set(gameIdKey, PersistentDataType.LONG, game.getGameId());
@@ -178,6 +180,11 @@ public class CoinflipManageMenu implements Listener {
             }
         } else {
             if (clickType.isShiftClick()) {
+                // --- FIX: Check lock *before* scheduling task ---
+                if (playersCancelling.contains(player.getUniqueId())) {
+                    return;
+                }
+
                 ItemMeta meta = clickedItem.getItemMeta();
                 if (meta != null && meta.getPersistentDataContainer().has(gameIdKey, PersistentDataType.LONG)) {
                     long gameId = meta.getPersistentDataContainer().get(gameIdKey, PersistentDataType.LONG);
@@ -188,14 +195,22 @@ public class CoinflipManageMenu implements Listener {
                     }
                     double amount = meta.getPersistentDataContainer().get(gameAmountKey, PersistentDataType.DOUBLE);
 
-                    handleCancelCoinflip(player, gameId, amount, currentPage);
+                    // --- FIX: Add 1-tick delay ---
+                    // Add lock *before* the delay to prevent double clicks
+                    playersCancelling.add(player.getUniqueId());
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        // The handler will be responsible for removing the lock
+                        handleCancelCoinflip(player, gameId, amount, currentPage);
+                    }, 1L);
+                    // --- END FIX ---
                 }
             }
         }
     }
 
     private void handleCancelCoinflip(Player player, long gameId, double amount, int currentPage) {
-        playersCancelling.add(player.getUniqueId()); // [Req 2] Add lock
+        // --- FIX: Lock is now added in the click event *before* the delay ---
+        // playersCancelling.add(player.getUniqueId()); // [Req 2] Add lock
 
         database.removeCoinflip(gameId).whenCompleteAsync((success, error) -> {
             UUID playerUUID = player.getUniqueId();
@@ -235,11 +250,13 @@ public class CoinflipManageMenu implements Listener {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(name.decoration(TextDecoration.ITALIC, false));
+            // --- FIX: Removed bold ---
+            meta.displayName(name.decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
             List<Component> loreList = new ArrayList<>();
             for (Component line : lore) {
-                loreList.add(line.decoration(TextDecoration.ITALIC, false));
+                loreList.add(line.decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
             }
+            // --- END FIX ---
             meta.lore(loreList);
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             item.setItemMeta(meta);

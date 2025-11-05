@@ -8,6 +8,7 @@ import me.login.discordcommand.DiscordCommandRegistrar;
 import me.login.discordcommand.DiscordModConfig;
 import me.login.discordcommand.DiscordModCommands;
 import me.login.discordcommand.DiscordRankCommand;
+import me.login.island.IslandModule; // <-- ADDED IMPORT
 import me.login.loginsystem.*;
 import me.login.ordersystem.*;
 import me.login.DamageIndicator;
@@ -115,6 +116,8 @@ public class Login extends JavaPlugin implements Listener {
     private ReviveMenu reviveMenu;
     private CombatLogManager combatLogManager;
     private LuckPerms luckPermsApi;
+
+    private IslandModule islandModule; // <-- ADDED FIELD
 
 
     @Override
@@ -264,6 +267,13 @@ public class Login extends JavaPlugin implements Listener {
                             }
                             DiscordCommandRegistrar.register(discordLinking.getJDA());
                             getLogger().info("Discord slash command listeners registered.");
+
+                            // --- [NEW] Initialize Island Module ---
+                            getLogger().info("Initializing Island Module...");
+                            this.islandModule = new IslandModule(this);
+                            this.islandModule.init();
+                            getLogger().info("Island Module enabled.");
+                            // --- End Island Module ---
 
                             // --- [FIX] START OF COINFLIP INIT FIX ---
 
@@ -510,6 +520,12 @@ public class Login extends JavaPlugin implements Listener {
                 combatLogManager.shutdown();
             }
 
+            // --- [NEW] Disable Island Module ---
+            if (islandModule != null) {
+                islandModule.disable();
+            }
+            // --- End Island Module ---
+
             if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
             if (loginDatabase != null) loginDatabase.disconnect();
             if (ordersDatabase != null) ordersDatabase.disconnect();
@@ -677,5 +693,10 @@ public class Login extends JavaPlugin implements Listener {
         if (title.equals(CoinflipSystem.ANIMATION_TITLE)) {
             event.setCancelled(true);
         }
+    }
+
+    // --- [NEW] Getter for Island Module ---
+    public IslandModule getIslandModule() {
+        return islandModule;
     }
 }

@@ -7,6 +7,7 @@ staff-bot-channel: 1434006967357145168
 
 coinflip-log-channel-id: 1431926295847243858
 coinflip-admin-log-channel-id: 1435165917779591218
+island-drop-channel-id: "YOUR_CHANNEL_ID_HERE"
 
 verification-channel-id: 1430953529463279696
 verified-role-id: 1430766504575635508
