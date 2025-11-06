@@ -60,15 +60,14 @@ import me.login.moderation.BanCommand;
 import me.login.moderation.CheckInvCommand;
 import me.login.moderation.MuteCommand;
 
-// --- LIFESTEAL REFACTOR ---
-// Import the new module
+// --- LIFESTEAL IMPORTS ---
 import me.login.lifesteal.LifestealModule;
-// Import the specific types for the public getters
+import me.login.lifesteal.LifestealLogger;
 import me.login.lifesteal.DatabaseManager;
 import me.login.lifesteal.ItemManager;
 import me.login.lifesteal.LifestealManager;
 import me.login.lifesteal.DeadPlayerManager;
-// --- END LIFESTEAL REFACTOR ---
+// --- END LIFESTEAL IMPORTS ---
 
 import net.luckperms.api.LuckPerms;
 
@@ -98,13 +97,10 @@ public class Login extends JavaPlugin implements Listener {
     private LeaderboardDisplayManager leaderboardManager;
     private BukkitTask leaderboardUpdateTask;
 
-    // private String coinflipPrefixString; // [REMOVED] Req 1
-
-    // --- [NEW] Coinflip Fields ---
-    private CoinflipAdminMenu coinflipAdminMenu; // [NEW] Req 8
-    private CoinflipLogger coinflipLogger; // [NEW] Req 9
-    private MessageManager coinflipMessageManager; // [NEW] Req 1
-    // --- End Coinflip Fields ---
+    // ... Coinflip Fields ...
+    private CoinflipAdminMenu coinflipAdminMenu;
+    private CoinflipLogger coinflipLogger;
+    private MessageManager coinflipMessageManager;
 
     private ModerationDatabase moderationDatabase;
     private WebhookClient staffWebhookClient;
@@ -120,8 +116,8 @@ public class Login extends JavaPlugin implements Listener {
     private LuckPerms luckPermsApi;
 
     // --- LIFESTEAL REFACTOR ---
-    // Remove individual component fields
-    private LifestealModule lifestealModule; // Add the module field
+    private LifestealModule lifestealModule;
+    private LifestealLogger lifestealLogger;
     // --- END LIFESTEAL REFACTOR ---
 
 
@@ -162,20 +158,17 @@ public class Login extends JavaPlugin implements Listener {
         ordersDatabase.connect();
         if (ordersDatabase.getConnection() == null) { disableWithError("Orders DB failed."); return; }
 
-        this.coinflipDatabase = new CoinflipDatabase(this); // [MODIFIED] Req 3 (Path logic is in its constructor)
+        this.coinflipDatabase = new CoinflipDatabase(this);
         coinflipDatabase.connect();
         if (coinflipDatabase.getConnection() == null) { disableWithError("Coinflip DB failed."); return; }
 
         this.moderationDatabase = new ModerationDatabase(this);
 
-        // --- LIFESTEAL REFACTOR ---
-        // Remove individual Lifesteal database initialization
-        // --- END LIFESTEAL REFACTOR ---
+        // --- LIFESTEAL REFACTOR: Initialization moved to JDA startup ---
 
         this.linkWebhookClient = initializeWebhook("link-system-log-webhook", "Link-System");
         this.loginWebhookClient = initializeWebhook("login-system-log-webhook", "Login-System");
         this.orderWebhookClient = initializeWebhook("order-system-log-webhook", "Order-System");
-        // this.coinflipWebhookClient = initializeWebhook("coinflip-system-log-webhook", "Coinflip-System"); // [REMOVED] Req 9
         this.staffWebhookClient = initializeWebhook("staff-system-log-webhook", "Staff-System");
         this.discordStaffLogWebhook = initializeWebhook("discord-staff-log-webhook", "Discord-Staff-System");
 
@@ -193,8 +186,6 @@ public class Login extends JavaPlugin implements Listener {
         this.orderManage = new OrderManage(this, orderSystem);
         this.orderAdminMenu = new OrderAdminMenu(this, orderSystem);
 
-        // --- [MOVED] Coinflip setup is deferred until after JDA is ready ---
-
         getServer().getPluginManager().registerEvents(orderAdminMenu, this);
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
 
@@ -203,24 +194,13 @@ public class Login extends JavaPlugin implements Listener {
         long refreshTicks = 20L * getConfig().getLong("leaderboards.refresh-seconds", 60);
         this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(this, delay, refreshTicks);
 
-        // --- LIFESTEAL REFACTOR ---
-        // Initialize the entire module
-        this.lifestealModule = new LifestealModule(this, luckPermsApi);
-        if (!this.lifestealModule.init()) {
-            // init() already logs the error
-            disableWithError("Failed to initialize Lifesteal Module! Disabling plugin.");
-            return;
-        }
-        // All individual lifesteal component inits are removed
-        // All lifesteal listener registrations are removed (handled by module)
-        // --- END LIFESTEAL REFACTOR ---
+        // --- LIFESTEAL REFACTOR: Listener/Command registration moved to JDA startup (inside LifestealModule.init()) ---
 
-        registerCommands(); // Coinflip command is registered later
+        registerCommands(); // Coinflip & Lifesteal commands are registered later
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new LeaderboardProtectionListener(this.leaderboardManager), this);
 
         getLogger().info("Initializing ClearLag components...");
-        // Register the new consolidated listener
         getServer().getPluginManager().registerEvents(new PlacementLimitListener(this), this);
         long countdownInterval = 20L;
         new CleanupTask(this, this.lagClearConfig).runTaskTimer(this, countdownInterval, countdownInterval);
@@ -272,66 +252,74 @@ public class Login extends JavaPlugin implements Listener {
                             }
                             DiscordCommandRegistrar.register(discordLinking.getJDA());
                             getLogger().info("Discord slash command listeners registered.");
-                            // --- [FIX] START OF COINFLIP INIT FIX ---
 
-                            // 1. Create the logger. This will start its async JDA build.
                             this.lagClearLogger = new LagClearLogger(this);
                             getLogger().info("LagClear Logger initialization requested...");
 
-                            // 2. Create a new task to check when the logger bot is ready.
                             new BukkitRunnable() {
                                 int attempts = 0;
                                 final int maxAttempts = 10; // Wait 10 seconds (10 * 20 ticks)
 
                                 @Override
                                 public void run() {
-                                    if (!isEnabled()) { // Plugin disabled
+                                    if (!isEnabled()) {
                                         this.cancel();
                                         return;
                                     }
 
-                                    // Check if the logger's JDA is ready
                                     if (lagClearLogger != null && lagClearLogger.getJDA() != null && lagClearLogger.getJDA().getStatus() == JDA.Status.CONNECTED) {
-                                        // --- IT'S READY! NOW INITIALIZE COINFLIP ---
-                                        getLogger().info("LagClear Logger JDA is now connected. Initializing Coinflip system...");
+                                        getLogger().info("LagClear Logger JDA is now connected. Initializing JDA-dependent modules...");
 
-                                        coinflipMessageManager = new MessageManager(Login.this); // [NEW] Req 1
-                                        coinflipLogger = new CoinflipLogger(Login.this); // [NEW] Req 9
+                                        // --- LIFESTEAL REFACTOR: Initialize Logger and Module here ---
+                                        getLogger().info("Initializing LifestealLogger...");
+                                        lifestealLogger = new LifestealLogger(Login.this, lagClearLogger.getJDA());
 
-                                        coinflipMenu = new CoinflipMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger); // [MODIFIED] Req 1, 9
-                                        coinflipSystem = new CoinflipSystem(Login.this, coinflipDatabase, vaultEconomy, coinflipLogger, coinflipMessageManager, coinflipMenu.getPlayersChallengingSet()); // [MODIFIED] Req 1, 9
+                                        getLogger().info("Initializing LifestealModule...");
+                                        lifestealModule = new LifestealModule(Login.this, luckPermsApi, lifestealLogger);
+                                        if (!lifestealModule.init()) {
+                                            getLogger().severe("Failed to initialize Lifesteal Module!");
+                                            // Don't disable the whole plugin, just this module failed
+                                        }
+                                        // --- END LIFESTEAL REFACTOR ---
+
+                                        // --- Coinflip Initialization ---
+                                        getLogger().info("Initializing Coinflip system...");
+                                        coinflipMessageManager = new MessageManager(Login.this);
+                                        coinflipLogger = new CoinflipLogger(Login.this);
+
+                                        coinflipMenu = new CoinflipMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger);
+                                        coinflipSystem = new CoinflipSystem(Login.this, coinflipDatabase, vaultEconomy, coinflipLogger, coinflipMessageManager, coinflipMenu.getPlayersChallengingSet());
                                         coinflipMenu.setCoinflipSystem(coinflipSystem);
-                                        coinflipManageMenu = new CoinflipManageMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger); // [MODIFIED] Req 1, 9
-                                        coinflipAdminMenu = new CoinflipAdminMenu(Login.this, coinflipDatabase, coinflipSystem, vaultEconomy, coinflipMessageManager, coinflipLogger); // [NEW] Req 8
+                                        coinflipManageMenu = new CoinflipManageMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger);
+                                        coinflipAdminMenu = new CoinflipAdminMenu(Login.this, coinflipDatabase, coinflipSystem, vaultEconomy, coinflipMessageManager, coinflipLogger);
 
                                         if (getServer().getPluginManager().getPlugin("Citizens") != null) {
-                                            getServer().getPluginManager().registerEvents(new CoinflipNpcListener(Login.this, coinflipMenu), Login.this); // [MODIFIED] Req 7 (Handled in NpcListener)
+                                            getServer().getPluginManager().registerEvents(new CoinflipNpcListener(Login.this, coinflipMenu), Login.this);
                                             getLogger().info("Citizens found, Coinflip NPC listener registered.");
                                         } else {
                                             getLogger().warning("Citizens plugin not found! Coinflip NPC click will not work.");
                                         }
-                                        getServer().getPluginManager().registerEvents(coinflipMenu, Login.this); // [MODIFIED] Req 2 (Handled in Menu)
-                                        getServer().getPluginManager().registerEvents(coinflipManageMenu, Login.this); // [MODIFIED] Req 2 (Handled in Menu)
-                                        getServer().getPluginManager().registerEvents(coinflipAdminMenu, Login.this); // [NEW] Req 8
+                                        getServer().getPluginManager().registerEvents(coinflipMenu, Login.this);
+                                        getServer().getPluginManager().registerEvents(coinflipManageMenu, Login.this);
+                                        getServer().getPluginManager().registerEvents(coinflipAdminMenu, Login.this);
 
-                                        // Register coinflip command
-                                        CoinflipCmd coinflipCmd = new CoinflipCmd(Login.this, coinflipDatabase, vaultEconomy, coinflipMenu, coinflipManageMenu, coinflipAdminMenu, coinflipSystem, coinflipMessageManager, coinflipLogger); // [MODIFIED] Req 4, 8, 10
+                                        CoinflipCmd coinflipCmd = new CoinflipCmd(Login.this, coinflipDatabase, vaultEconomy, coinflipMenu, coinflipManageMenu, coinflipAdminMenu, coinflipSystem, coinflipMessageManager, coinflipLogger);
                                         setCommandExecutor("coinflip", coinflipCmd);
                                         getCommand("coinflip").setTabCompleter(coinflipCmd);
                                         getLogger().info("Coinflip system enabled.");
+                                        // --- End Coinflip ---
 
-                                        this.cancel(); // Stop this checking task
+                                        this.cancel();
                                         return;
                                     }
 
-                                    // Check for timeout
                                     attempts++;
                                     if (attempts >= maxAttempts) {
-                                        getLogger().severe("LagClear Logger JDA did not connect after 10 seconds. Coinflip system will be disabled.");
+                                        getLogger().severe("LagClear Logger JDA did not connect after 10 seconds. Coinflip & Lifesteal logging will be disabled.");
                                         this.cancel();
                                     }
                                 }
-                            }.runTaskTimer(Login.this, 20L, 20L); // <-- [FIXED] Changed 'plugin' to 'Login.this'
+                            }.runTaskTimer(Login.this, 20L, 20L);
 
                         } catch (Throwable postErr) {
                             getLogger().severe("Post-start Discord steps failed: " + postErr.getMessage());
@@ -407,18 +395,14 @@ public class Login extends JavaPlugin implements Listener {
     private void disableWithError(String message) { getLogger().severe(message + " Disabling plugin."); getServer().getPluginManager().disablePlugin(this); }
 
     private void registerCommands() {
-        // --- LIFESTEAL REFACTOR ---
-        // Updated the null check
-        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || /* coinflipSystem == null || coinflipMenu == null || coinflipManageMenu == null || */ leaderboardManager == null || moderationDatabase == null ||
-                lifestealModule == null) { // Check for the module
+        // --- LIFESTEAL REFACTOR: Null check removed, commands are registered by the module ---
+        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || /* coinflip ... */ leaderboardManager == null || moderationDatabase == null) {
             getLogger().severe("Cannot register commands - one or more systems failed initialization!"); return;
         }
-        // --- END LIFESTEAL REFACTOR ---
 
         DiscordLinkCmd discordCmd = new DiscordLinkCmd(this, discordLinking, discordLinkDatabase);
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase);
         OrderCmd orderCmd = new OrderCmd(this, orderSystem, orderMenu, orderManage, orderAdminMenu);
-        // CoinflipCmd coinflipCmd = new CoinflipCmd(this, coinflipDatabase, vaultEconomy, coinflipManageMenu, coinflipSystem, coinflipMenu); // [MOVED]
 
         setCommandExecutor("discord", discordCmd); setCommandExecutor("unlink", discordCmd); setCommandExecutor("adminunlink", discordCmd);
         setCommandExecutor("register", loginCmd); setCommandExecutor("login", loginCmd);
@@ -426,7 +410,6 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("unregister", loginCmd); setCommandExecutor("loginhistory", loginCmd); setCommandExecutor("checkalt", loginCmd);
         setCommandExecutor("adminchangepass", loginCmd);
         setCommandExecutor("order", orderCmd);
-        // setCommandExecutor("coinflip", coinflipCmd); // [MOVED]
 
         LeaderboardCommand leaderboardCmd = new LeaderboardCommand(this, this.leaderboardManager);
         getCommand("leaderboard").setExecutor(leaderboardCmd);
@@ -456,9 +439,8 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("checkinv", checkInvExecutor);
         setCommandExecutor("admincheckinv", checkInvExecutor);
 
-        // --- LIFESTEAL REFACTOR ---
-        // Remove Lifesteal command registration (handled by module)
-        // --- END LIFESTEAL REFACTOR ---
+        // --- LIFESTEAL REFACTOR: All lifesteal command registrations are removed ---
+        // They are now handled by LifestealModule.init()
 
         setCommandExecutor("scoreboard", this);
 
@@ -510,12 +492,10 @@ public class Login extends JavaPlugin implements Listener {
                 this.leaderboardUpdateTask.cancel();
             }
 
-            // --- LIFESTEAL REFACTOR ---
-            // Call the module's shutdown method
+            // --- LIFESTEAL REFACTOR: Call module shutdown ---
             if (lifestealModule != null) {
                 lifestealModule.shutdown();
             }
-            // Remove individual component shutdowns
             // --- END LIFESTEAL REFACTOR ---
 
             if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
@@ -523,7 +503,7 @@ public class Login extends JavaPlugin implements Listener {
             if (ordersDatabase != null) ordersDatabase.disconnect();
             if (coinflipDatabase != null) coinflipDatabase.disconnect();
             if (moderationDatabase != null) moderationDatabase.closeConnection();
-            // if (databaseManager != null) databaseManager.closeConnection(); // Handled by module
+            // --- LIFESTEAL REFACTOR: Removed databaseManager.closeConnection() (handled by module) ---
 
             if (discordLinking != null && discordLinking.getJDA() != null) {
                 getLogger().info("Shutting down Discord JDA...");
@@ -537,8 +517,7 @@ public class Login extends JavaPlugin implements Listener {
             if(linkWebhookClient != null) linkWebhookClient.close();
             if(loginWebhookClient != null) loginWebhookClient.close();
             if(orderWebhookClient != null) orderWebhookClient.close();
-            // if(coinflipWebhookClient != null) coinflipWebhookClient.close(); // [REMOVED] Req 9
-            // if(itemManager != null) itemManager.closeWebhook(); // Handled by module
+            // --- LIFESTEAL REFACTOR: Removed itemManager.closeWebhook() (handled by module) ---
             if(staffWebhookClient != null) staffWebhookClient.close();
             if(discordStaffLogWebhook != null) discordStaffLogWebhook.close();
 
@@ -608,8 +587,7 @@ public class Login extends JavaPlugin implements Listener {
         return adminCheckMap.getOrDefault(staffUUID, false);
     }
 
-    // --- LIFESTEAL REFACTOR ---
-    // Update getters to delegate to the module
+    // --- LIFESTEAL REFACTOR: Getters now delegate to the module ---
     public DatabaseManager getDatabaseManager() {
         return (lifestealModule != null) ? lifestealModule.getDatabaseManager() : null;
     }
@@ -681,7 +659,9 @@ public class Login extends JavaPlugin implements Listener {
     }
 
     public void sendDiscordStaffLog(String message) {
+        // --- SYNTAX FIX ---
         getLogger().info("[Discord Staff Log] " + ChatColor.stripColor(message.replace("`", "").replace("*", "")));
+        // --- END SYNTAX FIX ---
         if (discordStaffLogWebhook != null) {
             discordStaffLogWebhook.send("[Discord Staff] " + message).exceptionally(error -> {
                 getLogger().warning("Failed send Discord staff webhook: ".concat(error.getMessage()));
@@ -697,5 +677,4 @@ public class Login extends JavaPlugin implements Listener {
             event.setCancelled(true);
         }
     }
-
 }

@@ -1,7 +1,6 @@
 package me.login.lifesteal;
 
-import club.minnced.discord.webhook.WebhookClient;
-import club.minnced.discord.webhook.WebhookClientBuilder;
+// --- REMOVED WEBHOOK IMPORTS ---
 import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -26,7 +25,7 @@ public class ItemManager {
     private FileConfiguration itemsConfig;
 
     private final Component serverPrefix;
-    private final WebhookClient logWebhook;
+    // --- REMOVED logWebhook FIELD ---
 
     public final NamespacedKey heartItemKey;
     public final NamespacedKey beaconItemKey;
@@ -39,14 +38,11 @@ public class ItemManager {
 
         loadItemsConfig();
 
-        // --- MODIFICATION (Request 1) ---
         // Load prefix from main config.yml using the correct key
         String prefixString = plugin.getConfig().getString("server_prefix", "<gray>[Lifesteal]</gray> ");
-        // --- END MODIFICATION ---
         this.serverPrefix = miniMessage.deserialize(prefixString);
 
-        // Load webhook
-        this.logWebhook = initializeWebhook("lifesteal-system-log-webhook", "Lifesteal-System");
+        // --- REMOVED Webhook Initialization ---
     }
 
     private void loadItemsConfig() {
@@ -58,11 +54,9 @@ public class ItemManager {
         itemsConfig = YamlConfiguration.loadConfiguration(itemsFile);
     }
 
-    // Call this if you add a /lifesteal reload command
     public void reloadConfigs() {
         loadItemsConfig();
         plugin.reloadConfig();
-        // Note: Can't reload prefix or webhook without re-initializing this class
     }
 
     public Component formatMessage(String message) {
@@ -98,60 +92,20 @@ public class ItemManager {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
 
-        // Use MiniMessage for name
         meta.displayName(miniMessage.deserialize(name));
 
-        // Use MiniMessage for lore
         List<Component> componentLore = lore.stream()
                 .map(miniMessage::deserialize)
                 .collect(Collectors.toList());
         meta.lore(componentLore);
 
-        // Add PDC tag to identify the item
         meta.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
-
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
         item.setItemMeta(meta);
         return item;
     }
 
-    // --- Webhook ---
-    public void sendLog(String message) {
-        if (logWebhook != null) {
-            logWebhook.send("[Lifesteal] " + message).exceptionally(error -> {
-                plugin.getLogger().warning("Failed send lifesteal webhook: " + error.getMessage());
-                return null;
-            });
-        }
-    }
-
-    private WebhookClient initializeWebhook(String configKey, String systemName) {
-        String url = plugin.getConfig().getString(configKey);
-        if (url == null || url.isEmpty() || url.equals("YOUR_WEBHOOK_URL_HERE")) {
-            plugin.getLogger().info(systemName + " Webhook disabled (check '" + configKey + "').");
-            return null;
-        }
-        try {
-            WebhookClientBuilder builder = new WebhookClientBuilder(url);
-            builder.setThreadFactory((job) -> {
-                Thread t = new Thread(job);
-                t.setName(systemName + "-WH");
-                t.setDaemon(true);
-                return t;
-            });
-            plugin.getLogger().info(systemName + " Webhook enabled.");
-            return builder.build();
-        } catch (IllegalArgumentException e) {
-            plugin.getLogger().warning("Invalid Webhook URL [" + systemName + "]: " + e.getMessage());
-        }
-        return null;
-    }
-
-    public void closeWebhook() {
-        if (logWebhook != null) {
-            logWebhook.close();
-        }
-    }
+    // --- REMOVED ALL WEBHOOK METHODS (sendLog, initializeWebhook, closeWebhook) ---
 
     // --- Adventure Component Helpers ---
     public static String toLegacy(Component component) {

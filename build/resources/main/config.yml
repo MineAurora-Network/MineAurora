@@ -1,13 +1,15 @@
 bot-token: ""
 logger-bot-token: ""
 
-lagclear-log-channel-id: 1434707657633169611
 normal-bot-channel: 1434006801011048621
 staff-bot-channel: 1434006967357145168
 
 coinflip-log-channel-id: 1431926295847243858
 coinflip-admin-log-channel-id: 1435165917779591218
-island-drop-channel-id: "YOUR_CHANNEL_ID_HERE"
+lagclear-log-channel-id: 1434707657633169611
+lifesteal-normal-channel-id: 1434006801011048621
+lifesteal-admin-channel-id: 1434006967357145168
+combat-log-channel-id: 0 # <-- PLEASE SET THIS ID
 
 verification-channel-id: 1430953529463279696
 verified-role-id: 1430766504575635508

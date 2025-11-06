@@ -236,4 +236,3 @@ permissions:
     description: Allows use of the /ckill command.
     default: op
   # --- END ISLAND PERMISSIONS ---
-}

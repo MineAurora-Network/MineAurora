@@ -21,7 +21,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.metadata.FixedMetadataValue;
 
 import java.util.*;
-import java.util.logging.Level; // <-- IMPORT ADDED
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 public class ReviveMenu implements Listener {
@@ -29,6 +29,7 @@ public class ReviveMenu implements Listener {
     private final Login plugin;
     private final ItemManager itemManager;
     private final DeadPlayerManager deadPlayerManager;
+    private final LifestealLogger logger; // <-- ADDED FIELD
 
     private static final int GUI_SIZE = 54; // 6 rows
     private static final int PLAYERS_PER_PAGE = 45; // 5 rows
@@ -36,11 +37,13 @@ public class ReviveMenu implements Listener {
     private static final String GUI_PAGE_META = "ReviveMenuPage";
     private static final String GUI_FILTER_META = "ReviveMenuFilter";
 
-    public ReviveMenu(Login plugin, ItemManager itemManager, DeadPlayerManager deadPlayerManager) {
+    // --- CONSTRUCTOR UPDATED ---
+    public ReviveMenu(Login plugin, ItemManager itemManager, DeadPlayerManager deadPlayerManager, LifestealLogger logger) {
         this.plugin = plugin;
         this.itemManager = itemManager;
         this.deadPlayerManager = deadPlayerManager;
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        this.logger = logger; // <-- STORE LOGGER
+        // plugin.getServer().getPluginManager().registerEvents(this, plugin); // This is now handled by LifestealModule
     }
 
     public void openMenu(Player player, int page, String filter) {
@@ -154,7 +157,12 @@ public class ReviveMenu implements Listener {
             player.getInventory().addItem(itemManager.getReviveBeaconItem(1));
 
             player.sendMessage(itemManager.formatMessage("<green>You have revived " + target.getName() + "!"));
-            itemManager.sendLog(player.getName() + " revived " + target.getName());
+
+            // --- LOGGING UPDATED ---
+            if (logger != null) {
+                logger.logAdmin("`" + player.getName() + "` revived `" + target.getName() + "` using a Revive Beacon.");
+            }
+            // --- END LOGGING ---
 
             // Refresh menu
             openMenu(player, currentPage, currentFilter);
@@ -164,21 +172,18 @@ public class ReviveMenu implements Listener {
     private void openSearchSign(Player player, int page, String filter) {
         player.closeInventory(); // Close GUI first
 
-        // --- FIX: Wrap in try-catch ---
         try {
             SignGUI.builder()
                     .setLines("", "^^^^^^^^^^^^^^^", "Enter Player Name", "Or 'clear' to reset")
                     .setHandler((p, result) -> {
                         String input = result.getLine(0).trim();
 
-                        // --- FIX: Create final variable for lambda ---
                         final String newFilter;
                         if (input.equalsIgnoreCase("clear") || input.isEmpty()) {
                             newFilter = null;
                         } else {
                             newFilter = input;
                         }
-                        // --- END FIX ---
 
                         // Re-open the menu with the new filter
                         plugin.getServer().getScheduler().runTask(plugin, () -> {
@@ -193,7 +198,6 @@ public class ReviveMenu implements Listener {
             plugin.getLogger().log(Level.SEVERE, "Error opening SignGUI for ReviveMenu", e);
             player.sendMessage(itemManager.formatMessage("<red>An error occurred opening the search prompt."));
         }
-        // --- END FIX ---
     }
 
     @EventHandler

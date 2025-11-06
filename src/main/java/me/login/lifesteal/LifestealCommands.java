@@ -27,17 +27,18 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
     private final Login plugin;
     private final ItemManager itemManager;
     private final LifestealManager lifestealManager;
-    private final DeadPlayerManager deadPlayerManager; // --- ADD THIS FIELD ---
+    private final DeadPlayerManager deadPlayerManager;
     private final LuckPerms luckPermsApi;
+    private final LifestealLogger logger; // <-- ADDED FIELD
 
     // --- CONSTRUCTOR UPDATED ---
-    public LifestealCommands(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager, LuckPerms luckPermsApi) {
+    public LifestealCommands(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager, LuckPerms luckPermsApi, LifestealLogger logger) {
         this.plugin = plugin;
         this.itemManager = itemManager;
         this.lifestealManager = lifestealManager;
-        this.deadPlayerManager = deadPlayerManager; // --- STORE THE INSTANCE ---
-        this.luckPermsApi = luckPermsApi; // Can be null if LuckPerms is not found
-        // removed: this.deadPlayerManager = plugin.getDeadPlayerManager();
+        this.deadPlayerManager = deadPlayerManager;
+        this.luckPermsApi = luckPermsApi;
+        this.logger = logger; // <-- STORE LOGGER
     }
 
     @Override
@@ -68,7 +69,7 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
                 case "checkhearts":
                     return handleCheck(sender, subArgs);
                 case "revive":
-                    return handleRevive(sender, subArgs); // This will now use the class field
+                    return handleRevive(sender, subArgs); // New command handler
                 default:
                     sendUsage(sender);
                     return true;
@@ -167,11 +168,15 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
         if (itemName.equals("heart") || itemName.equals("hearts")) {
             player.getInventory().addItem(itemManager.getHeartItem(amount));
             player.sendMessage(itemManager.formatMessage("<green>Gave you " + amount + " heart(s)."));
-            itemManager.sendLog("Admin " + player.getName() + " gave themselves " + amount + " heart(s).");
+            if (logger != null) {
+                logger.logAdmin("Admin `" + player.getName() + "` gave themselves " + amount + " heart(s).");
+            }
         } else if (itemName.equals("revive_beacon") || itemName.equals("beacon")) {
             player.getInventory().addItem(itemManager.getReviveBeaconItem(amount));
             player.sendMessage(itemManager.formatMessage("<green>Gave you " + amount + " revive beacon(s)."));
-            itemManager.sendLog("Admin " + player.getName() + " gave themselves " + amount + " revive beacon(s).");
+            if (logger != null) {
+                logger.logAdmin("Admin `" + player.getName() + "` gave themselves " + amount + " revive beacon(s).");
+            }
         } else {
             player.sendMessage(itemManager.formatMessage("<red>Invalid item. Use 'heart' or 'revive_beacon'."));
             return true;
@@ -205,23 +210,31 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        // --- MODIFICATION (Request 2) ---
         // LuckPerms Rank Weight Check
         if (luckPermsApi != null && sender instanceof Player admin) {
-            User adminUser = luckPermsApi.getUserManager().getUser(admin.getUniqueId());
-            User targetUser = luckPermsApi.getUserManager().getUser(target.getUniqueId());
+            // Check if admin is targeting themselves
+            if (admin.getUniqueId().equals(target.getUniqueId())) {
+                // Admin is targeting themselves, allow it.
+            } else {
+                // Admin is targeting someone else, check hierarchy
+                User adminUser = luckPermsApi.getUserManager().getUser(admin.getUniqueId());
+                User targetUser = luckPermsApi.getUserManager().getUser(target.getUniqueId());
 
-            if (adminUser != null && targetUser != null) {
-                int adminWeight = getWeight(adminUser);
-                int targetWeight = getWeight(targetUser);
+                if (adminUser != null && targetUser != null) {
+                    int adminWeight = getWeight(adminUser);
+                    int targetWeight = getWeight(targetUser);
 
-                // Admin has less or equal weight -> cannot modify
-                if (adminWeight <= targetWeight) {
-                    admin.sendMessage(itemManager.formatMessage("<red>You cannot modify the hearts of a player with equal or higher rank."));
-                    return true;
+                    // Admin has less or equal weight -> cannot modify
+                    if (adminWeight <= targetWeight) {
+                        admin.sendMessage(itemManager.formatMessage("<red>You cannot modify the hearts of a player with equal or higher rank."));
+                        return true;
+                    }
                 }
             }
         }
-        // Console or admin with higher weight proceeds
+        // Console or admin with higher weight (or self-targeting) proceeds
+        // --- END MODIFICATION ---
 
         int actualAmount = lifestealManager.setHearts(target.getUniqueId(), amount);
         sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage(
@@ -235,7 +248,9 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
             ));
         }
 
-        itemManager.sendLog(sender.getName() + " set " + target.getName() + "'s hearts to " + actualAmount + ".");
+        if (logger != null) {
+            logger.logAdmin("`" + sender.getName() + "` set `" + target.getName() + "`'s hearts to " + actualAmount + ".");
+        }
         return true;
     }
 
@@ -283,48 +298,47 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // --- Use the class field ---
-        if (!this.deadPlayerManager.isDead(target.getUniqueId())) {
+        if (!deadPlayerManager.isDead(target.getUniqueId())) {
             sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<red>That player is not dead.")));
             return true;
         }
 
         // Revive the player
-        this.deadPlayerManager.removeDeadPlayer(target.getUniqueId());
+        deadPlayerManager.removeDeadPlayer(target.getUniqueId());
         // Reset hearts to default
         int newHearts = lifestealManager.setHearts(target.getUniqueId(), lifestealManager.DEFAULT_HEARTS);
 
         sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage("<green>You have revived " + target.getName() + " and set their hearts to " + newHearts + ".")));
-        itemManager.sendLog(sender.getName() + " revived " + target.getName() + ".");
+
+        if (logger != null) {
+            logger.logAdmin("`" + sender.getName() + "` revived `" + target.getName() + "`.");
+        }
 
         Player onlineTarget = target.getPlayer();
         if (onlineTarget != null && onlineTarget.isOnline()) {
             onlineTarget.setGameMode(GameMode.SURVIVAL);
             onlineTarget.sendMessage(itemManager.formatMessage("<green>You have been revived by an admin!</green>"));
-            // Manually update health here as they were likely in spectator
             lifestealManager.updatePlayerHealth(onlineTarget);
         }
         return true;
     }
 
     private int getWeight(User user) {
-        // Get weight from meta key "weight"
         String weightString = user.getCachedData().getMetaData().getMetaValue("weight");
         if (weightString != null) {
             try {
                 return Integer.parseInt(weightString);
             } catch (NumberFormatException e) {
-                return 0; // Default weight if meta is invalid
+                return 0;
             }
         }
-        return 0; // Default weight if no meta
+        return 0;
     }
 
     @Nullable
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
 
-        // Tab complete for /ls and /lifesteal
         if (command.getName().equalsIgnoreCase("lifesteal") || command.getName().equalsIgnoreCase("ls")) {
             if (args.length == 1) {
                 List<String> subcommands = new ArrayList<>();
@@ -350,17 +364,14 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
                         return Arrays.asList("1", "10", "32", "64");
                     }
                 }
-
                 if (subCmd.equals("sethearts") || subCmd.equals("checkhearts") || subCmd.equals("revive")) {
                     if (args.length == 2) {
-                        // Suggest online player names
                         return null;
                     }
                 }
             }
         }
 
-        // Tab complete for /withdrawhearts
         if (command.getName().equalsIgnoreCase("withdrawhearts")) {
             if (args.length == 1) {
                 return Arrays.asList("1", "2", "5");

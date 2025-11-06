@@ -10,13 +10,13 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerChangedWorldEvent; // <-- IMPORT ADDED
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.persistence.PersistentDataType; // <-- MISSING IMPORT ADDED
+import org.bukkit.persistence.PersistentDataType;
 
 public class LifestealListener implements Listener {
 
@@ -25,64 +25,62 @@ public class LifestealListener implements Listener {
     private final LifestealManager lifestealManager;
     private final DeadPlayerManager deadPlayerManager;
     private final ReviveMenu reviveMenu;
+    private LifestealLogger logger; // <-- ADDED FIELD
 
-    public LifestealListener(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager, ReviveMenu reviveMenu) {
+    // --- CONSTRUCTOR UPDATED ---
+    public LifestealListener(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager, ReviveMenu reviveMenu, LifestealLogger logger) {
         this.plugin = plugin;
         this.itemManager = itemManager;
         this.lifestealManager = lifestealManager;
         this.deadPlayerManager = deadPlayerManager;
         this.reviveMenu = reviveMenu;
+        this.logger = logger; // <-- STORE LOGGER
     }
+
+    // --- (onPlayerJoin, onWorldChange, onPlayerQuit... remain the same) ---
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        // This will load data AND apply world-specific health
         lifestealManager.loadPlayerData(player);
-
         if (deadPlayerManager.isDead(player.getUniqueId())) {
-            // Player is dead, needs reviving
             player.setGameMode(GameMode.SPECTATOR);
             player.sendMessage(itemManager.formatMessage("<red>You are dead! A player must revive you using a Revive Beacon."));
         }
     }
 
-    // --- MODIFICATION (Request 2) ---
     @EventHandler
     public void onWorldChange(PlayerChangedWorldEvent event) {
-        // Update player's max health based on the world they entered
         lifestealManager.updatePlayerHealth(event.getPlayer());
     }
-    // --- END MODIFICATION ---
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // Save data on quit
         lifestealManager.savePlayerData(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player victim = event.getEntity();
-        Player killer = victim.getKiller(); // This is null if not killed by a player
+        Player killer = victim.getKiller();
 
         int victimHearts = lifestealManager.getHearts(victim.getUniqueId());
 
-        // Player loses a heart, unless they are at 1
-        // --- FIX ---
         if (victimHearts > lifestealManager.getMinHearts()) {
-            // --- END FIX ---
             lifestealManager.removeHearts(victim.getUniqueId(), 1);
             victim.sendMessage(itemManager.formatMessage("<red>You lost a heart!"));
         } else {
-            // Player is at 1 heart and died. They are now "dead"
             deadPlayerManager.addDeadPlayer(victim.getUniqueId(), victim.getName());
             victim.setGameMode(GameMode.SPECTATOR);
             victim.sendMessage(itemManager.formatMessage("<dark_red>You have lost your final life. You are now dead.</dark_red>"));
-            itemManager.sendLog(victim.getName() + " lost their final life and is now dead.");
+
+            // --- LOGGING UPDATED ---
+            if (logger != null) {
+                String killerName = (killer != null) ? killer.getName() : "Unknown Causes";
+                logger.logNormal("Player `" + victim.getName() + "` lost their final life (killed by `" + killerName + "`) and is now dead.");
+            }
         }
 
-        // If killed by a player, killer gains a heart
         if (killer != null && !killer.equals(victim)) {
             int killerHearts = lifestealManager.getHearts(killer.getUniqueId());
             if (killerHearts < lifestealManager.getMaxHearts()) {
@@ -94,6 +92,8 @@ public class LifestealListener implements Listener {
         }
     }
 
+    // --- (onHeartUse, onBeaconPlace... remain the same) ---
+
     @EventHandler
     public void onHeartUse(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -104,13 +104,9 @@ public class LifestealListener implements Listener {
 
         if (item.getType() == Material.AIR || !item.hasItemMeta()) return;
 
-        // Check if it's our custom heart item
-        // --- FIX ---
         if (item.getItemMeta().getPersistentDataContainer().has(itemManager.heartItemKey, PersistentDataType.BYTE)) {
-            // --- END FIX ---
             event.setCancelled(true);
             if (lifestealManager.useHeart(player)) {
-                // Success, remove one item
                 item.setAmount(item.getAmount() - 1);
             }
         }
@@ -123,19 +119,15 @@ public class LifestealListener implements Listener {
 
         if (item.getType() == Material.AIR || !item.hasItemMeta()) return;
 
-        // Check if it's our custom revive beacon
-        // --- FIX ---
         if (item.getItemMeta().getPersistentDataContainer().has(itemManager.beaconItemKey, PersistentDataType.BYTE)) {
-            // --- END FIX ---
-            event.setCancelled(true); // Cancel placement
+            event.setCancelled(true);
 
             if (!player.hasPermission("lifesteal.revive")) {
                 player.sendMessage(itemManager.formatMessage("<red>You do not have permission to use this."));
                 return;
             }
 
-            // Open the Revive GUI
-            reviveMenu.openMenu(player, 0, null); // Open first page, no search filter
+            reviveMenu.openMenu(player, 0, null);
         }
     }
 }

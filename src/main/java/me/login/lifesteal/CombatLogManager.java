@@ -1,12 +1,10 @@
 package me.login.lifesteal;
 
 import me.login.Login;
-import net.kyori.adventure.text.Component;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -29,46 +27,48 @@ public class CombatLogManager implements Listener {
     private final Login plugin;
     private final ItemManager itemManager;
     private final LifestealManager lifestealManager;
-    private final DeadPlayerManager deadPlayerManager; // --- ADD THIS FIELD ---
+    private final DeadPlayerManager deadPlayerManager; // <-- Field for new logic
+    private LifestealLogger logger; // <-- ADDED FIELD
 
     private static final long COMBAT_TIME_MS = 10 * 1000; // 10 seconds
     private final Map<UUID, CombatData> combatMap = new HashMap<>();
     private final BukkitTask combatTimerTask;
 
     // --- CONSTRUCTOR UPDATED ---
-    public CombatLogManager(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager) {
+    public CombatLogManager(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager, LifestealLogger logger) {
         this.plugin = plugin;
         this.itemManager = itemManager;
         this.lifestealManager = lifestealManager;
-        this.deadPlayerManager = deadPlayerManager; // --- STORE THE INSTANCE ---
+        this.deadPlayerManager = deadPlayerManager; // <-- STORE
+        this.logger = logger; // <-- STORE LOGGER
 
         this.combatTimerTask = new BukkitRunnable() {
+            // ... (run method remains the same) ...
             @Override
             public void run() {
                 long currentTime = System.currentTimeMillis();
-                // Iterate over a copy to avoid ConcurrentModificationException
                 new HashMap<>(combatMap).forEach((uuid, data) -> {
                     Player player = plugin.getServer().getPlayer(uuid);
                     if (player == null) {
-                        combatMap.remove(uuid); // Clean up
+                        combatMap.remove(uuid);
                         return;
                     }
 
                     long timeLeft = (data.lastHitTime + COMBAT_TIME_MS) - currentTime;
                     if (timeLeft <= 0) {
-                        // Combat expired
                         combatMap.remove(uuid);
                         player.sendActionBar(itemManager.formatMessage("<green>You are no longer in combat."));
                     } else {
-                        // Still in combat
                         player.sendActionBar(itemManager.formatMessage(
                                 "<red>In Combat! Do not log out! <white>(" + (timeLeft / 1000 + 1) + "s)"
                         ));
                     }
                 });
             }
-        }.runTaskTimer(plugin, 20L, 20L); // Run every second
+        }.runTaskTimer(plugin, 20L, 20L);
     }
+
+    // --- (shutdown, onPlayerDamage, tagPlayer... remain the same) ---
 
     public void shutdown() {
         if (combatTimerTask != null && !combatTimerTask.isCancelled()) {
@@ -89,9 +89,8 @@ public class CombatLogManager implements Listener {
             }
         }
 
-        if (attacker == null || attacker.equals(victim)) return; // No attacker or self-harm
+        if (attacker == null || attacker.equals(victim)) return;
 
-        // Tag both players
         tagPlayer(victim, attacker);
         tagPlayer(attacker, victim);
     }
@@ -107,24 +106,24 @@ public class CombatLogManager implements Listener {
         UUID victimUUID = victim.getUniqueId();
 
         if (combatMap.containsKey(victimUUID)) {
-            // Player combat logged!
             CombatData data = combatMap.remove(victimUUID);
 
-            itemManager.sendLog(victim.getName() + " combat logged! Attacker: " + data.lastAttackerUUID);
+            // --- LOGGING UPDATED ---
+            if (logger != null) {
+                logger.logCombat("Player `" + victim.getName() + "` combat logged! Last attacker: `" + data.lastAttackerUUID + "`");
+            }
 
-            // Punish victim:
             int currentHearts = lifestealManager.getHearts(victimUUID);
             if (currentHearts <= lifestealManager.getMinHearts()) {
-                // Player is at min hearts, they die
-                // --- UPDATE THIS LINE ---
-                this.deadPlayerManager.addDeadPlayer(victimUUID, victim.getName());
-                itemManager.sendLog(victim.getName() + " combat logged at " + currentHearts + " heart(s) and is now dead.");
+                deadPlayerManager.addDeadPlayer(victimUUID, victim.getName());
+                // --- LOGGING UPDATED ---
+                if (logger != null) {
+                    logger.logCombat("`" + victim.getName() + "` combat logged at " + currentHearts + " heart(s) and is now DEAD.");
+                }
             } else {
-                // Remove 1 heart (this is an offline-safe async DB update)
                 lifestealManager.removeHearts(victimUUID, 1);
             }
 
-            // Reward attacker: gain 1 heart
             lifestealManager.addHearts(data.lastAttackerUUID, 1);
 
             Player attacker = plugin.getServer().getPlayer(data.lastAttackerUUID);
@@ -134,7 +133,6 @@ public class CombatLogManager implements Listener {
                 ));
             }
 
-            // Drop inventory
             Location dropLocation = victim.getLocation();
             World world = victim.getWorld();
             for (ItemStack item : victim.getInventory().getContents()) {
@@ -142,28 +140,23 @@ public class CombatLogManager implements Listener {
                     world.dropItemNaturally(dropLocation, item);
                 }
             }
-            // Clear inventory (so they don't have it on rejoin)
             victim.getInventory().clear();
 
-            // Drop XP
             int xp = victim.getTotalExperience();
             if (xp > 0) {
                 world.spawn(dropLocation, ExperienceOrb.class).setExperience(xp);
-                victim.setTotalExperience(0); // Clear their XP
+                victim.setTotalExperience(0);
             }
         }
     }
 
-    // If a dead player logs in, make sure they are still in spectator
     @EventHandler
     public void onDeadPlayerJoin(PlayerJoinEvent event) {
-        // --- UPDATE THIS LINE ---
-        if (this.deadPlayerManager != null && this.deadPlayerManager.isDead(event.getPlayer().getUniqueId())) {
+        if (deadPlayerManager != null && deadPlayerManager.isDead(event.getPlayer().getUniqueId())) {
             event.getPlayer().setGameMode(GameMode.SPECTATOR);
         }
     }
 
-    // --- Private inner class ---
     private static class CombatData {
         long lastHitTime;
         UUID lastAttackerUUID;
