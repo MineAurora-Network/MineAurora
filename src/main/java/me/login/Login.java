@@ -3,14 +3,14 @@ package me.login;
 import club.minnced.discord.webhook.WebhookClient;
 import club.minnced.discord.webhook.WebhookClientBuilder;
 import me.login.discordlinking.*;
-import me.login.discordcommand.DiscordCommandManager;
 import me.login.discordcommand.DiscordCommandRegistrar;
 import me.login.discordcommand.DiscordModConfig;
-import me.login.discordcommand.DiscordModCommands;
-import me.login.discordcommand.DiscordRankCommand;
 import me.login.loginsystem.*;
+import me.login.misc.dailyreward.DailyRewardDatabase; // IMPORT DailyRewardDatabase
+import me.login.misc.dailyreward.DailyRewardModule; // IMPORT DailyRewardModule
+import me.login.misc.playtimerewards.PlaytimeRewardModule; // IMPORT PlaytimeRewardModule
+import me.login.misc.tokens.TokenModule; // IMPORT TokenModule
 import me.login.ordersystem.*;
-import me.login.DamageIndicator;
 import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.CleanupTask;
 import me.login.clearlag.LagClearCommand;
@@ -20,12 +20,10 @@ import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import me.login.coinflip.*;
@@ -40,34 +38,21 @@ import me.login.leaderboards.LeaderboardUpdateTask;
 import org.bukkit.scheduler.BukkitTask;
 import me.login.leaderboards.KillLeaderboardCommand;
 import me.login.leaderboards.LeaderboardProtectionListener;
-
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.event.player.PlayerQuitEvent;
-
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-
 import me.login.moderation.ModerationDatabase;
 import me.login.moderation.ModerationListener;
 import me.login.moderation.BanCommand;
 import me.login.moderation.CheckInvCommand;
 import me.login.moderation.MuteCommand;
-
-// --- LIFESTEAL IMPORTS ---
 import me.login.lifesteal.LifestealModule;
 import me.login.lifesteal.LifestealLogger;
 import me.login.lifesteal.DatabaseManager;
 import me.login.lifesteal.ItemManager;
 import me.login.lifesteal.LifestealManager;
 import me.login.lifesteal.DeadPlayerManager;
-// --- END LIFESTEAL IMPORTS ---
 
 import net.luckperms.api.LuckPerms;
 
@@ -89,36 +74,25 @@ public class Login extends JavaPlugin implements Listener {
     private DamageIndicator damageIndicator;
     private int defaultOrderLimit;
     private ScoreboardManager scoreboardManager;
-    private CoinflipDatabase coinflipDatabase;
-    private CoinflipSystem coinflipSystem;
-    private CoinflipMenu coinflipMenu;
-    private CoinflipManageMenu coinflipManageMenu;
     private Economy vaultEconomy = null;
     private LeaderboardDisplayManager leaderboardManager;
     private BukkitTask leaderboardUpdateTask;
-
-    // ... Coinflip Fields ...
-    private CoinflipAdminMenu coinflipAdminMenu;
-    private CoinflipLogger coinflipLogger;
-    private MessageManager coinflipMessageManager;
-
+    private CoinflipModule coinflipModule;
     private ModerationDatabase moderationDatabase;
     private WebhookClient staffWebhookClient;
     private final Map<UUID, UUID> viewingInventories = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> adminCheckMap = new ConcurrentHashMap<>();
-
     private DiscordModConfig discordModConfig;
     private WebhookClient discordStaffLogWebhook;
-
     private LagClearConfig lagClearConfig;
     private LagClearLogger lagClearLogger;
-
     private LuckPerms luckPermsApi;
-
-    // --- LIFESTEAL REFACTOR ---
     private LifestealModule lifestealModule;
     private LifestealLogger lifestealLogger;
-    // --- END LIFESTEAL REFACTOR ---
+    private DailyRewardModule dailyRewardModule; // ADD DailyRewardModule INSTANCE
+    private DailyRewardDatabase dailyRewardDatabase; // ADD DailyRewardDatabase INSTANCE
+    private PlaytimeRewardModule playtimeRewardModule; // ADD PlaytimeRewardModule INSTANCE
+    private TokenModule tokenModule; // ADD TokenModule INSTANCE
 
 
     @Override
@@ -158,13 +132,18 @@ public class Login extends JavaPlugin implements Listener {
         ordersDatabase.connect();
         if (ordersDatabase.getConnection() == null) { disableWithError("Orders DB failed."); return; }
 
-        this.coinflipDatabase = new CoinflipDatabase(this);
-        coinflipDatabase.connect();
-        if (coinflipDatabase.getConnection() == null) { disableWithError("Coinflip DB failed."); return; }
+        this.coinflipModule = new CoinflipModule(this);
+        if (!coinflipModule.initDatabase()) {
+            disableWithError("Coinflip DB failed."); return;
+        }
+
+        // --- ADDED DATABASE INIT FOR DAILY REWARDS ---
+        this.dailyRewardDatabase = new DailyRewardDatabase(this);
+        dailyRewardDatabase.connect();
+        dailyRewardDatabase.createTables();
+        // --- END DATABASE INIT ---
 
         this.moderationDatabase = new ModerationDatabase(this);
-
-        // --- LIFESTEAL REFACTOR: Initialization moved to JDA startup ---
 
         this.linkWebhookClient = initializeWebhook("link-system-log-webhook", "Link-System");
         this.loginWebhookClient = initializeWebhook("login-system-log-webhook", "Login-System");
@@ -280,34 +259,36 @@ public class Login extends JavaPlugin implements Listener {
                                             getLogger().severe("Failed to initialize Lifesteal Module!");
                                             // Don't disable the whole plugin, just this module failed
                                         }
-                                        // --- END LIFESTEAL REFACTOR ---
 
-                                        // --- Coinflip Initialization ---
                                         getLogger().info("Initializing Coinflip system...");
-                                        coinflipMessageManager = new MessageManager(Login.this);
-                                        coinflipLogger = new CoinflipLogger(Login.this);
+                                        coinflipModule.initLogicAndListeners();
 
-                                        coinflipMenu = new CoinflipMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger);
-                                        coinflipSystem = new CoinflipSystem(Login.this, coinflipDatabase, vaultEconomy, coinflipLogger, coinflipMessageManager, coinflipMenu.getPlayersChallengingSet());
-                                        coinflipMenu.setCoinflipSystem(coinflipSystem);
-                                        coinflipManageMenu = new CoinflipManageMenu(Login.this, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger);
-                                        coinflipAdminMenu = new CoinflipAdminMenu(Login.this, coinflipDatabase, coinflipSystem, vaultEconomy, coinflipMessageManager, coinflipLogger);
-
-                                        if (getServer().getPluginManager().getPlugin("Citizens") != null) {
-                                            getServer().getPluginManager().registerEvents(new CoinflipNpcListener(Login.this, coinflipMenu), Login.this);
-                                            getLogger().info("Citizens found, Coinflip NPC listener registered.");
-                                        } else {
-                                            getLogger().warning("Citizens plugin not found! Coinflip NPC click will not work.");
+                                        // --- ADDED DAILY REWARD MODULE INITIALIZATION ---
+                                        getLogger().info("Initializing DailyRewardModule...");
+                                        // Pass the already-initialized database to the module
+                                        dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
+                                        if (!dailyRewardModule.init()) {
+                                            getLogger().severe("Failed to initialize DailyReward Module!");
                                         }
-                                        getServer().getPluginManager().registerEvents(coinflipMenu, Login.this);
-                                        getServer().getPluginManager().registerEvents(coinflipManageMenu, Login.this);
-                                        getServer().getPluginManager().registerEvents(coinflipAdminMenu, Login.this);
+                                        // --- END DAILY REWARD ---
 
-                                        CoinflipCmd coinflipCmd = new CoinflipCmd(Login.this, coinflipDatabase, vaultEconomy, coinflipMenu, coinflipManageMenu, coinflipAdminMenu, coinflipSystem, coinflipMessageManager, coinflipLogger);
-                                        setCommandExecutor("coinflip", coinflipCmd);
-                                        getCommand("coinflip").setTabCompleter(coinflipCmd);
-                                        getLogger().info("Coinflip system enabled.");
-                                        // --- End Coinflip ---
+                                        // --- ADDED PLAYTIME REWARD MODULE INITIALIZATION ---
+                                        getLogger().info("Initializing PlaytimeRewardModule...");
+                                        // Pass both economy and the daily reward database (for tokens)
+                                        playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
+                                        if (!playtimeRewardModule.init()) {
+                                            getLogger().severe("Failed to initialize PlaytimeReward Module!");
+                                        }
+                                        // --- END PLAYTIME REWARD ---
+
+                                        // --- ADDED TOKEN MODULE INITIALIZATION ---
+                                        getLogger().info("Initializing TokenModule...");
+                                        // Pass the required dependencies
+                                        tokenModule = new TokenModule(Login.this, luckPermsApi, dailyRewardDatabase);
+                                        if (!tokenModule.init()) {
+                                            getLogger().severe("Failed to initialize Token Module!");
+                                        }
+                                        // --- END TOKEN MODULE ---
 
                                         this.cancel();
                                         return;
@@ -316,6 +297,13 @@ public class Login extends JavaPlugin implements Listener {
                                     attempts++;
                                     if (attempts >= maxAttempts) {
                                         getLogger().severe("LagClear Logger JDA did not connect after 10 seconds. Coinflip & Lifesteal logging will be disabled.");
+                                        // --- ADDED DAILY REWARD FALLBACK ---
+                                        getLogger().severe("DailyRewardModule will also fail to initialize logging!");
+                                        // --- ADDED PLAYTIME REWARD FALLBACK ---
+                                        getLogger().severe("PlaytimeRewardModule will also fail to initialize logging!");
+                                        // --- ADDED TOKEN MODULE FALLBACK ---
+                                        getLogger().severe("TokenModule will also fail to initialize logging!");
+                                        // --- END ---
                                         this.cancel();
                                     }
                                 }
@@ -396,7 +384,7 @@ public class Login extends JavaPlugin implements Listener {
 
     private void registerCommands() {
         // --- LIFESTEAL REFACTOR: Null check removed, commands are registered by the module ---
-        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || /* coinflip ... */ leaderboardManager == null || moderationDatabase == null) {
+        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || /* coinflipModule checked in its init */ leaderboardManager == null || moderationDatabase == null) {
             getLogger().severe("Cannot register commands - one or more systems failed initialization!"); return;
         }
 
@@ -439,11 +427,14 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("checkinv", checkInvExecutor);
         setCommandExecutor("admincheckinv", checkInvExecutor);
 
-        // --- LIFESTEAL REFACTOR: All lifesteal command registrations are removed ---
-        // They are now handled by LifestealModule.init()
-
         setCommandExecutor("scoreboard", this);
 
+        // Daily Reward command is registered inside the module,
+        // but we must check for it in plugin.yml
+
+        // Playtime Reward command is registered inside the module
+
+        // Token commands are registered inside the module
     }
 
     private void setCommandExecutor(String commandName, org.bukkit.command.CommandExecutor executor) { org.bukkit.command.PluginCommand command = getCommand(commandName); if (command != null) { command.setExecutor(executor); } else { getLogger().severe("Failed register command '" + commandName + "'! In plugin.yml?"); } }
@@ -492,18 +483,44 @@ public class Login extends JavaPlugin implements Listener {
                 this.leaderboardUpdateTask.cancel();
             }
 
-            // --- LIFESTEAL REFACTOR: Call module shutdown ---
             if (lifestealModule != null) {
                 lifestealModule.shutdown();
             }
-            // --- END LIFESTEAL REFACTOR ---
+
+            // --- ADDED DAILY REWARD SHUTDOWN ---
+            if (dailyRewardModule != null) {
+                dailyRewardModule.shutdown();
+            }
+            // --- END DAILY REWARD ---
+
+            // --- ADDED PLAYTIME REWARD SHUTDOWN ---
+            if (playtimeRewardModule != null) {
+                playtimeRewardModule.shutdown();
+            }
+            // --- END PLAYTIME REWARD ---
+
+            // --- ADDED TOKEN MODULE SHUTDOWN ---
+            if (tokenModule != null) {
+                tokenModule.shutdown();
+            }
+            // --- END TOKEN MODULE ---
 
             if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
             if (loginDatabase != null) loginDatabase.disconnect();
             if (ordersDatabase != null) ordersDatabase.disconnect();
-            if (coinflipDatabase != null) coinflipDatabase.disconnect();
+            if (coinflipModule != null && coinflipModule.getDatabase() != null) {
+                coinflipModule.getDatabase().disconnect();
+            }
             if (moderationDatabase != null) moderationDatabase.closeConnection();
-            // --- LIFESTEAL REFACTOR: Removed databaseManager.closeConnection() (handled by module) ---
+
+            // --- ADDED DAILY REWARD DB DISCONNECT ---
+            // This is now handled by the DailyRewardModule's shutdown
+            // if (dailyRewardDatabase != null) {
+            //    dailyRewardDatabase.disconnect();
+            // }
+            // --- END ---
+
+            // --- SHUTDOWN FOR PLAYTIME DB IS IN ITS MODULE ---
 
             if (discordLinking != null && discordLinking.getJDA() != null) {
                 getLogger().info("Shutting down Discord JDA...");
@@ -517,9 +534,9 @@ public class Login extends JavaPlugin implements Listener {
             if(linkWebhookClient != null) linkWebhookClient.close();
             if(loginWebhookClient != null) loginWebhookClient.close();
             if(orderWebhookClient != null) orderWebhookClient.close();
-            // --- LIFESTEAL REFACTOR: Removed itemManager.closeWebhook() (handled by module) ---
             if(staffWebhookClient != null) staffWebhookClient.close();
             if(discordStaffLogWebhook != null) discordStaffLogWebhook.close();
+
 
             try {
                 Class<?> taskRunner = Class.forName("okhttp3.internal.concurrent.TaskRunner");
@@ -552,11 +569,24 @@ public class Login extends JavaPlugin implements Listener {
     public ScoreboardManager getScoreboardManager() {
         return scoreboardManager;
     }
-    public CoinflipDatabase getCoinflipDatabase() { return coinflipDatabase; }
+
+    public CoinflipDatabase getCoinflipDatabase() {
+        return (coinflipModule != null) ? coinflipModule.getDatabase() : null;
+    }
     public Economy getVaultEconomy() { return vaultEconomy; }
     public CoinflipMenu getCoinflipMenu() {
-        return coinflipMenu;
+        return (coinflipModule != null) ? coinflipModule.getCoinflipMenu() : null;
     }
+    public CoinflipSystem getCoinflipSystem() {
+        return (coinflipModule != null) ? coinflipModule.getCoinflipSystem() : null;
+    }
+    public CoinflipManageMenu getCoinflipManageMenu() {
+        return (coinflipModule != null) ? coinflipModule.getCoinflipManageMenu() : null;
+    }
+    public CoinflipAdminMenu getCoinflipAdminMenu() {
+        return (coinflipModule != null) ? coinflipModule.getCoinflipAdminMenu() : null;
+    }
+
     public LeaderboardDisplayManager getLeaderboardManager() {
         return leaderboardManager;
     }
@@ -587,7 +617,6 @@ public class Login extends JavaPlugin implements Listener {
         return adminCheckMap.getOrDefault(staffUUID, false);
     }
 
-    // --- LIFESTEAL REFACTOR: Getters now delegate to the module ---
     public DatabaseManager getDatabaseManager() {
         return (lifestealModule != null) ? lifestealModule.getDatabaseManager() : null;
     }
@@ -600,52 +629,17 @@ public class Login extends JavaPlugin implements Listener {
     public DeadPlayerManager getDeadPlayerManager() {
         return (lifestealModule != null) ? lifestealModule.getDeadPlayerManager() : null;
     }
-    // --- END LIFESTEAL REFACTOR ---
+
+    // --- ADDED GETTER FOR DAILY REWARD DATABASE ---
+    public DailyRewardDatabase getDailyRewardDatabase() {
+        return this.dailyRewardDatabase; // Return the instance from the main class
+    }
+    // --- END GETTER ---
 
     @EventHandler public void onPlayerJoin(PlayerJoinEvent event) {
         if (scoreboardManager != null) {
             scoreboardManager.updateScoreboard(event.getPlayer());
         }
-    }
-
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        UUID playerUUID = player.getUniqueId();
-
-        coinflipDatabase.loadPlayerPendingCoinflips(playerUUID).whenCompleteAsync((games, error) -> {
-            if (error != null || games == null || games.isEmpty()) {
-                return;
-            }
-
-            double totalRefund = games.stream().mapToDouble(CoinflipGame::getAmount).sum();
-            List<Long> gameIds = games.stream()
-                    .map(CoinflipGame::getGameId)
-                    .collect(Collectors.toList());
-
-            if (totalRefund <= 0) {
-                return;
-            }
-
-            CompletableFuture<?>[] removalFutures = gameIds.stream()
-                    .map(coinflipDatabase::removeCoinflip)
-                    .toArray(CompletableFuture[]::new);
-
-            CompletableFuture.allOf(removalFutures).whenComplete((v, removalError) -> {
-                if (removalError != null) {
-                    getLogger().severe("Error removing coinflips for " + player.getName() + " on quit: " + removalError.getMessage());
-                }
-
-                Bukkit.getScheduler().runTask(this, () -> {
-                    EconomyResponse refundResp = vaultEconomy.depositPlayer(Bukkit.getOfflinePlayer(playerUUID), totalRefund);
-                    if (refundResp.transactionSuccess()) {
-                        getLogger().info("Refunded " + player.getName() + " " + vaultEconomy.format(totalRefund) + " for " + gameIds.size() + " cancelled coinflips on quit.");
-                    } else {
-                        getLogger().severe("CRITICAL: Failed to refund " + player.getName() + " " + vaultEconomy.format(totalRefund) + " on quit. Error: " + refundResp.errorMessage);
-                    }
-                });
-            });
-        });
     }
 
     public void sendStaffLog(String message) {
@@ -659,22 +653,12 @@ public class Login extends JavaPlugin implements Listener {
     }
 
     public void sendDiscordStaffLog(String message) {
-        // --- SYNTAX FIX ---
         getLogger().info("[Discord Staff Log] " + ChatColor.stripColor(message.replace("`", "").replace("*", "")));
-        // --- END SYNTAX FIX ---
         if (discordStaffLogWebhook != null) {
             discordStaffLogWebhook.send("[Discord Staff] " + message).exceptionally(error -> {
                 getLogger().warning("Failed send Discord staff webhook: ".concat(error.getMessage()));
                 return null;
             });
-        }
-    }
-
-    @EventHandler
-    public void onAnimationInventoryClick(InventoryClickEvent event) {
-        Component title = event.getView().title();
-        if (title.equals(CoinflipSystem.ANIMATION_TITLE)) {
-            event.setCancelled(true);
         }
     }
 }

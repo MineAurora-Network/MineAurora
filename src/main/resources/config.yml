@@ -9,7 +9,11 @@ coinflip-admin-log-channel-id: 1435165917779591218
 lagclear-log-channel-id: 1434707657633169611
 lifesteal-normal-channel-id: 1434006801011048621
 lifesteal-admin-channel-id: 1434006967357145168
-combat-log-channel-id: 0 # <-- PLEASE SET THIS ID
+combat-log-channel-id: 1435687676161429546
+daily-reward-channel-id: 1435894088779169822
+playtime-reward-channel-id: 1435894166369468426
+token-shop-channel-id: 1435894542334169138
+token-admin-channel-id: 1435894607027109918
 
 verification-channel-id: 1430953529463279696
 verified-role-id: 1430766504575635508
@@ -23,6 +27,7 @@ ranks:
 code-expiry-seconds: 60
 
 server_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>: "
+server_prefix_2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
 server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
 cleaner_prefix: "<b><gradient:#F04747:#FF00F6>ᴄʟᴇᴀɴᴇʀ</gradient></b><white>:"
 cleaner_prefix_2: "&x&F&0&4&7&4&7&lᴄ&x&F&3&3&B&6&4&lʟ&x&F&5&2&F&8&1&lᴇ&x&F&8&2&4&9&F&lᴀ&x&F&A&1&8&B&C&lɴ&x&F&D&0&C&D&9&lᴇ&x&F&F&0&0&F&6&lʀ&f:"
@@ -44,10 +49,11 @@ login-book:
     - "<click:run_command:/server creative><hover:show_text:'Click to join Creative!'>[Creative]</click></hover>"
     -
 
-      # ============================
-      # Coinflip Configuration
-    # ============================
-coinflip-npc-id: 2 # <-- [ADDED FOR REQ 7] ID of the Citizens NPC
+coinflip-npc-id: 4
+daily-reward-npc-id: 6
+playtime-reward-npc-id: -1 # <-- PLEASE SET THIS ID FOR THE PLAYTIME REWARD NPC
+token-shop-npc-id: 13
+# --- END ---
 coinflip:
   broadcast-worlds: # <-- [ADDED FOR REQ 4] Worlds for /cf msgtoggle
     - "lifesteal"
@@ -95,7 +101,7 @@ scoreboard:
       - '&6&l╏ &fRank: &r%vault_prefix%'
       - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
       - '&6&l╏ &fPing: &a%player_ping%'
-      - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
+      - '&6&l_lifesteal╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
       - '      &eplay.aplhamc.fun  '
       - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
@@ -124,7 +130,7 @@ scoreboard:
       - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
       - '      &eplay.aplhamc.fun  '
-      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+      - '&e&m┅┅┅*┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
 
 leaderboards:
   # The %nl% placeholder will be replaced with a newline.

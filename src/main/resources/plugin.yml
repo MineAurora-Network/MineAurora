@@ -140,6 +140,29 @@ commands:
     permission: mineaurora.island.kill
   # --- END ISLAND COMMANDS ---
 
+  # --- ADDED DAILY REWARD COMMAND ---
+  dailyreward:
+    description: Claim your daily reward.
+    usage: /dailyreward
+    aliases: [dr]
+  # --- END DAILY REWARD COMMAND ---
+
+  # --- ADDED PLAYTIME REWARD COMMAND ---
+  playtimerewards:
+    description: Claim your playtime rewards.
+    usage: /playtimerewards
+    aliases: [ptrewards]
+  # --- END PLAYTIME REWARD COMMAND ---
+
+  # --- ADDED TOKEN COMMANDS ---
+  tokenshop:
+    description: Opens the token shop.
+    usage: /tokenshop
+  token:
+    description: Manage your tokens or admin tokens.
+    usage: /token <balance|add|remove|set>
+  # --- END TOKEN COMMANDS ---
+
 permissions:
   logincore.admin:
     description: Allows use of /unregister
@@ -236,3 +259,37 @@ permissions:
     description: Allows use of the /ckill command.
     default: op
   # --- END ISLAND PERMISSIONS ---
+
+  # --- DAILY REWARD PERMISSIONS ---
+  mineaurora.dailyreward.rank:
+    description: Allows player to open the ranked daily reward GUI.
+    default: op
+  mineaurora.dailyreward.elite:
+    description: Permission for the Elite daily reward.
+    default: op
+  mineaurora.dailyreward.ace:
+    description: Permission for the Ace daily reward.
+    default: op
+  mineaurora.dailyreward.overlord:
+    description: Permission for the Overlord daily reward.
+    default: op
+  mineaurora.dailyreward.immortal:
+    description: Permission for the Immortal daily reward.
+    default: op
+  mineaurora.dailyreward.supreme:
+    description: Permission for the Supreme daily reward.
+    default: op
+  mineaurora.dailyreward.phantom:
+    description: Permission for the Phantom daily reward.
+    default: op
+  # --- END DAILY REWARD PERMISSIONS ---
+
+  # --- PLAYTIME REWARD PERMISSIONS ---
+  # (No permissions needed, command is default: true for all players)
+  # --- END PLAYTIME REWARD PERMISSIONS ---
+
+  # --- TOKEN SYSTEM PERMISSIONS ---
+  token.admin:
+    description: Allows use of /token <add|remove|set>
+    default: op
+  # --- END TOKEN SYSTEM PERMISSIONS ---
