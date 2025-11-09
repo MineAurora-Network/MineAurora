@@ -34,8 +34,12 @@ public class DailyRewardGUI implements Listener {
     private final NamespacedKey rankKey;
     private static final DecimalFormat coinFormat = new DecimalFormat("#,###");
 
-    // Slot mapping for the 6 ranks in the 3rd row
-    private static final int[] RANK_SLOTS = { 19, 20, 21, 22, 23, 24 };
+    // --- FIX: Updated slot mapping for the new 6-row layout ---
+    private static final int[] RANK_SLOTS = { 10, 13, 16, 28, 31, 34 };
+    private static final int GUI_ROWS = 6;
+    private static final int GUI_SIZE = GUI_ROWS * 9; // 54 slots
+    private static final int CLOSE_SLOT = 49; // Middle of 6th row
+    // --- END FIX ---
 
     public DailyRewardGUI(Login plugin, DailyRewardManager manager) {
         this.plugin = plugin;
@@ -47,42 +51,45 @@ public class DailyRewardGUI implements Listener {
     public void openGUI(Player player) {
         long startOfDay = manager.getStartOfCurrentDay();
 
-        manager.getDatabase().getClaimedRankToday(player.getUniqueId(), startOfDay).thenAccept(claimedRankKey -> {
+        // --- MODIFIED: Get a list of *all* claimed ranks ---
+        manager.getDatabase().getClaimedRanksToday(player.getUniqueId(), startOfDay).thenAccept(claimedRanks -> {
 
             Map<String, DailyRewardManager.Reward> rewards = manager.getRankRewards();
-            ItemStack[] guiItems = new ItemStack[54];
-
-            // Get player's best rank
-            DailyRewardManager.Reward bestReward = manager.getBestRankReward(player);
-            String bestRankKey = null;
-            if (bestReward != null) {
-                for (Map.Entry<String, DailyRewardManager.Reward> entry : rewards.entrySet()) {
-                    if (entry.getValue() == bestReward) {
-                        bestRankKey = entry.getKey();
-                        break;
-                    }
-                }
-            }
+            // --- FIX: Use new GUI_SIZE ---
+            ItemStack[] guiItems = new ItemStack[GUI_SIZE]; // 54 slots
 
             // Create rank items
             int slotIndex = 0;
+            // This loop now iterates from elite -> phantom, which is correct
             for (Map.Entry<String, DailyRewardManager.Reward> entry : rewards.entrySet()) {
                 if (slotIndex >= RANK_SLOTS.length) break;
 
                 String rankKey = entry.getKey();
                 DailyRewardManager.Reward reward = entry.getValue();
-                boolean isClaimed = rankKey.equals(claimedRankKey);
-                boolean isBest = rankKey.equals(bestRankKey);
-                boolean canClaim = isBest && claimedRankKey == null;
 
-                // --- FIX: Accessing public record fields ---
-                guiItems[RANK_SLOTS[slotIndex]] = createRankItem(rankKey, reward, isClaimed, canClaim, player.hasPermission(reward.permission()));
+                // --- MODIFIED: Check if this rank is in the list ---
+                boolean isClaimed = claimedRanks.contains(rankKey);
+                boolean hasPerm = player.hasPermission(reward.permission());
+                // --- END MODIFICATION ---
+
+                guiItems[RANK_SLOTS[slotIndex]] = createRankItem(rankKey, reward, isClaimed, hasPerm); // Pass new args
                 slotIndex++;
             }
 
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 Component title = mm.deserialize("<dark_gray>Daily Rewards</dark_gray>");
-                Inventory gui = Bukkit.createInventory(null, 54, title);
+                // --- FIX: Use new GUI_SIZE ---
+                Inventory gui = Bukkit.createInventory(null, GUI_SIZE, title); // 6 rows
+
+                // Add close button
+                ItemStack close = new ItemStack(Material.BARRIER);
+                ItemMeta closeMeta = close.getItemMeta();
+                if (closeMeta != null) { // Added null check
+                    closeMeta.displayName(mm.deserialize("<red><bold>Close</bold></red>").decoration(TextDecoration.ITALIC, false));
+                    close.setItemMeta(closeMeta);
+                }
+                // --- FIX: Use new CLOSE_SLOT ---
+                guiItems[CLOSE_SLOT] = close; // Slot 49
 
                 ItemStack filler = createFillerItem();
                 for (int i = 0; i < gui.getSize(); i++) {
@@ -99,31 +106,34 @@ public class DailyRewardGUI implements Listener {
         });
     }
 
-    private ItemStack createRankItem(String rankKey, DailyRewardManager.Reward reward, boolean isClaimed, boolean canClaim, boolean hasPerm) {
-        Material mat = isClaimed ? Material.MINECART : Material.CHEST_MINECART;
+    // --- MODIFIED: Signature and logic ---
+    private ItemStack createRankItem(String rankKey, DailyRewardManager.Reward reward, boolean isClaimed, boolean hasPerm) {
+        Material mat = (isClaimed || !hasPerm) ? Material.MINECART : Material.CHEST_MINECART;
         ItemStack item = new ItemStack(mat);
         ItemMeta meta = item.getItemMeta();
 
-        // --- FIX: Accessing public record fields ---
+        if (meta == null) { // Added failsafe null check
+            return item;
+        }
+
         Component rankName = mm.deserialize(reward.prettyName());
         meta.displayName(rankName.decoration(TextDecoration.ITALIC, false));
 
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty());
-        lore.add(mm.deserialize("<gray>Coins: <white>" + coinFormat.format(reward.coins()) + "</white>"));
-        lore.add(mm.deserialize("<gray>Tokens: <white>" + reward.tokens() + "</white>"));
+        // --- FIX: Added colors and removed italics for lore ---
+        lore.add(mm.deserialize("<gold>Coins: <yellow>" + coinFormat.format(reward.coins()) + "</yellow></gold>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<light_purple>Tokens: <aqua>" + reward.tokens() + "</aqua></light_purple>").decoration(TextDecoration.ITALIC, false));
         lore.add(Component.empty());
 
         if (isClaimed) {
-            lore.add(mm.deserialize("<red>Already claimed!</red>"));
-        } else if (canClaim) {
-            lore.add(mm.deserialize("<yellow>Click to claim!</yellow>"));
-        } else if (hasPerm) {
-            // Has perm, but it's not their best (or they claimed a different one? shouldn't happen)
-            lore.add(mm.deserialize("<gray>You have this rank, but can claim a better one!</gray>"));
-        } else {
-            lore.add(mm.deserialize("<red>You do not have this rank.</red>"));
-            lore.add(mm.deserialize("<red>Visit store.mineaurora.fun to buy!</red>")); // Example store link
+            lore.add(mm.deserialize("<red>You have already claimed</red>").decoration(TextDecoration.ITALIC, false));
+            lore.add(mm.deserialize("<red>this reward today!</red>").decoration(TextDecoration.ITALIC, false)); // Changed message
+        } else if (hasPerm) { // Has perm and not yet claimed
+            lore.add(mm.deserialize("<yellow>Click to claim!</yellow>").decoration(TextDecoration.ITALIC, false));
+        } else { // Does not have perm
+            lore.add(mm.deserialize("<red>You do not have this rank.</red>").decoration(TextDecoration.ITALIC, false));
+            lore.add(mm.deserialize("<red>Visit store.mineaurora.fun to buy!</red>").decoration(TextDecoration.ITALIC, false));
         }
 
         meta.lore(lore);
@@ -131,7 +141,6 @@ public class DailyRewardGUI implements Listener {
 
         // Add PDC tag to identify which rank this is
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        // --- FIX: Use this.rankKey as the KEY, rankKey as the VALUE ---
         pdc.set(this.rankKey, PersistentDataType.STRING, rankKey);
 
         item.setItemMeta(meta);
@@ -141,8 +150,10 @@ public class DailyRewardGUI implements Listener {
     private ItemStack createFillerItem() {
         ItemStack item = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text(" ").color(NamedTextColor.GRAY));
-        item.setItemMeta(meta);
+        if (meta != null) { // Added null check
+            meta.displayName(Component.text(" ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)); // Also remove italics
+            item.setItemMeta(meta);
+        }
         return item;
     }
 
@@ -155,17 +166,21 @@ public class DailyRewardGUI implements Listener {
         ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null || clickedItem.getType() == Material.AIR) return;
 
+        // --- FIX: Close button check updated to new slot ---
+        if (clickedItem.getType() == Material.BARRIER && event.getSlot() == CLOSE_SLOT) {
+            player.closeInventory();
+            return;
+        }
+
         ItemMeta meta = clickedItem.getItemMeta();
         if (meta == null) return;
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         String clickedRankKey = null;
 
-        // --- FIX: Use this.rankKey to check for and get the value ---
         if (pdc.has(this.rankKey, PersistentDataType.STRING)) {
             clickedRankKey = pdc.get(this.rankKey, PersistentDataType.STRING);
         }
-        // --- END FIX ---
 
         if (clickedRankKey == null) {
             // Clicked on glass or something else
@@ -173,24 +188,33 @@ public class DailyRewardGUI implements Listener {
         }
 
         // Player clicked a rank item
-        DailyRewardManager.Reward bestReward = manager.getBestRankReward(player);
-        if (bestReward == null) {
-            player.closeInventory();
-            return;
-        }
+        DailyRewardManager.Reward reward = manager.getRankRewards().get(clickedRankKey);
+        if (reward == null) return; // Should not happen
 
-        // --- FIX: Use .equals() to compare records ---
-        if (bestReward.equals(manager.getRankRewards().get(clickedRankKey))) {
-            // It's their best rank. Try to claim it.
-            // The manager will handle cooldown checks and messaging.
-            // --- FIX: Accessing public record field ---
-            manager.claimRankedReward(player, clickedRankKey, bestReward);
-        } else if (player.hasPermission(manager.getRankRewards().get(clickedRankKey).permission())) {
-            // Clicked a rank they have, but it's not their best
-            player.sendMessage(manager.getPrefix().append(mm.deserialize("<red>You can claim a higher-tier reward!</red>")));
+        // NEW LOGIC: Check if player has permission for the *clicked* rank
+        if (player.hasPermission(reward.permission())) {
+            // Player has perm, attempt to claim.
+            // --- MODIFIED: Use CompletableFuture to refresh GUI on success ---
+            manager.claimRankedReward(player, clickedRankKey, reward).thenAccept(success -> {
+                if (success) {
+                    // Refresh the GUI on the main thread
+                    plugin.getServer().getScheduler().runTask(plugin, () -> openGUI(player));
+                }
+                // If not success, manager already sent a cooldown message
+            });
+            // --- END MODIFICATION ---
         } else {
             // Clicked a rank they don't have
             player.sendMessage(manager.getPrefix().append(mm.deserialize("<red>You do not have permission for this reward.</red>")));
         }
     }
+    @EventHandler
+    public void onInventoryClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        if (player.hasMetadata(GUI_METADATA)) {
+            player.removeMetadata(GUI_METADATA, plugin);
+            Bukkit.getLogger().info("[DailyRewardFix] Removed GUI metadata for " + player.getName());
+        }
+    }
+
 }

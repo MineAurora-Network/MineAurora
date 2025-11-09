@@ -1,11 +1,13 @@
 package me.login.leaderboards;
 
 import me.login.Login;
-import org.bukkit.ChatColor;
+import net.kyori.adventure.audience.Audience; // IMPORT
+import net.kyori.adventure.text.minimessage.MiniMessage; // IMPORT
+// import org.bukkit.ChatColor; // REMOVED
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
-import org.bukkit.entity.Player;
+// import org.bukkit.entity.Player; // No longer needed
 import org.bukkit.util.StringUtil;
 
 import java.util.ArrayList;
@@ -20,6 +22,9 @@ public class KillLeaderboardCommand implements TabExecutor {
             "kills", "deaths", "playtime", "balance", "credits", "lifesteal", "all"
     );
 
+    // --- KYORI CHANGE ---
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
+
     public KillLeaderboardCommand(Login plugin, LeaderboardDisplayManager manager) {
         this.plugin = plugin;
         this.manager = manager;
@@ -27,8 +32,12 @@ public class KillLeaderboardCommand implements TabExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        // --- KYORI CHANGE ---
+        final Audience audience = (Audience) sender;
+
         if (!sender.hasPermission("leaderboards.admin")) {
-            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
+            // --- KYORI CHANGE ---
+            audience.sendMessage(miniMessage.deserialize("<red>You do not have permission to use this command.</red>"));
             return true;
         }
 
@@ -40,7 +49,8 @@ public class KillLeaderboardCommand implements TabExecutor {
         String typeToRemove = args[0].toLowerCase();
 
         if (!leaderboardTypes.contains(typeToRemove)) {
-            sender.sendMessage(ChatColor.RED + "Invalid leaderboard type specified.");
+            // --- KYORI CHANGE ---
+            audience.sendMessage(miniMessage.deserialize("<red>Invalid leaderboard type specified.</red>"));
             sendUsage(sender);
             return true;
         }
@@ -48,9 +58,11 @@ public class KillLeaderboardCommand implements TabExecutor {
         int removedCount = manager.removeLeaderboardsByType(typeToRemove);
 
         if (removedCount > 0) {
-            sender.sendMessage(ChatColor.GREEN + "Successfully removed " + removedCount + " leaderboard display(s) of type '" + typeToRemove + "'.");
+            // --- KYORI CHANGE ---
+            audience.sendMessage(miniMessage.deserialize("<green>Successfully removed " + removedCount + " leaderboard display(s) of type '" + typeToRemove + "'.</green>"));
         } else {
-            sender.sendMessage(ChatColor.YELLOW + "No leaderboard displays found matching type '" + typeToRemove + "'.");
+            // --- KYORI CHANGE ---
+            audience.sendMessage(miniMessage.deserialize("<yellow>No leaderboard displays found matching type '" + typeToRemove + "'.</yellow>"));
         }
 
         return true;
@@ -69,7 +81,9 @@ public class KillLeaderboardCommand implements TabExecutor {
     }
 
     private void sendUsage(CommandSender sender) {
-        sender.sendMessage(ChatColor.RED + "Usage: /killleaderboard <type|all>");
-        sender.sendMessage(ChatColor.RED + "Types: kills, deaths, playtime, balance, credits, lifesteal, all");
+        // --- KYORI CHANGE ---
+        final Audience audience = (Audience) sender;
+        audience.sendMessage(miniMessage.deserialize("<red>Usage: /killleaderboard <type|all></red>"));
+        audience.sendMessage(miniMessage.deserialize("<red>Types: kills, deaths, playtime, balance, credits, lifesteal, all</red>"));
     }
 }

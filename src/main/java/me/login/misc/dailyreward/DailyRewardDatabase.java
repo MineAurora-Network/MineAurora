@@ -4,6 +4,8 @@ import me.login.Login;
 
 import java.io.File;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -57,12 +59,16 @@ public class DailyRewardDatabase {
     }
 
     public void createTables() {
+        // --- MODIFIED TABLE SCHEMA ---
+        // This new table stores one row per player *per rank*, allowing separate cooldowns.
         String dailyRewardsTable = """
-            CREATE TABLE IF NOT EXISTS daily_rewards (
-                player_uuid VARCHAR(36) PRIMARY KEY NOT NULL,
+            CREATE TABLE IF NOT EXISTS daily_reward_claims (
+                player_uuid VARCHAR(36) NOT NULL,
+                rank_key VARCHAR(32) NOT NULL,
                 last_claim_time BIGINT NOT NULL,
-                claimed_rank_key VARCHAR(32)
+                PRIMARY KEY (player_uuid, rank_key)
             );""";
+        // --- END MODIFICATION ---
 
         String tokensTable = """
             CREATE TABLE IF NOT EXISTS player_tokens (
@@ -81,52 +87,67 @@ public class DailyRewardDatabase {
 
     // --- Daily Reward Methods ---
 
-    public CompletableFuture<Long> getLastClaimTime(UUID uuid) {
+    /**
+     * Gets the last claim time for a specific rank.
+     * @param uuid Player's UUID
+     * @param rankKey The key for the rank (e.g., "elite", "default")
+     * @return CompletableFuture with the timestamp, or 0L if never claimed.
+     */
+    public CompletableFuture<Long> getLastClaimTime(UUID uuid, String rankKey) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "SELECT last_claim_time FROM daily_rewards WHERE player_uuid = ?";
+            String sql = "SELECT last_claim_time FROM daily_reward_claims WHERE player_uuid = ? AND rank_key = ?";
             try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
                 ps.setString(1, uuid.toString());
+                ps.setString(2, rankKey);
                 ResultSet rs = ps.executeQuery();
                 if (rs.next()) {
                     return rs.getLong("last_claim_time");
                 }
             } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "Could not get last claim time for " + uuid, e);
+                plugin.getLogger().log(Level.WARNING, "Could not get last claim time for " + uuid + " and rank " + rankKey, e);
             }
             return 0L; // No previous claim
         }, runnable -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, runnable));
     }
 
-    public CompletableFuture<String> getClaimedRankToday(UUID uuid, long startOfDay) {
+    /**
+     * Gets a list of all rank keys a player has claimed since the startOfDay.
+     * @param uuid Player's UUID
+     * @param startOfDay The timestamp marking the start of the 24h period
+     * @return CompletableFuture with a List of claimed rank keys.
+     */
+    public CompletableFuture<List<String>> getClaimedRanksToday(UUID uuid, long startOfDay) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "SELECT claimed_rank_key FROM daily_rewards WHERE player_uuid = ? AND last_claim_time >= ?";
+            List<String> claimedRanks = new ArrayList<>();
+            String sql = "SELECT rank_key FROM daily_reward_claims WHERE player_uuid = ? AND last_claim_time >= ?";
             try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
                 ps.setString(1, uuid.toString());
                 ps.setLong(2, startOfDay);
                 ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    return rs.getString("claimed_rank_key");
+                while (rs.next()) {
+                    claimedRanks.add(rs.getString("rank_key"));
                 }
             } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "Could not get claimed rank for " + uuid, e);
+                plugin.getLogger().log(Level.WARNING, "Could not get claimed ranks for " + uuid, e);
             }
-            return null; // Not claimed today
+            return claimedRanks; // Return list (might be empty)
         }, runnable -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, runnable));
     }
 
     public void setLastClaimTime(UUID uuid, long time, String rankKey) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            String sql = "INSERT INTO daily_rewards (player_uuid, last_claim_time, claimed_rank_key) VALUES (?, ?, ?) " +
-                    "ON CONFLICT(player_uuid) DO UPDATE SET last_claim_time = ?, claimed_rank_key = ?";
+            // --- MODIFIED SQL ---
+            String sql = "INSERT INTO daily_reward_claims (player_uuid, rank_key, last_claim_time) VALUES (?, ?, ?) " +
+                    "ON CONFLICT(player_uuid, rank_key) DO UPDATE SET last_claim_time = ?";
             try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
                 ps.setString(1, uuid.toString());
-                ps.setLong(2, time);
-                ps.setString(3, rankKey);
+                ps.setString(2, rankKey);
+                ps.setLong(3, time);
+                // On conflict
                 ps.setLong(4, time);
-                ps.setString(5, rankKey);
                 ps.executeUpdate();
             } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "Could not set last claim time for " + uuid, e);
+                plugin.getLogger().log(Level.WARNING, "Could not set last claim time for " + uuid + " and rank " + rankKey, e);
             }
         });
     }

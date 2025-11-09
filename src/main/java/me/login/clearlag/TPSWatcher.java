@@ -2,8 +2,6 @@ package me.login.clearlag;
 
 import me.login.Login; // <-- CHANGED
 import org.bukkit.Bukkit;
-// import org.bukkit.ChatColor; // <-- REMOVED
-import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 public class TPSWatcher extends BukkitRunnable {

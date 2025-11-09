@@ -14,6 +14,8 @@ daily-reward-channel-id: 1435894088779169822
 playtime-reward-channel-id: 1435894166369468426
 token-shop-channel-id: 1435894542334169138
 token-admin-channel-id: 1435894607027109918
+creator-code-channel-id: 1436624030814965832
+rank-log-channel-id: 1436623612571553896
 
 verification-channel-id: 1430953529463279696
 verified-role-id: 1430766504575635508
@@ -39,11 +41,9 @@ login-book:
   enabled: true
   title: "<green>Welcome!"
   author: "<gold>MineAurora"
-  # Each line here will be a new line on the *first page* of the book.
-  # MiniMessage is supported.
   pages:
     - "Welcome to <server_prefix>!"
-    - "" # This creates a blank line
+    - ""
     - "<blue><u>Gamemodes:</u></blue>"
     - "<click:run_command:/server survival><hover:show_text:'Click to join Survival!'>[Survival]</click></hover>"
     - "<click:run_command:/server creative><hover:show_text:'Click to join Creative!'>[Creative]</click></hover>"
@@ -65,12 +65,12 @@ coinflip:
 # ============================
 # Logging Configuration
 # ============================
-link-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-login-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-order-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+link-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+login-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+order-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
 # coinflip-system-log-webhook: "..." # <-- [REMOVED FOR REQ 9]
-staff-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-discord-staff-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+staff-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+discord-staff-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
 # ============================
 # Order System Configuration
 # ============================
@@ -130,7 +130,7 @@ scoreboard:
       - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
       - '      &eplay.aplhamc.fun  '
-      - '&e&m┅┅┅*┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+      - '&e&m┅┅┅*┅┅┅┅┅┅┅D'
 
 leaderboards:
   # The %nl% placeholder will be replaced with a newline.

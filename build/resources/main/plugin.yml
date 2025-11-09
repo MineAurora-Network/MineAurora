@@ -2,7 +2,7 @@ name: Login
 version: '1.0.0'
 main: me.login.Login
 api-version: '1.21'
-depend: [Vault, Citizens, Skript] # Hard dependencies
+depend: [Vault, Citizens, Skript, LuckPerms] # Hard dependencies
 softdepend: [Essentials, PlaceholderAPI, Citizens ] # PAPI is already here, perfect!
 
 commands:
@@ -163,6 +163,28 @@ commands:
     usage: /token <balance|add|remove|set>
   # --- END TOKEN COMMANDS ---
 
+  # --- CREATOR CODE COMMANDS ---
+  creditcode:
+    description: Apply a creator code.
+    usage: /creditcode
+    aliases: [applycreatorcode]
+  creatorcode:
+    description: Admin command to manage creator codes.
+    usage: /creatorcode <add|remove|list>
+    permission: login.creatorcode.admin
+  removecreditcode:
+    description: Admin command to remove a creator code.
+    usage: /removecreditcode <name>
+    permission: login.creatorcode.admin
+  # --- END CREATOR CODE COMMANDS ---
+
+  # --- RANK MODULE COMMANDS ---
+  rank:
+    description: Manages player ranks.
+    usage: /rank <set|remove|info>
+    permission: login.rank.admin
+  # --- END RANK MODULE COMMANDS ---
+
 permissions:
   logincore.admin:
     description: Allows use of /unregister
@@ -293,3 +315,18 @@ permissions:
     description: Allows use of /token <add|remove|set>
     default: op
   # --- END TOKEN SYSTEM PERMISSIONS ---
+
+  # --- CREATOR CODE PERMISSIONS ---
+  login.creatorcode.use:
+    description: Allows players to use /creditcode.
+    default: true
+  login.creatorcode.admin:
+    description: Allows admins to manage creator codes.
+    default: op
+  # --- END CREATOR CODE PERMISSIONS ---
+
+  # --- RANK MODULE PERMISSIONS ---
+  login.rank.admin:
+    description: Allows admins to manage player ranks with /rank.
+    default: op
+  # --- END RANK MODULE PERMISSIONS ---

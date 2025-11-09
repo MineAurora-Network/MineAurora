@@ -9,11 +9,14 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream; // --- IMPORTED ---
+import java.nio.file.Files; // --- IMPORTED ---
 import java.util.UUID;
 import java.util.logging.Level;
 
 /**
  * Manages the lagclear.yml file and message formatting.
+ * Stores the file in the /database/ subfolder.
  */
 public class LagClearConfig {
 
@@ -21,18 +24,25 @@ public class LagClearConfig {
     private FileConfiguration config;
     private File configFile;
 
-    // --- NEW: Kyori Adventure fields ---
     private final MiniMessage miniMessage;
     private final Component serverPrefix;
     private final String legacyPrefix; // Fallback
 
     public LagClearConfig(Login plugin) {
         this.plugin = plugin;
-        this.configFile = new File(plugin.getDataFolder(), "lagclear.yml");
+
+        // --- MODIFICATION: Set file path to database folder ---
+        File databaseDir = new File(plugin.getDataFolder(), "database");
+        if (!databaseDir.exists()) {
+            databaseDir.mkdirs();
+        }
+        this.configFile = new File(databaseDir, "lagclear.yml");
+        // --- END MODIFICATION ---
+
         saveDefaultConfig();
         reloadConfig();
 
-        // --- NEW: Initialize prefixes ---
+        // Initialize prefixes
         this.miniMessage = MiniMessage.miniMessage();
         String prefixString = plugin.getConfig().getString("cleaner_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>CLEANER</gradient></b><white>:");
         String legacyPrefixString = plugin.getConfig().getString("cleaner_prefix_2", "&x&4&7&F&0&D&E&lC&x&4&2&A&C&F&1&lL&x&3&4&A&3&F&1&lE&x&2&6&9&9&F&0&lA&x&1&7&9&0&F&0&lN&x&0&9&8&6&E&F&lE&x&0&9&8&6&E&F&lR&f:");
@@ -46,7 +56,6 @@ public class LagClearConfig {
         }
         this.serverPrefix = parsedPrefix;
         this.legacyPrefix = legacyPrefixString;
-        // --- END NEW ---
     }
 
     /**
@@ -74,7 +83,13 @@ public class LagClearConfig {
 
     public void reloadConfig() {
         if (this.configFile == null) {
-            this.configFile = new File(plugin.getDataFolder(), "lagclear.yml");
+            // --- MODIFICATION: Set file path to database folder ---
+            File databaseDir = new File(plugin.getDataFolder(), "database");
+            if (!databaseDir.exists()) {
+                databaseDir.mkdirs();
+            }
+            this.configFile = new File(databaseDir, "lagclear.yml");
+            // --- END MODIFICATION ---
         }
         this.config = YamlConfiguration.loadConfiguration(this.configFile);
 
@@ -98,11 +113,32 @@ public class LagClearConfig {
 
     public void saveDefaultConfig() {
         if (this.configFile == null) {
-            this.configFile = new File(plugin.getDataFolder(), "lagclear.yml");
+            // --- MODIFICATION: Set file path to database folder ---
+            File databaseDir = new File(plugin.getDataFolder(), "database");
+            if (!databaseDir.exists()) {
+                databaseDir.mkdirs();
+            }
+            this.configFile = new File(databaseDir, "lagclear.yml");
+            // --- END MODIFICATION ---
         }
+
+        // --- MODIFICATION: Copy from JAR to database folder ---
         if (!this.configFile.exists()) {
-            plugin.saveResource("lagclear.yml", false);
+            plugin.getLogger().info("lagclear.yml not found in database folder, attempting to copy default...");
+            try (InputStream in = plugin.getResource("lagclear.yml")) {
+                if (in != null) {
+                    Files.copy(in, this.configFile.toPath());
+                    plugin.getLogger().info("Default lagclear.yml copied to database/lagclear.yml");
+                } else {
+                    plugin.getLogger().warning("Default lagclear.yml not found in JAR. A new empty file will be created at database/lagclear.yml upon save.");
+                }
+            } catch (java.nio.file.FileAlreadyExistsException e) {
+                // This is fine, means it was created between the check and copy
+            } catch (IOException e) {
+                plugin.getLogger().log(Level.SEVERE, "Could not copy default lagclear.yml to database folder", e);
+            }
         }
+        // --- END MODIFICATION ---
     }
 
     // --- Player Toggle Methods ---

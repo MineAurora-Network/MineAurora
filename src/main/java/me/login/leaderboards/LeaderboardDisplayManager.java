@@ -2,11 +2,12 @@ package me.login.leaderboards;
 
 import me.clip.placeholderapi.PlaceholderAPI;
 import me.login.Login;
+import net.kyori.adventure.audience.Audience; // IMPORT
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
+// import org.bukkit.ChatColor; // REMOVED
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Statistic;
@@ -23,6 +24,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream; // IMPORT
+import java.nio.file.Files; // IMPORT
 import java.text.NumberFormat;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -58,9 +61,13 @@ public class LeaderboardDisplayManager {
     public void createLeaderboard(Location location, String type, Player creator) {
         location.setPitch(0);
 
+        // --- KYORI CHANGE ---
+        Audience creatorAudience = (Audience) creator;
+
         TextDisplay textDisplay = spawnNewDisplay(location, type);
         if (textDisplay == null) {
-            creator.sendMessage(ChatColor.RED + "Failed to spawn leaderboard entity.");
+            // --- KYORI CHANGE ---
+            creatorAudience.sendMessage(miniMessage.deserialize("<red>Failed to spawn leaderboard entity.</red>"));
             return;
         }
 
@@ -78,7 +85,8 @@ public class LeaderboardDisplayManager {
         // Save the data FROM the info object TO leaderboards.yml
         saveLeaderboards();
 
-        creator.sendMessage(ChatColor.GREEN + "Leaderboard created! It will update on the next cycle.");
+        // --- KYORI CHANGE ---
+        creatorAudience.sendMessage(miniMessage.deserialize("<green>Leaderboard created! It will update on the next cycle.</green>"));
         updateDisplay(textDisplay.getUniqueId()); // Run initial update
     }
 
@@ -212,15 +220,41 @@ public class LeaderboardDisplayManager {
         return activeLeaderboards.containsKey(uuid);
     }
 
-    // --- Persistence Methods (Using leaderboards.yml) ---
+    // --- Persistence Methods (Using database/leaderboards.yml) ---
     public void loadLeaderboards() {
-        leaderboardsFile = new File(plugin.getDataFolder(), "leaderboards.yml");
-        if (!leaderboardsFile.exists()) {
-            plugin.saveResource("leaderboards.yml", false);
+        // --- DATABASE PATH CHANGE ---
+        File databaseDir = new File(plugin.getDataFolder(), "database");
+        if (!databaseDir.exists()) {
+            if (!databaseDir.mkdirs()) {
+                plugin.getLogger().severe("COULD NOT CREATE DATABASE DIRECTORY. Leaderboards may not load/save.");
+            }
         }
+
+        leaderboardsFile = new File(databaseDir, "leaderboards.yml");
+        // --- END DATABASE PATH CHANGE ---
+
+        if (!leaderboardsFile.exists()) {
+            // --- DATABASE PATH CHANGE: Manually copy default resource ---
+            plugin.getLogger().info("leaderboards.yml not found in database folder, attempting to copy default...");
+            try (InputStream in = plugin.getResource("leaderboards.yml")) {
+                if (in != null) {
+                    Files.copy(in, leaderboardsFile.toPath());
+                    plugin.getLogger().info("Default leaderboards.yml copied to database/leaderboards.yml");
+                } else {
+                    plugin.getLogger().warning("Default leaderboards.yml not found in JAR. A new empty file will be created at database/leaderboards.yml upon save.");
+                }
+            } catch (java.nio.file.FileAlreadyExistsException e) {
+                // This is fine, means it was created between the check and copy.
+            } catch (IOException e) {
+                plugin.getLogger().severe("Could not save default leaderboards.yml to database folder!");
+                e.printStackTrace();
+            }
+            // --- END DATABASE PATH CHANGE ---
+        }
+
         leaderboardsConfig = YamlConfiguration.loadConfiguration(leaderboardsFile);
         if (leaderboardsConfig == null) {
-            plugin.getLogger().severe("FAILED TO LOAD leaderboards.yml! File might be corrupt.");
+            plugin.getLogger().severe("FAILED TO LOAD database/leaderboards.yml! File might be corrupt.");
             leaderboardsConfig = new YamlConfiguration();
         }
 
@@ -238,7 +272,7 @@ public class LeaderboardDisplayManager {
                     double z = displaysSection.getDouble(uuidString + ".z");
 
                     if (type == null || worldName == null) {
-                        plugin.getLogger().warning("Incomplete leaderboard data for UUID: " + uuidString + " in leaderboards.yml. Skipping.");
+                        plugin.getLogger().warning("Incomplete leaderboard data for UUID: " + uuidString + " in database/leaderboards.yml. Skipping.");
                         continue;
                     }
 
@@ -247,13 +281,13 @@ public class LeaderboardDisplayManager {
                     activeLeaderboards.put(uuid, info); // Store in map
 
                 } catch (IllegalArgumentException e) {
-                    plugin.getLogger().warning("Found invalid UUID in leaderboards.yml: " + uuidString);
+                    plugin.getLogger().warning("Found invalid UUID in database/leaderboards.yml: " + uuidString);
                 } catch (Exception e) {
                     plugin.getLogger().severe("Error loading leaderboard data for " + uuidString + ": " + e.getMessage());
                 }
             }
         }
-        plugin.getLogger().info("Loaded " + activeLeaderboards.size() + " leaderboard configurations from leaderboards.yml.");
+        plugin.getLogger().info("Loaded " + activeLeaderboards.size() + " leaderboard configurations from database/leaderboards.yml.");
     }
 
     public void saveLeaderboards() {
@@ -281,6 +315,7 @@ public class LeaderboardDisplayManager {
         }
 
         try {
+            // This will save to the 'leaderboardsFile' object, which now points to the database folder
             leaderboardsConfig.save(leaderboardsFile); // Save config object TO leaderboards.yml file
         } catch (IOException e) {
             plugin.getLogger().severe("Could not save leaderboards to file!");

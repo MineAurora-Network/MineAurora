@@ -10,14 +10,13 @@ import me.login.misc.dailyreward.DailyRewardDatabase; // IMPORT DailyRewardDatab
 import me.login.misc.dailyreward.DailyRewardModule; // IMPORT DailyRewardModule
 import me.login.misc.playtimerewards.PlaytimeRewardModule; // IMPORT PlaytimeRewardModule
 import me.login.misc.tokens.TokenModule; // IMPORT TokenModule
+import me.login.misc.creatorcode.CreatorCodeModule; // IMPORT CreatorCodeModule
+import me.login.misc.rank.RankModule; // IMPORT RankModule
 import me.login.ordersystem.*;
 import me.login.scoreboard.ScoreboardManager;
-import me.login.clearlag.CleanupTask;
-import me.login.clearlag.LagClearCommand;
-import me.login.clearlag.PlacementLimitListener;
-import me.login.clearlag.TPSWatcher;
 import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
+import me.login.clearlag.LagClearModule;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -32,12 +31,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.ChatColor;
-import me.login.leaderboards.LeaderboardCommand;
-import me.login.leaderboards.LeaderboardDisplayManager;
-import me.login.leaderboards.LeaderboardUpdateTask;
-import org.bukkit.scheduler.BukkitTask;
-import me.login.leaderboards.KillLeaderboardCommand;
-import me.login.leaderboards.LeaderboardProtectionListener;
+import me.login.leaderboards.LeaderboardModule;
 import org.bukkit.event.player.PlayerQuitEvent;
 import java.util.Map;
 import java.util.UUID;
@@ -75,8 +69,7 @@ public class Login extends JavaPlugin implements Listener {
     private int defaultOrderLimit;
     private ScoreboardManager scoreboardManager;
     private Economy vaultEconomy = null;
-    private LeaderboardDisplayManager leaderboardManager;
-    private BukkitTask leaderboardUpdateTask;
+    private LeaderboardModule leaderboardModule;
     private CoinflipModule coinflipModule;
     private ModerationDatabase moderationDatabase;
     private WebhookClient staffWebhookClient;
@@ -84,7 +77,7 @@ public class Login extends JavaPlugin implements Listener {
     private final Map<UUID, Boolean> adminCheckMap = new ConcurrentHashMap<>();
     private DiscordModConfig discordModConfig;
     private WebhookClient discordStaffLogWebhook;
-    private LagClearConfig lagClearConfig;
+    private LagClearModule lagClearModule;
     private LagClearLogger lagClearLogger;
     private LuckPerms luckPermsApi;
     private LifestealModule lifestealModule;
@@ -93,14 +86,16 @@ public class Login extends JavaPlugin implements Listener {
     private DailyRewardDatabase dailyRewardDatabase; // ADD DailyRewardDatabase INSTANCE
     private PlaytimeRewardModule playtimeRewardModule; // ADD PlaytimeRewardModule INSTANCE
     private TokenModule tokenModule; // ADD TokenModule INSTANCE
+    private CreatorCodeModule creatorCodeModule; // ADD CreatorCodeModule INSTANCE
+    private RankModule rankModule; // ADD RankModule INSTANCE
 
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         saveResource("items.yml", false);
+        getServer().getPluginManager().registerEvents(new me.login.misc.GuiCleanup.MetaDataRemover(this), this);
 
-        this.lagClearConfig = new LagClearConfig(this);
         this.discordModConfig = new DiscordModConfig(this);
         this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3);
 
@@ -168,24 +163,18 @@ public class Login extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(orderAdminMenu, this);
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
 
-        this.leaderboardManager = new LeaderboardDisplayManager(this);
-        long delay = 20L * 10;
-        long refreshTicks = 20L * getConfig().getLong("leaderboards.refresh-seconds", 60);
-        this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(this, delay, refreshTicks);
+        this.leaderboardModule = new LeaderboardModule(this);
+        if (!this.leaderboardModule.init()) {
+            getLogger().severe("Failed to initialize Leaderboard Module!");
+        }
 
-        // --- LIFESTEAL REFACTOR: Listener/Command registration moved to JDA startup (inside LifestealModule.init()) ---
+        this.lagClearModule = new LagClearModule(this);
+        if (!this.lagClearModule.init()) {
+            getLogger().severe("Failed to initialize LagClear Module!");
+        }
 
-        registerCommands(); // Coinflip & Lifesteal commands are registered later
+        registerCommands();
         getServer().getPluginManager().registerEvents(this, this);
-        getServer().getPluginManager().registerEvents(new LeaderboardProtectionListener(this.leaderboardManager), this);
-
-        getLogger().info("Initializing ClearLag components...");
-        getServer().getPluginManager().registerEvents(new PlacementLimitListener(this), this);
-        long countdownInterval = 20L;
-        new CleanupTask(this, this.lagClearConfig).runTaskTimer(this, countdownInterval, countdownInterval);
-        long tpsCheckInterval = 200L;
-        new TPSWatcher(this).runTaskTimer(this, tpsCheckInterval, tpsCheckInterval);
-        getLogger().info("ClearLag components enabled.");
 
         this.scoreboardManager = new ScoreboardManager(this);
 
@@ -249,7 +238,6 @@ public class Login extends JavaPlugin implements Listener {
                                     if (lagClearLogger != null && lagClearLogger.getJDA() != null && lagClearLogger.getJDA().getStatus() == JDA.Status.CONNECTED) {
                                         getLogger().info("LagClear Logger JDA is now connected. Initializing JDA-dependent modules...");
 
-                                        // --- LIFESTEAL REFACTOR: Initialize Logger and Module here ---
                                         getLogger().info("Initializing LifestealLogger...");
                                         lifestealLogger = new LifestealLogger(Login.this, lagClearLogger.getJDA());
 
@@ -257,7 +245,6 @@ public class Login extends JavaPlugin implements Listener {
                                         lifestealModule = new LifestealModule(Login.this, luckPermsApi, lifestealLogger);
                                         if (!lifestealModule.init()) {
                                             getLogger().severe("Failed to initialize Lifesteal Module!");
-                                            // Don't disable the whole plugin, just this module failed
                                         }
 
                                         getLogger().info("Initializing Coinflip system...");
@@ -265,7 +252,6 @@ public class Login extends JavaPlugin implements Listener {
 
                                         // --- ADDED DAILY REWARD MODULE INITIALIZATION ---
                                         getLogger().info("Initializing DailyRewardModule...");
-                                        // Pass the already-initialized database to the module
                                         dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
                                         if (!dailyRewardModule.init()) {
                                             getLogger().severe("Failed to initialize DailyReward Module!");
@@ -274,7 +260,6 @@ public class Login extends JavaPlugin implements Listener {
 
                                         // --- ADDED PLAYTIME REWARD MODULE INITIALIZATION ---
                                         getLogger().info("Initializing PlaytimeRewardModule...");
-                                        // Pass both economy and the daily reward database (for tokens)
                                         playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
                                         if (!playtimeRewardModule.init()) {
                                             getLogger().severe("Failed to initialize PlaytimeReward Module!");
@@ -283,12 +268,31 @@ public class Login extends JavaPlugin implements Listener {
 
                                         // --- ADDED TOKEN MODULE INITIALIZATION ---
                                         getLogger().info("Initializing TokenModule...");
-                                        // Pass the required dependencies
                                         tokenModule = new TokenModule(Login.this, luckPermsApi, dailyRewardDatabase);
                                         if (!tokenModule.init()) {
                                             getLogger().severe("Failed to initialize Token Module!");
                                         }
                                         // --- END TOKEN MODULE ---
+
+                                        // --- ADDED CREATOR CODE MODULE INITIALIZATION ---
+                                        getLogger().info("Initializing CreatorCodeModule...");
+                                        creatorCodeModule = new CreatorCodeModule(Login.this);
+                                        if (!creatorCodeModule.init(lagClearLogger)) {
+                                            getLogger().severe("Failed to initialize Creator Code Module!");
+                                        }
+                                        // --- END CREATOR CODE MODULE ---
+
+                                        // --- ADDED RANK MODULE INITIALIZATION ---
+                                        getLogger().info("Initializing RankModule...");
+                                        if (luckPermsApi == null) {
+                                            getLogger().severe("LuckPerms API not found! RankModule will be disabled.");
+                                        } else {
+                                            rankModule = new RankModule(Login.this);
+                                            if (!rankModule.init(lagClearLogger, luckPermsApi)) {
+                                                getLogger().severe("Failed to initialize Rank Module!");
+                                            }
+                                        }
+                                        // --- END RANK MODULE INITIALIZATION ---
 
                                         this.cancel();
                                         return;
@@ -297,13 +301,11 @@ public class Login extends JavaPlugin implements Listener {
                                     attempts++;
                                     if (attempts >= maxAttempts) {
                                         getLogger().severe("LagClear Logger JDA did not connect after 10 seconds. Coinflip & Lifesteal logging will be disabled.");
-                                        // --- ADDED DAILY REWARD FALLBACK ---
                                         getLogger().severe("DailyRewardModule will also fail to initialize logging!");
-                                        // --- ADDED PLAYTIME REWARD FALLBACK ---
                                         getLogger().severe("PlaytimeRewardModule will also fail to initialize logging!");
-                                        // --- ADDED TOKEN MODULE FALLBACK ---
                                         getLogger().severe("TokenModule will also fail to initialize logging!");
-                                        // --- END ---
+                                        getLogger().severe("CreatorCodeModule will also fail to initialize logging!");
+                                        getLogger().severe("RankModule will also fail to initialize!");
                                         this.cancel();
                                     }
                                 }
@@ -325,20 +327,6 @@ public class Login extends JavaPlugin implements Listener {
         }, 20L);
 
         getLogger().info(getName() + " v" + getDescription().getVersion() + " Enabled Successfully!");
-    }
-
-
-    public void reloadLeaderboards() {
-        reloadConfig();
-        if (leaderboardManager != null) {
-            leaderboardManager.reloadConfigAndUpdateAll();
-        }
-        if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
-            this.leaderboardUpdateTask.cancel();
-        }
-        long delay = 20L * 10;
-        long refreshTicks = 20L * getConfig().getLong("leaderboards.refresh-seconds", 60);
-        this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(this, delay, refreshTicks);
     }
 
     private boolean setupEconomy() {
@@ -383,8 +371,7 @@ public class Login extends JavaPlugin implements Listener {
     private void disableWithError(String message) { getLogger().severe(message + " Disabling plugin."); getServer().getPluginManager().disablePlugin(this); }
 
     private void registerCommands() {
-        // --- LIFESTEAL REFACTOR: Null check removed, commands are registered by the module ---
-        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || /* coinflipModule checked in its init */ leaderboardManager == null || moderationDatabase == null) {
+        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || moderationDatabase == null) {
             getLogger().severe("Cannot register commands - one or more systems failed initialization!"); return;
         }
 
@@ -398,18 +385,6 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("unregister", loginCmd); setCommandExecutor("loginhistory", loginCmd); setCommandExecutor("checkalt", loginCmd);
         setCommandExecutor("adminchangepass", loginCmd);
         setCommandExecutor("order", orderCmd);
-
-        LeaderboardCommand leaderboardCmd = new LeaderboardCommand(this, this.leaderboardManager);
-        getCommand("leaderboard").setExecutor(leaderboardCmd);
-        getCommand("leaderboard").setTabCompleter(leaderboardCmd);
-
-        KillLeaderboardCommand killLeaderboardCmd = new KillLeaderboardCommand(this, this.leaderboardManager);
-        getCommand("killleaderboard").setExecutor(killLeaderboardCmd);
-        getCommand("killleaderboard").setTabCompleter(killLeaderboardCmd);
-
-        LagClearCommand lagClearCmd = new LagClearCommand(this, this.lagClearConfig);
-        getCommand("lagclear").setExecutor(lagClearCmd);
-        getCommand("lagclear").setTabCompleter(lagClearCmd);
 
         MuteCommand muteExecutor = new MuteCommand(this, moderationDatabase);
         setCommandExecutor("mute", muteExecutor);
@@ -428,13 +403,6 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("admincheckinv", checkInvExecutor);
 
         setCommandExecutor("scoreboard", this);
-
-        // Daily Reward command is registered inside the module,
-        // but we must check for it in plugin.yml
-
-        // Playtime Reward command is registered inside the module
-
-        // Token commands are registered inside the module
     }
 
     private void setCommandExecutor(String commandName, org.bukkit.command.CommandExecutor executor) { org.bukkit.command.PluginCommand command = getCommand(commandName); if (command != null) { command.setExecutor(executor); } else { getLogger().severe("Failed register command '" + commandName + "'! In plugin.yml?"); } }
@@ -479,31 +447,37 @@ public class Login extends JavaPlugin implements Listener {
                 }
             }
 
-            if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
-                this.leaderboardUpdateTask.cancel();
+            if (leaderboardModule != null) {
+                leaderboardModule.shutdown();
+            }
+
+            if (lagClearModule != null) {
+                lagClearModule.shutdown();
             }
 
             if (lifestealModule != null) {
                 lifestealModule.shutdown();
             }
 
-            // --- ADDED DAILY REWARD SHUTDOWN ---
             if (dailyRewardModule != null) {
                 dailyRewardModule.shutdown();
             }
-            // --- END DAILY REWARD ---
 
-            // --- ADDED PLAYTIME REWARD SHUTDOWN ---
             if (playtimeRewardModule != null) {
                 playtimeRewardModule.shutdown();
             }
-            // --- END PLAYTIME REWARD ---
 
-            // --- ADDED TOKEN MODULE SHUTDOWN ---
             if (tokenModule != null) {
                 tokenModule.shutdown();
             }
-            // --- END TOKEN MODULE ---
+
+            if (creatorCodeModule != null) {
+                creatorCodeModule.shutdown();
+            }
+
+            if (rankModule != null) {
+                rankModule.shutdown();
+            }
 
             if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
             if (loginDatabase != null) loginDatabase.disconnect();
@@ -512,15 +486,6 @@ public class Login extends JavaPlugin implements Listener {
                 coinflipModule.getDatabase().disconnect();
             }
             if (moderationDatabase != null) moderationDatabase.closeConnection();
-
-            // --- ADDED DAILY REWARD DB DISCONNECT ---
-            // This is now handled by the DailyRewardModule's shutdown
-            // if (dailyRewardDatabase != null) {
-            //    dailyRewardDatabase.disconnect();
-            // }
-            // --- END ---
-
-            // --- SHUTDOWN FOR PLAYTIME DB IS IN ITS MODULE ---
 
             if (discordLinking != null && discordLinking.getJDA() != null) {
                 getLogger().info("Shutting down Discord JDA...");
@@ -587,12 +552,12 @@ public class Login extends JavaPlugin implements Listener {
         return (coinflipModule != null) ? coinflipModule.getCoinflipAdminMenu() : null;
     }
 
-    public LeaderboardDisplayManager getLeaderboardManager() {
-        return leaderboardManager;
+    public LeaderboardModule getLeaderboardModule() {
+        return leaderboardModule;
     }
 
     public LagClearConfig getLagClearConfig() {
-        return lagClearConfig;
+        return (lagClearModule != null) ? lagClearModule.getLagClearConfig() : null;
     }
 
     public LagClearLogger getLagClearLogger() {

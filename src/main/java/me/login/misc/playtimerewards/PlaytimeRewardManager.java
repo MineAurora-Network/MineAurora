@@ -47,8 +47,9 @@ public class PlaytimeRewardManager implements Listener {
         this.dailyRewardDatabase = dailyRewardDatabase;
 
         this.miniMessage = MiniMessage.miniMessage();
-        String prefixString = plugin.getConfig().getString("server_prefix", "<gray>[<aqua>Server</aqua>]</gray> ");
-        this.serverPrefix = miniMessage.deserialize(prefixString);
+        // --- FIX: Using the main server prefix from config ---
+        String prefixString = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>:");
+        this.serverPrefix = miniMessage.deserialize(prefixString + " ");
 
         this.rewardLevels = new ArrayList<>(MAX_LEVEL);
         generateRewardLevels();
@@ -116,7 +117,7 @@ public class PlaytimeRewardManager implements Listener {
                 // Every SAVE_INTERVAL_SECONDS (e.g., 5 mins), save data
                 if (ticks >= (SAVE_INTERVAL_SECONDS * 20)) {
                     ticks = 0;
-                    plugin.getLogger().info("Saving all online player playtime data...");
+                    // plugin.getLogger().info("Saving all online player playtime data..."); // A bit spammy
                     saveAllPlayerData();
                 }
             }
@@ -186,8 +187,11 @@ public class PlaytimeRewardManager implements Listener {
         // Check if playtime is sufficient
         if (data.totalPlaytimeSeconds() >= levelInfo.timeRequiredSeconds()) {
             // Unlocked a new level they haven't been notified for!
-            sendMsg(player, "<green>You have unlocked Playtime Reward Level " + levelInfo.level() + "!</green>");
-            sendMsg(player, "<gray>Type <white>/ptrewards</white> to claim it.</gray>");
+            // --- FIX: Combine messages ---
+            String message = "<green>You have unlocked Playtime Reward Level " + levelInfo.level() + "!</green><newline>" +
+                    "<gray>Type <white>/ptrewards</white> to claim it.</gray>";
+            sendMsg(player, message);
+            // --- END FIX ---
 
             // Update cache with new notified level
             PlaytimeRewardDatabase.PlayerPlaytimeData newData = new PlaytimeRewardDatabase.PlayerPlaytimeData(
@@ -274,9 +278,12 @@ public class PlaytimeRewardManager implements Listener {
         database.savePlayerPlaytimeData(uuid, newData.totalPlaytimeSeconds(), newData.lastClaimedLevel(), newData.notifiedLevel());
 
         // 4. Send messages and log
-        sendMsg(player, "<green>You claimed reward for Level " + levelInfo.level() + "!</green>");
-        sendMsg(player, "<gray>+ <white>" + levelInfo.coinReward() + " Coins</white></gray>");
-        sendMsg(player, "<gray>+ <white>" + levelInfo.tokenReward() + " Tokens</white></gray>");
+        // --- FIX: Combine messages into one and fix typo ---
+        String message = "<green>You claimed reward for Level " + levelInfo.level() + "!</green><newline>" +
+                "<gray>+ <white>" + levelInfo.coinReward() + " Coins</white></gray><newline>" +
+                "<gray>+ <white>" + levelInfo.tokenReward() + " Tokens</white></gray>";
+        sendMsg(player, message);
+        // --- END FIX ---
 
         logger.log("`" + player.getName() + "` claimed Playtime Level `" + levelInfo.level() + "` (`" +
                 levelInfo.coinReward() + "` coins, `" + levelInfo.tokenReward() + "` tokens).");

@@ -4,6 +4,10 @@ import club.minnced.discord.webhook.WebhookClient;
 import me.login.Login; // Import base plugin class
 import me.login.discordlinking.DiscordLinkDatabase; // Import renamed class from other package
 // LoginDatabase is imported implicitly as it's in the same package
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.inventory.InventoryClickEvent;
 
 // --- ADDED IMPORTS ---
 import net.kyori.adventure.text.Component;
@@ -177,39 +181,40 @@ public class LoginSystem implements Listener {
         }
     }
 
-    // --- REWRITTEN onPlayerJoin for reliability ---
-    @EventHandler(priority = EventPriority.HIGHEST) public void onPlayerJoin(PlayerJoinEvent event) {
+    // --- REWRITTEN onPlayerJoin (fixed invisibility + hub book issue) ---
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerJoin(PlayerJoinEvent event) {
         Player p = event.getPlayer();
         UUID uuid = p.getUniqueId();
 
-        // 1. Immediately mark the player as un-logged-in
+        Bukkit.getLogger().info("[LoginDebug] PlayerJoin: " + p.getName());
+
+        // 1. Mark player as un-logged-in until verified
         unloggedInPlayers.add(uuid);
 
-        // 2. Immediately teleport to the login location
+        // 2. Teleport to login world
         if (loginLocation != null) {
             p.teleport(loginLocation);
         } else {
-            // Don't apply restrictions if the world doesn't exist, just warn them
             sendPrefixedMessage(p, "§c§lWARNING: Login world not found. Please contact an admin.");
-            unloggedInPlayers.remove(uuid); // Let them play normally
+            unloggedInPlayers.remove(uuid);
             return;
         }
 
-        // 3. --- FIXED: Apply effects 1 tick after teleport ---
+        // 3. Apply login restrictions (darkness + invisibility)
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            if (p.isOnline() && unloggedInPlayers.contains(uuid)) { // Check they didn't log in/quit
-                applyLoginRestrictions(p); // This adds Darkness + Invisibility
+            if (p.isOnline() && unloggedInPlayers.contains(uuid)) {
+                applyLoginRestrictions(p);
+                Bukkit.getLogger().info("[LoginDebug] Applied restrictions for " + p.getName());
             }
-        }, 1L); // 1-tick delay
-        // --- END FIX ---
+        }, 1L);
 
-        // 4. Now, check the database asynchronously to see *what* to show them
+        // 4. Check database async to see if player is registered
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             boolean isReg = loginDb.isRegistered(uuid);
 
-            // 5. Back on the main thread, set up the UI
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!p.isOnline() || !unloggedInPlayers.contains(uuid)) return; // Check if they left/logged in
+                if (!p.isOnline() || !unloggedInPlayers.contains(uuid)) return;
 
                 needsRegistration.put(uuid, !isReg);
                 loginAttempts.put(uuid, 0);
@@ -218,18 +223,24 @@ public class LoginSystem implements Listener {
                 startBossbarTask(p);
 
                 if (isReg) {
-                    sendPrefixedMessage(p, "§fYou are not logged in, use §e/login <pass>§f, you have §e" + MAX_LOGIN_ATTEMPTS + "  §fattempts left.");
-                    // --- FIXED TITLE ---
+                    sendPrefixedMessage(p, "§fYou are not logged in, use §e/login <pass>§f, you have §e" + MAX_LOGIN_ATTEMPTS + " §fattempts left.");
                     p.sendTitle(titleLegacyPrefixString, "§fUse §e/login <pass> §fto login", 10, 100, 20);
                 } else {
                     sendPrefixedMessage(p, "§fYou are not registered use §a/register <pass> <pass>");
-                    // --- FIXED TITLE ---
                     p.sendTitle(titleLegacyPrefixString, "§fYou are not registered use §a/register <pass> <pass>", 10, 100, 20);
                 }
             });
         });
+
+        // 5. --- FIX: Ensure restrictions are removed after successful login ---
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (!isUnloggedIn(uuid)) {
+                removeLoginRestrictions(p);
+                Bukkit.getLogger().info("[LoginFix] Removed leftover invisibility/darkness for " + p.getName());
+            }
+        }, 40L); // wait ~2s to ensure login/teleport fully completes
     }
-    // --- END REWRITE ---
+
 
     @EventHandler public void onPlayerQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId(); if (unloggedInPlayers.remove(uuid)) {
@@ -465,6 +476,7 @@ public class LoginSystem implements Listener {
             if (BCrypt.checkpw(password, hash)) { long ts = System.currentTimeMillis(); loginDb.updateLoginInfo(uuid, ip, ts); loginAttempts.remove(uuid); plugin.getServer().getScheduler().runTask(plugin, () -> {
                 unloggedInPlayers.remove(uuid);
                 removeLoginRestrictions(player); // This now removes Invisibility
+                Bukkit.getLogger().info("[LoginDebug] Login success — unloggedInPlayers.contains=" + unloggedInPlayers.contains(uuid));
                 needsRegistration.remove(uuid);
                 cancelKickTimer(uuid);
                 stopBossbarTask(uuid);
@@ -472,7 +484,6 @@ public class LoginSystem implements Listener {
                 sendPrefixedMessage(player, "§a§lLogin Successful!"); // UPDATED
                 if (hubLocation != null) {
                     player.teleport(hubLocation);
-                    // player.sendTitle("§aWelcome", "§fyou are playing on play.mineaurora.fun", 10, 70, 20); // REMOVED
                     giveWelcomeBook(player); // --- ADDED BOOK ---
                 } else {
                     sendPrefixedMessage(player, "§cSuccessfully logged in, but the hub world is missing!"); // UPDATED
@@ -489,42 +500,66 @@ public class LoginSystem implements Listener {
             } } });
     }
 
-    // --- MODIFIED: giveWelcomeBook Method for single page ---
+    // --- FIXED giveWelcomeBook (auto open + remove from inventory) ---
     private void giveWelcomeBook(Player player) {
-        if (!bookEnabled) {
-            return;
-        }
+        if (!bookEnabled) return;
 
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
 
-        // --- FIXED: Use ChatColor.translateAlternateColorCodes ---
-        // We use the "plain" legacy prefix for the book
         String title = ChatColor.translateAlternateColorCodes('&', bookTitle.replace("<server_prefix>", legacyPrefixPlain));
         String author = ChatColor.translateAlternateColorCodes('&', bookAuthor.replace("<server_prefix>", legacyPrefixPlain));
-        // --- END FIX ---
 
         meta.setTitle(title);
         meta.setAuthor(author);
 
-        // --- FIXED: Use ChatColor for single page ---
-        // 1. Join all lines in the list with a newline character
         String singlePageContent = bookPages.stream()
-                .map(line -> line.replace("<server_prefix>", legacyPrefixPlain)) // Still replace placeholder
-                .collect(Collectors.joining("\n")); // Join with \n
-
-        // 2. Translate all legacy & codes
+                .map(line -> line.replace("<server_prefix>", legacyPrefixPlain))
+                .collect(Collectors.joining("\n"));
         String processedPage = ChatColor.translateAlternateColorCodes('&', singlePageContent);
-        // --- END FIX ---
-
         meta.addPage(processedPage);
         book.setItemMeta(meta);
 
-        // Give book and open it
+        // Give, open, and then remove immediately
         player.getInventory().addItem(book);
         player.openBook(book);
+
+        // Remove book next tick (prevents lingering)
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            player.getInventory().remove(Material.WRITTEN_BOOK);
+            Bukkit.getLogger().info("[LoginFix] Removed welcome book for " + player.getName());
+        }, 2L); // 2 ticks = ~0.1s delay
     }
-    // --- END MODIFIED ---
+// --- END FIX ---
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onAnyInventoryClick(org.bukkit.event.inventory.InventoryClickEvent event) {
+        Player p = (Player) event.getWhoClicked();
+        Bukkit.getLogger().info("[ClickDebug] " + p.getName() +
+                " clicked in " + event.getView().getTitle() +
+                " slot=" + event.getSlot() +
+                " cancelled=" + event.isCancelled());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    public void onInventoryClickDebug(InventoryClickEvent event) {
+        // ⚠️ This does NOT cancel anything — it only logs existing cancellations
+        try {
+            if (event.isCancelled()) {
+                Bukkit.getLogger().info("[CancelTrace] " + event.getWhoClicked().getName() + " click cancelled at:");
+                Exception e = new Exception();
+                for (StackTraceElement el : e.getStackTrace()) {
+                    if (el.getClassName().contains("login")) {
+                        Bukkit.getLogger().info("  at " + el);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            // Prevent debug exceptions from ever cancelling clicks
+            Bukkit.getLogger().warning("[CancelTrace] Debug listener error: " + t.getMessage());
+        }
+    }
+
 
     public void handleChangePassword(Player player, String oldPass, String newPass) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {

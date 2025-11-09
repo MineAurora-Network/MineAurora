@@ -34,17 +34,17 @@ public class TokenShopGUI implements Listener {
     private final NamespacedKey itemKeyPDC;
     private final NamespacedKey costKeyPDC;
 
+    // --- NEW LAYOUT ---
     // Define shop layout: Slot -> ItemKey in items.yml
-    // You can add more items here and in config.yml
     private final ShopItem[] shopLayout = {
-            new ShopItem(0, "sell-wand-1.5", 100),
-            new ShopItem(1, "sell-wand-2.0", 250),
-            new ShopItem(2, "sell-wand-2.5", 500),
-            new ShopItem(3, "feed-voucher-3d", 75),
-            new ShopItem(4, "craft-voucher-3d", 75)
-            // Add item 6 here, e.g.:
-            // new ShopItem(30, "my-new-item-key", 1000)
+            new ShopItem(10, "sell-wand-1.5", 100),
+            new ShopItem(11, "sell-wand-2.0", 250),
+            new ShopItem(12, "sell-wand-2.5", 500),
+            new ShopItem(13, "feed-voucher-3d", 75),
+            new ShopItem(14, "craft-voucher-3d", 75)
+            // Slots 15 and 16 will be glass
     };
+    // --- END NEW LAYOUT ---
 
     // Simple record to hold shop item data
     private record ShopItem(int slot, String itemKey, long cost) {}
@@ -58,12 +58,13 @@ public class TokenShopGUI implements Listener {
     }
 
     public void openGUI(Player player) {
-        Inventory gui = Bukkit.createInventory(null, 54, mm.deserialize("<dark_gray>Token Shop</dark_gray>")); // 6 rows
+        // --- FIX: Set GUI to 4 rows (36 slots) ---
+        Inventory gui = Bukkit.createInventory(null, 36, mm.deserialize("<dark_gray>Token Shop</dark_gray>")); // 4 rows
 
         // --- Fill Decoration ---
         ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta fillerMeta = filler.getItemMeta();
-        fillerMeta.displayName(Component.text(" ").color(NamedTextColor.GRAY));
+        fillerMeta.displayName(Component.text(" ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         filler.setItemMeta(fillerMeta);
         for (int i = 0; i < gui.getSize(); i++) {
             gui.setItem(i, filler);
@@ -74,7 +75,7 @@ public class TokenShopGUI implements Listener {
         ItemMeta closeMeta = close.getItemMeta();
         closeMeta.displayName(mm.deserialize("<red><bold>Close</bold></red>").decoration(TextDecoration.ITALIC, false));
         close.setItemMeta(closeMeta);
-        gui.setItem(49, close);
+        gui.setItem(31, close); // --- FIX: Slot 31 (4th row middle) ---
 
         // --- Load Shop Items ---
         manager.getTokenBalance(player.getUniqueId()).thenAccept(balance -> {
@@ -91,7 +92,7 @@ public class TokenShopGUI implements Listener {
                     mm.deserialize("<gray>You have <white>" + balance + " ☆</white> Tokens.</gray>").decoration(TextDecoration.ITALIC, false)
             ));
             balanceItem.setItemMeta(balanceMeta);
-            gui.setItem(48, balanceItem); // Next to close button
+            gui.setItem(27, balanceItem); // --- FIX: Slot 27 (4th row start) ---
 
             // Open inventory on main thread
             plugin.getServer().getScheduler().runTask(plugin, () -> {
@@ -108,7 +109,9 @@ public class TokenShopGUI implements Listener {
             item = new ItemStack(Material.BARRIER);
             ItemMeta meta = item.getItemMeta();
             meta.displayName(mm.deserialize("<red>Error: Item '" + itemKey + "' not found.</red>"));
-            meta.lore(List.of(mm.deserialize("<gray>Please contact an admin.</gray>")));
+            meta.lore(List.of(
+                    mm.deserialize("<gray>Please contact an admin.</gray>").decoration(TextDecoration.ITALIC, false)
+            ));
             item.setItemMeta(meta);
             return item;
         }
@@ -143,8 +146,8 @@ public class TokenShopGUI implements Listener {
         ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null || clickedItem.getType() == Material.AIR) return;
 
-        // Close button
-        if (clickedItem.getType() == Material.BARRIER && clickedItem.getItemMeta().getDisplayName().contains("Close")) {
+        // --- FIX: Check new close slot ---
+        if (clickedItem.getType() == Material.BARRIER && event.getSlot() == 31) {
             player.closeInventory();
             return;
         }

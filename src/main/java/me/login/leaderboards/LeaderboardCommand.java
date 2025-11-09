@@ -1,7 +1,8 @@
 package me.login.leaderboards;
 
 import me.login.Login;
-import org.bukkit.ChatColor;
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
@@ -15,31 +16,37 @@ import java.util.List;
 public class LeaderboardCommand implements TabExecutor {
 
     private final Login plugin;
+    private final LeaderboardModule module; // <-- ADDED
     private final LeaderboardDisplayManager manager;
-    // --- ADDED NEW TYPES ---
     private final List<String> spawnTypes = Arrays.asList("kills", "deaths", "playtime", "balance", "credits", "lifesteal");
     private final List<String> subCommands = Arrays.asList("reload");
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public LeaderboardCommand(Login plugin, LeaderboardDisplayManager manager) {
+    // --- CONSTRUCTOR UPDATED ---
+    public LeaderboardCommand(Login plugin, LeaderboardModule module, LeaderboardDisplayManager manager) {
         this.plugin = plugin;
+        this.module = module; // <-- ADDED
         this.manager = manager;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        final Audience audience = (Audience) sender;
+
         if (!(sender instanceof Player)) {
             if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-                plugin.reloadLeaderboards();
-                sender.sendMessage(ChatColor.GREEN + "Leaderboards configuration reloaded and all displays updated.");
+                // --- CHANGED ---
+                module.reload();
+                audience.sendMessage(miniMessage.deserialize("<green>Leaderboards configuration reloaded and all displays updated.</green>"));
                 return true;
             }
-            sender.sendMessage("This command can only be run by a player.");
+            audience.sendMessage(miniMessage.deserialize("<red>This command can only be run by a player.</red>"));
             return true;
         }
 
         Player player = (Player) sender;
         if (!player.hasPermission("leaderboards.admin")) {
-            player.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
+            audience.sendMessage(miniMessage.deserialize("<red>You do not have permission to use this command.</red>"));
             return true;
         }
 
@@ -51,8 +58,9 @@ public class LeaderboardCommand implements TabExecutor {
         String arg = args[0].toLowerCase();
 
         if (arg.equals("reload")) {
-            plugin.reloadLeaderboards();
-            player.sendMessage(ChatColor.GREEN + "Leaderboards configuration reloaded and all displays updated.");
+            // --- CHANGED ---
+            module.reload();
+            audience.sendMessage(miniMessage.deserialize("<green>Leaderboards configuration reloaded and all displays updated.</green>"));
             return true;
 
         } else if (spawnTypes.contains(arg)) {
@@ -81,8 +89,8 @@ public class LeaderboardCommand implements TabExecutor {
     }
 
     private void sendUsage(Player player) {
-        player.sendMessage(ChatColor.RED + "Usage: /leaderboard <type|reload>");
-        // --- UPDATED USAGE ---
-        player.sendMessage(ChatColor.RED + "Types: kills, deaths, playtime, balance, credits, lifesteal");
+        final Audience audience = (Audience) player;
+        audience.sendMessage(miniMessage.deserialize("<red>Usage: /leaderboard <type|reload></red>"));
+        audience.sendMessage(miniMessage.deserialize("<red>Types: kills, deaths, playtime, balance, credits, lifesteal</red>"));
     }
 }

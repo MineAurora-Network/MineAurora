@@ -11,7 +11,6 @@ import org.bukkit.block.data.type.Dispenser;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -37,19 +36,23 @@ public class PlacementLimitListener implements Listener {
     private final int REPEATER_LIMIT;
     private final int DISPENSER_LIMIT;
 
-    public PlacementLimitListener(Login plugin) {
+    // --- MODIFICATION: Constructor now accepts LagClearConfig ---
+    public PlacementLimitListener(Login plugin, LagClearConfig lagClearConfig) {
         this.plugin = plugin;
 
         // Load server prefix using MiniMessage
+        // Note: This still comes from the main config.yml, which is fine.
         String prefixString = plugin.getConfig().getString("server_prefix", "<gray>[<#1998FF>Server<gray>] ");
         this.serverPrefix = MiniMessage.miniMessage().deserialize(prefixString + " ");
 
-        // Load limits from config.yml
+        // Load limits from main config.yml
+        // We pass the main plugin config, not the lagclear.yml
         this.ARMOR_STAND_LIMIT = plugin.getConfig().getInt("clearlag-limits.armor-stand", 3);
         this.HOPPER_LIMIT = plugin.getConfig().getInt("clearlag-limits.hopper", 10);
         this.REPEATER_LIMIT = plugin.getConfig().getInt("clearlag-limits.repeater", 20);
         this.DISPENSER_LIMIT = plugin.getConfig().getInt("clearlag-limits.dispenser", 10);
     }
+    // --- END MODIFICATION ---
 
     /**
      * Counts Tile Entities (Hoppers, Repeaters, Dispensers) in a chunk.
@@ -99,7 +102,7 @@ public class PlacementLimitListener implements Listener {
         player.sendMessage(message);
     }
 
-    // --- Event Handlers ---
+    // --- Event Handlers (No changes below this line) ---
 
     /**
      * Handles placing Tile Entities (Hoppers, Repeaters, Dispensers).

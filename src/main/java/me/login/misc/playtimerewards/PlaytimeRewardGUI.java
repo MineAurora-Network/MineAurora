@@ -32,15 +32,23 @@ public class PlaytimeRewardGUI implements Listener {
     private final NamespacedKey pageKey;
 
     private static final String GUI_METADATA = "PlaytimeRewardsGUI";
-    private static final int GUI_SIZE = 54;
+    private static final int GUI_SIZE = 54; // 6 rows
     private static final int LEVELS_PER_PAGE = 21; // 3 rows of 7
+    // Slots for rewards:
+    // Row 2: 10-16
+    // Row 3: 19-25
+    // Row 4: 28-34
     private static final int[] LEVEL_SLOTS = {
             10, 11, 12, 13, 14, 15, 16, // Row 2
             19, 20, 21, 22, 23, 24, 25, // Row 3
             28, 29, 30, 31, 32, 33, 34  // Row 4
     };
 
-    // Swapped to concrete for stability
+    private static final int PREVIOUS_PAGE_SLOT = 39;
+    private static final int PLAYER_INFO_SLOT = 40;
+    private static final int NEXT_PAGE_SLOT = 41;
+
+    // Materials for the 7 reward items in a row
     private final Map<Integer, Material> RAINBOW_MATERIALS = Map.of(
             0, Material.RED_CONCRETE,
             1, Material.ORANGE_CONCRETE,
@@ -54,7 +62,7 @@ public class PlaytimeRewardGUI implements Listener {
     public PlaytimeRewardGUI(Login plugin, PlaytimeRewardManager manager) {
         this.plugin = plugin;
         this.manager = manager;
-        this.mm = manager.getMiniMessage(); // Get MiniMessage from manager
+        this.mm = manager.getMiniMessage();
         this.levelKey = new NamespacedKey(plugin, "ptreward_level");
         this.pageKey = new NamespacedKey(plugin, "ptreward_page");
 
@@ -77,22 +85,24 @@ public class PlaytimeRewardGUI implements Listener {
             return;
         }
 
-        // --- Fill Rainbow Decoration ---
-        for (int i = 0; i < 7; i++) {
-            gui.setItem(i, createDecorationItem(RAINBOW_MATERIALS.get(i), Component.empty())); // L87
-        }
-        for (int i = 47; i < 54; i++) {
-            gui.setItem(i, createDecorationItem(RAINBOW_MATERIALS.get(i - 47), Component.empty())); // L90
+        // --- Fill all slots with filler glass first ---
+        ItemStack filler = createDecorationItem(Material.GRAY_STAINED_GLASS_PANE, Component.empty());
+        for (int i = 0; i < GUI_SIZE; i++) {
+            gui.setItem(i, filler);
         }
 
         // --- Navigation & Info ---
-        if (page > 0) {
-            gui.setItem(36, createNavItem(Material.RED_CANDLE, "<red>Previous Page</red>", page));
-        }
-        gui.setItem(40, createPlayerInfoItem(player, data)); // Player head - L95
+        // Always display previous page button, but gray it out if on page 0
+        gui.setItem(PREVIOUS_PAGE_SLOT, createNavItem(Material.RED_CANDLE, "<red>Previous Page</red>", page, page > 0));
+
+        gui.setItem(PLAYER_INFO_SLOT, createPlayerInfoItem(player, data)); // Player head
         if (page < TOTAL_PAGES - 1) {
-            gui.setItem(44, createNavItem(Material.GREEN_CANDLE, "<green>Next Page</green>", page)); // L99
+            gui.setItem(NEXT_PAGE_SLOT, createNavItem(Material.GREEN_CANDLE, "<green>Next Page</green>", page, true));
+        } else {
+            // If on the last page, put a grayed-out "next page" indicator
+            gui.setItem(NEXT_PAGE_SLOT, createNavItem(Material.GRAY_CANDLE, "<gray>Next Page</gray>", page, false));
         }
+
 
         // --- Fill Level Items ---
         int levelStart = (page * LEVELS_PER_PAGE) + 1;
@@ -117,30 +127,39 @@ public class PlaytimeRewardGUI implements Listener {
         List<Component> lore = new ArrayList<>();
         boolean glow = false;
 
+        int materialIndex = (level.level() - 1) % 7;
+        Material rainbowMat = RAINBOW_MATERIALS.getOrDefault(materialIndex, Material.STONE);
+
         if (level.level() <= data.lastClaimedLevel()) {
             // --- CLAIMED ---
-            mat = Material.GRAY_DYE;
-            name = mm.deserialize("<strikethrough><gray>Level " + level.level() + "</strikethrough></gray>");
-            lore.add(mm.deserialize("<green>REWARD CLAIMED</green>"));
-
-        } else if (level.level() == data.lastClaimedLevel() + 1 && data.totalPlaytimeSeconds() >= level.timeRequiredSeconds()) {
-            // --- CLAIMABLE ---
-            mat = Material.LIME_DYE;
-            name = mm.deserialize("<green><bold>Level " + level.level() + "</bold> - Click to Claim!</green>");
-            lore.add(Component.empty());
-            lore.add(mm.deserialize("<gray>+ <white>" + level.coinReward() + " Coins</white>"));
-            lore.add(mm.deserialize("<gray>+ <white>" + level.tokenReward() + " Tokens</white>"));
-            glow = true;
+            mat = Material.GRAY_CONCRETE;
+            // FIX: Corrected claimed level name and added gap
+            name = mm.deserialize("<strikethrough><gray>Level " + level.level() + "</gray></strikethrough>").decoration(TextDecoration.ITALIC, false);
+            lore.add(Component.empty()); // Gap
+            lore.add(mm.deserialize("<green>REWARD CLAIMED</green>").decoration(TextDecoration.ITALIC, false));
 
         } else {
-            // --- LOCKED ---
-            mat = Material.RED_DYE;
-            name = mm.deserialize("<red>Level " + level.level() + " - LOCKED</red>");
-            lore.add(Component.empty());
-            lore.add(mm.deserialize("<gray>Requires: <white>" + manager.formatPlaytime(level.timeRequiredSeconds()) + "</white>"));
-            long remaining = level.timeRequiredSeconds() - data.totalPlaytimeSeconds();
-            if (remaining > 0) {
-                lore.add(mm.deserialize("<gray>Time Left: <white>" + manager.formatPlaytime(remaining) + "</white>"));
+            // --- NOT CLAIMED (LOCKED OR CLAIMABLE) ---
+            mat = rainbowMat;
+
+            if (level.level() == data.lastClaimedLevel() + 1 && data.totalPlaytimeSeconds() >= level.timeRequiredSeconds()) {
+                // --- CLAIMABLE ---
+                name = mm.deserialize("<green><bold>Level " + level.level() + "</bold> - Click to Claim!</green>").decoration(TextDecoration.ITALIC, false);
+                lore.add(Component.empty());
+                lore.add(mm.deserialize("<gray>+ <white>" + level.coinReward() + " Coins</white>").decoration(TextDecoration.ITALIC, false));
+                lore.add(mm.deserialize("<gray>+ <white>" + level.tokenReward() + " Tokens</white>").decoration(TextDecoration.ITALIC, false));
+                glow = true;
+
+            } else {
+                // --- LOCKED ---
+                // THIS IS THE FIX: Removed "DRAFT:" from the string
+                name = mm.deserialize("<red>Level " + level.level() + " - LOCKED</red>").decoration(TextDecoration.ITALIC, false);
+                lore.add(Component.empty());
+                lore.add(mm.deserialize("<gray>Requires: <white>" + manager.formatPlaytime(level.timeRequiredSeconds()) + "</white>").decoration(TextDecoration.ITALIC, false));
+                long remaining = level.timeRequiredSeconds() - data.totalPlaytimeSeconds();
+                if (remaining > 0) {
+                    lore.add(mm.deserialize("<gray>Time Left: <white>" + manager.formatPlaytime(remaining) + "</white>").decoration(TextDecoration.ITALIC, false));
+                }
             }
         }
 
@@ -150,15 +169,10 @@ public class PlaytimeRewardGUI implements Listener {
             builder.glow();
         }
 
-        // Add PDC tag
         builder.pdc(levelKey, PersistentDataType.INTEGER, level.level());
 
         return builder.build();
     }
-
-    // ---
-    // --- HELPER METHODS RE-IMPLEMENTED ---
-    // ---
 
     /**
      * Creates the player info head item.
@@ -166,45 +180,42 @@ public class PlaytimeRewardGUI implements Listener {
     private ItemStack createPlayerInfoItem(Player player, PlaytimeRewardDatabase.PlayerPlaytimeData data) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
-        if (meta == null) return head; // Failsafe
+        if (meta == null) return head;
 
-        meta.setOwningPlayer(player); // This is correct, Player is an OfflinePlayer
+        meta.setOwningPlayer(player);
         meta.displayName(mm.deserialize("<aqua><bold>Your Statistics</bold></aqua>").decoration(TextDecoration.ITALIC, false));
 
-        // This is where L195 error was
         List<Component> lore = new ArrayList<>();
         lore.add(Component.empty());
-        lore.add(mm.deserialize("<gray>INFORMATION:</gray>"));
-        lore.add(mm.deserialize("<dark_gray>┃ <white>PLAYTIME LEVELS ARE ACHIEVABLE TIERS WHERE</white>"));
-        lore.add(mm.deserialize("<dark_gray>┃ <white>YOU CAN GET REWARDS BY JUST PLAYING! (OR AFKING)</white>"));
-        lore.add(mm.deserialize("<dark_gray>┃ <white>THE MORE YOU PLAY THE MORE IN-GAME REWARDS</white>"));
-        lore.add(mm.deserialize("<dark_gray>┃ <white>YOU WILL RECEIVE!</white>"));
+        lore.add(mm.deserialize("<gray>INFORMATION:</gray>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<dark_gray>┃ <white>PLAYTIME LEVELS ARE ACHIEVABLE TIERS WHERE</white>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<dark_gray>┃ <white>YOU CAN GET REWARDS BY JUST PLAYING! (OR AFKING)</white>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<dark_gray>┃ <white>THE MORE YOU PLAY THE MORE IN-GAME REWARDS</white>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<dark_gray>┃ <white>YOU WILL RECEIVE!</white>").decoration(TextDecoration.ITALIC, false));
         lore.add(Component.empty());
-        lore.add(mm.deserialize("<gray>STATISTICS:</gray>"));
-        lore.add(mm.deserialize("<dark_gray>┃ <white>LEVEL: <aqua>" + data.lastClaimedLevel() + "</aqua></white>"));
-        lore.add(mm.deserialize("<dark_gray>┃ <white>PLAYTIME: <aqua>" + manager.formatPlaytime(data.totalPlaytimeSeconds()) + "</aqua></white>"));
+        lore.add(mm.deserialize("<gray>STATISTICS:</gray>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<dark_gray>┃ <white>LEVEL: <aqua>" + data.lastClaimedLevel() + "</aqua></white>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<dark_gray>┃ <white>PLAYTIME: <aqua>" + manager.formatPlaytime(data.totalPlaytimeSeconds()) + "</aqua></white>").decoration(TextDecoration.ITALIC, false));
 
-        List<Component> finalLore = new ArrayList<>();
-        for (Component line : lore) {
-            finalLore.add(line.decoration(TextDecoration.ITALIC, false));
-        }
-        meta.lore(finalLore);
-
+        meta.lore(lore); // Fixed: assign the modified lore directly
         head.setItemMeta(meta);
         return head;
     }
 
     /**
      * Creates a navigation item (e.g., next/prev page).
+     * @param enabled If true, it's a normal candle; if false, it's a gray candle with gray text.
      */
-    private ItemStack createNavItem(Material mat, String name, int currentPage) {
-        ItemStack item = new ItemStack(mat);
+    private ItemStack createNavItem(Material mat, String name, int currentPage, boolean enabled) {
+        ItemStack item = new ItemStack(enabled ? mat : Material.GRAY_CANDLE); // Use gray candle if not enabled
         ItemMeta meta = item.getItemMeta();
-        if (meta == null) return item; // Failsafe
+        if (meta == null) return item;
 
-        // FIX: Deserialize the String 'name'
-        meta.displayName(mm.deserialize(name).decoration(TextDecoration.ITALIC, false));
-        // FIX: This is where L223 errors were
+        Component displayName = mm.deserialize(name).decoration(TextDecoration.ITALIC, false);
+        if (!enabled) {
+            displayName = mm.deserialize("<gray>" + mm.serialize(displayName) + "</gray>").decoration(TextDecoration.ITALIC, false);
+        }
+        meta.displayName(displayName);
         meta.getPersistentDataContainer().set(pageKey, PersistentDataType.INTEGER, currentPage);
         item.setItemMeta(meta);
         return item;
@@ -214,9 +225,8 @@ public class PlaytimeRewardGUI implements Listener {
      * Creates a decorative item (like the concrete border).
      */
     private ItemStack createDecorationItem(Material material, Component name) {
-        // FIX: This is where L239 errors were. Use ItemBuilder.
         return new ItemBuilder(material)
-                .displayName(name)
+                .displayName(name.decoration(TextDecoration.ITALIC, false)) // Also remove italics
                 .build();
     }
 
@@ -238,6 +248,7 @@ public class PlaytimeRewardGUI implements Listener {
         if (meta == null) return;
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        int slot = event.getSlot();
 
         if (pdc.has(levelKey, PersistentDataType.INTEGER)) {
             // Clicked on a reward
@@ -246,17 +257,23 @@ public class PlaytimeRewardGUI implements Listener {
                 manager.claimReward(player, level);
                 // Re-open GUI to show new state
                 int currentPage = player.getMetadata(GUI_METADATA).getFirst().asInt();
-                openGUI(player, currentPage);
+                openGUI(player, currentPage); // FIX: Ensure current page is passed
             }
 
         } else if (pdc.has(pageKey, PersistentDataType.INTEGER)) {
             // Clicked on navigation
             Integer currentPage = pdc.get(pageKey, PersistentDataType.INTEGER);
             if (currentPage != null) {
-                if (clickedItem.getType() == Material.GREEN_CANDLE) {
+                if (slot == NEXT_PAGE_SLOT) {
                     openGUI(player, currentPage + 1);
-                } else if (clickedItem.getType() == Material.RED_CANDLE) {
-                    openGUI(player, currentPage - 1);
+                } else if (slot == PREVIOUS_PAGE_SLOT) {
+                    // Only navigate if not on the first page
+                    if (currentPage > 0) {
+                        openGUI(player, currentPage - 1);
+                    } else {
+                        // For showcase, do nothing if trying to go back from page 0
+                        // player.sendMessage(manager.getPrefix().append(mm.deserialize("<red>You are already on the first page!</red>"))); // Commented out for less spam
+                    }
                 }
             }
         }

@@ -28,8 +28,8 @@ public class PlaytimeRewardCommand implements CommandExecutor {
             return true;
         }
 
-        // Open the GUI to page 1
-        gui.openGUI(player, 1);
+        // --- FIX: Open the GUI to page 0 (which is Page 1) ---
+        gui.openGUI(player, 0);
         return true;
     }
 }
