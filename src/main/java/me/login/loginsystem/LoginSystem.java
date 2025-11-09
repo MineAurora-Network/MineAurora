@@ -59,6 +59,7 @@ public class LoginSystem implements Listener {
     private final String legacyTitlePrefixString;
     private final String legacyPrefixPlain;
     private final LegacyComponentSerializer legacySerializer = LegacyComponentSerializer.legacyAmpersand();
+    private final LegacyComponentSerializer legacySectionSerializer = LegacyComponentSerializer.legacySection(); // <-- ADDED
     private final MiniMessage mm = MiniMessage.miniMessage();
 
     private final boolean bookEnabled;
@@ -90,10 +91,12 @@ public class LoginSystem implements Listener {
 
         String prefixString = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>:");
         this.serverPrefixComponent = mm.deserialize(prefixString + " ");
-        this.legacyPrefixPlain = LegacyComponentSerializer.legacySection().serialize(mm.deserialize(prefixString));
+        // This MUST be '&' coded for the book replacement logic to work.
+        this.legacyPrefixPlain = legacySerializer.serialize(mm.deserialize(prefixString)); // <-- MODIFIED
 
         String titlePrefixString = plugin.getConfig().getString("server-prefix-2", "&b&lᴍɪɴᴇᴀᴜʀᴏʀᴀ&f: ");
-        this.legacyTitlePrefixString = legacySerializer.serialize(legacySerializer.deserialize(titlePrefixString));
+        // This MUST be '§' coded for bossbars and p.sendTitle(String...)
+        this.legacyTitlePrefixString = legacySectionSerializer.serialize(legacySerializer.deserialize(titlePrefixString)); // <-- MODIFIED
         this.titlePrefixComponent = legacySerializer.deserialize(titlePrefixString + " ");
 
         this.bookEnabled = plugin.getConfig().getBoolean("login-book.enabled", true);
@@ -494,16 +497,22 @@ public class LoginSystem implements Listener {
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
 
-        String title = legacySerializer.serialize(legacySerializer.deserialize(bookTitle.replace("<server_prefix>", legacyPrefixPlain)));
-        String author = legacySerializer.serialize(legacySerializer.deserialize(bookAuthor.replace("<server_prefix>", legacyPrefixPlain)));
+        // bookTitle is '&' coded. legacyPrefixPlain is now also '&' coded. This works.
+        String titleString = bookTitle.replace("<server_prefix>", legacyPrefixPlain);
+        String authorString = bookAuthor.replace("<server_prefix>", legacyPrefixPlain);
 
-        meta.title(Component.text(title));
-        meta.author(Component.text(author));
+        // Your code `meta.title(Component.text(title))` was showing raw '&'.
+        // This deserializes the '&' string into a Component, which the Paper API needs.
+        meta.title(legacySerializer.deserialize(titleString)); // <-- MODIFIED
+        meta.author(legacySerializer.deserialize(authorString)); // <-- MODIFIED
 
         String singlePageContent = bookPages.stream()
-                .map(line -> line.replace("<server_prefix>", legacyPrefixPlain))
+                .map(line -> line.replace("<server_prefix>", legacyPrefixPlain)) // Creates a single '&' coded string
                 .collect(Collectors.joining("\n"));
-        String processedPage = legacySerializer.serialize(legacySerializer.deserialize(singlePageContent));
+
+        // Your code `meta.addPage(processedPage)` uses the Spigot API which needs '§' codes.
+        // This converts the '&' string to a '§' string.
+        String processedPage = legacySectionSerializer.serialize(legacySerializer.deserialize(singlePageContent)); // <-- MODIFIED
         meta.addPage(processedPage);
         book.setItemMeta(meta);
 
