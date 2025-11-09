@@ -86,4 +86,10 @@ public class RankModule {
             database.disconnect();
         }
     }
+
+    // --- ADD THIS METHOD ---
+    public RankManager getManager() {
+        return manager;
+    }
+    // --- END ---
 }

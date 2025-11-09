@@ -1,4 +1,4 @@
-package me.login.discord.linking; // <-- CHANGED
+package me.login.discord.linking;
 
 import me.login.Login;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -10,43 +10,32 @@ import net.dv8tion.jda.api.exceptions.HierarchyException;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.requests.ErrorResponse;
 import org.bukkit.Bukkit;
-// import org.bukkit.ChatColor; // <-- REMOVED
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-// --- NEW KYORI IMPORTS ---
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-// --- END NEW IMPORTS ---
+import org.jetbrains.annotations.NotNull;
 
 import java.awt.Color;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DiscordLinkCmd implements CommandExecutor {
 
     private final Login plugin;
-    private final DiscordLinking discordLinking;
-    private final DiscordLinkDatabase database;
-
-    // --- NEW KYORI FIELD ---
+    private final DiscordLinkingModule module;
     private final Component prefix;
 
-    // --- CONSTRUCTOR UPDATED ---
     public DiscordLinkCmd(Login plugin, DiscordLinkingModule module) {
         this.plugin = plugin;
-        this.discordLinking = module.getDiscordLinking();
-        this.database = module.getDiscordLinkDatabase();
+        this.module = module;
 
-        // --- ADDED PREFIX INITIALIZATION ---
         String prefixStr = plugin.getConfig().getString("server_prefix");
         if (prefixStr == null || prefixStr.isEmpty()) {
             prefixStr = plugin.getConfig().getString("server_prefix_2", "&cError: Prefix not found. ");
@@ -57,172 +46,167 @@ public class DiscordLinkCmd implements CommandExecutor {
         } else {
             this.prefix = LegacyComponentSerializer.legacyAmpersand().deserialize(prefixStr);
         }
-        // --- END PREFIX ---
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        String cmdName = cmd.getName().toLowerCase();
-        switch (cmdName) {
-            case "discord": return handleDiscordCommand(sender, args);
-            case "unlink": return handleUnlinkCommand(sender);
-            case "adminunlink": return handleAdminUnlinkCommand(sender, args);
-            default: return false;
-        }
-    }
-
-    private boolean handleDiscordCommand(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize("&cPlayer only command."));
-            return true;
-        }
-        if (discordLinking.getJDA() == null) {
-            player.sendMessage(prefix.append(Component.text("Discord bot offline.", NamedTextColor.RED)));
-            return true;
-        }
-        if (args.length == 1 && args[0].equalsIgnoreCase("link")) {
-            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-                if (database.isLinked(player.getUniqueId())) {
-                    player.sendMessage(prefix.append(Component.text("You are already linked!", NamedTextColor.RED)));
-                } else if (discordLinking.hasActiveCode(player.getUniqueId())) {
-                    player.sendMessage(prefix.append(Component.text("Linking code already exists.", NamedTextColor.RED)));
-                } else {
-                    String code = discordLinking.generateCode(player.getUniqueId(), player.getName());
-                    long channelId = plugin.getConfig().getLong("verification-channel-id");
-                    plugin.getServer().getScheduler().runTask(plugin, () -> {
-                        player.sendMessage(prefix.append(Component.text("You linking code is ", NamedTextColor.GREEN))
-                                .append(Component.text(code, NamedTextColor.YELLOW)));
-                        player.sendMessage(prefix.append(Component.text("Enter this code in ", NamedTextColor.GRAY))
-                                .append(Component.text("#Sync ", NamedTextColor.WHITE)) // You can change #Sync to your channel name
-                                .append(Component.text("discord channel to verify your account.", NamedTextColor.GRAY)));
-                    });
-                }
-            });
-            return true;
-        }
-        sender.sendMessage(prefix.append(Component.text("Usage: /discord link", NamedTextColor.YELLOW)));
-        return true;
-    }
-
-    private boolean handleUnlinkCommand(CommandSender sender) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize("&cPlayer only command."));
-            return true;
-        }
-        UUID uuid = player.getUniqueId();
-        Long discordId = discordLinking.getLinkedDiscordId(uuid);
-        if (discordId == null) {
-            player.sendMessage(prefix.append(Component.text("You are not linked.", NamedTextColor.RED)));
-            return true;
-        }
-        performUnlink(discordId, player.getName(), sender, false);
-        return true;
-    }
-
-    private boolean handleAdminUnlinkCommand(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("discord.unlink.admin")) {
-            sender.sendMessage(prefix.append(Component.text("You don't have permission to execute this command!", NamedTextColor.RED)));
-            return true;
-        }
-        if (args.length != 1) {
-            sender.sendMessage(prefix.append(Component.text("Usage: /adminunlink <player>", NamedTextColor.RED)));
-            return true;
-        }
-        String targetName = args[0];
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetName);
-            if (targetPlayer == null || !targetPlayer.hasPlayedBefore()) {
-                sender.sendMessage(prefix.append(Component.text("Player '" + targetName + "' not found.", NamedTextColor.RED)));
-                return;
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (label.equalsIgnoreCase("discord")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&cThis command can only be used by players."));
+                return true;
             }
-            UUID uuid = targetPlayer.getUniqueId();
-            Long discordId = discordLinking.getLinkedDiscordId(uuid);
-            if (discordId == null) {
-                sender.sendMessage(prefix.append(Component.text("Player is not linked.", NamedTextColor.RED)));
-                return;
+            if (args.length > 0 && args[0].equalsIgnoreCase("link")) {
+                handleLink(player);
+            } else {
+                String link = plugin.getConfig().getString("discord-server-link", "§cLink not set in config!");
+                player.sendMessage(prefix.append(Component.text("Join our Discord: " + link, NamedTextColor.AQUA)));
             }
-            plugin.getServer().getScheduler().runTask(plugin, () -> performUnlink(discordId, targetPlayer.getName(), sender, true));
-        });
-        return true;
+            return true;
+        }
+
+        if (label.equalsIgnoreCase("unlink")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&cThis command can only be used by players."));
+                return true;
+            }
+            handleUnlink(player, player.getUniqueId(), false);
+            return true;
+        }
+
+        if (label.equalsIgnoreCase("adminunlink")) {
+            if (!sender.hasPermission("login.admin.unlink")) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&cYou do not have permission to use this command."));
+                return true;
+            }
+            if (args.length < 1) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&cUsage: /adminunlink <player>"));
+                return true;
+            }
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
+            if (!target.hasPlayedBefore() && !target.isOnline()) {
+                sender.sendMessage(LegacyComponentSerializer.legacySection().deserialize("&cPlayer not found."));
+                return true;
+            }
+            handleUnlink(sender, target.getUniqueId(), true);
+            return true;
+        }
+        return false;
     }
 
-
-    private void performUnlink(long discordId, String targetName, CommandSender sender, boolean isAdmin) {
-        if (discordLinking.getJDA() == null) {
-            sender.sendMessage(prefix.append(Component.text("Discord bot offline.", NamedTextColor.RED)));
+    private void handleLink(Player player) {
+        if (module.getDiscordLinking() == null) {
+            player.sendMessage(prefix.append(Component.text("Discord system is not enabled.", NamedTextColor.RED)));
+            return;
+        }
+        if (module.getDiscordLinking().getLinkedDiscordId(player.getUniqueId()) != null) {
+            player.sendMessage(prefix.append(Component.text("Your account is already linked.", NamedTextColor.RED)));
+            return;
+        }
+        if (module.getDiscordLinking().hasActiveCode(player.getUniqueId())) {
+            player.sendMessage(prefix.append(Component.text("You already have an active code. Please wait.", NamedTextColor.RED)));
             return;
         }
 
-        discordLinking.unlinkUser(discordId); // Handles DB (async) and cache
+        String code = module.getDiscordLinking().generateCode(player.getUniqueId(), player.getName());
+        long channelId = plugin.getConfig().getLong("verification-channel-id");
+        long expiry = plugin.getConfig().getLong("code-expiry-seconds", 60);
 
-        AtomicInteger successCount = new AtomicInteger(0);
-        AtomicBoolean dmAttempted = new AtomicBoolean(false);
+        player.sendMessage(prefix.append(Component.text("Go to the ", NamedTextColor.GREEN)
+                .append(Component.text("#verify", NamedTextColor.YELLOW))
+                .append(Component.text(" channel (" + channelId + ") on our Discord and type:", NamedTextColor.GREEN))));
+        player.sendMessage(Component.text(code, NamedTextColor.WHITE, net.kyori.adventure.text.format.TextDecoration.BOLD));
+        player.sendMessage(prefix.append(Component.text("This code expires in " + expiry + " seconds.", NamedTextColor.GRAY)));
+    }
 
-        discordLinking.getJDA().retrieveUserById(discordId).queue(user -> { // Success user retrieval
-            int guildCount = discordLinking.getJDA().getGuilds().size();
-            AtomicInteger guildsProcessed = new AtomicInteger(0);
+    private void handleUnlink(CommandSender sender, UUID targetUUID, boolean isAdmin) {
+        if (module.getDiscordLinking() == null || module.getDiscordLinkDatabase() == null) {
+            sender.sendMessage(prefix.append(Component.text("Discord system is not enabled.", NamedTextColor.RED)));
+            return;
+        }
 
-            if (guildCount == 0) { // Handle case where bot might be in 0 guilds somehow
+        Long discordId = module.getDiscordLinking().getLinkedDiscordId(targetUUID);
+        if (discordId == null) {
+            sender.sendMessage(prefix.append(Component.text((isAdmin ? "That player is" : "You are") + " not linked.", NamedTextColor.RED)));
+            return;
+        }
+
+        OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetUUID);
+        String targetName = targetPlayer.getName() != null ? targetPlayer.getName() : targetUUID.toString();
+
+        module.getDiscordLinking().unlinkUser(discordId);
+        sender.sendMessage(prefix.append(Component.text("Unlinking... searching for Discord account...", NamedTextColor.GRAY)));
+
+        module.getDiscordLinking().getJDA().retrieveUserById(discordId).queue(user -> {
+            if (user == null) {
+                sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " DB, but couldn't find Discord user to update roles.", NamedTextColor.GREEN)));
+                module.getDiscordLinking().getLogger().sendLog("➖ " + (isAdmin ? "Admin (" + sender.getName() + ")" : "") + " Unlinked **" + targetName + "** (Discord User Not Found: ID `" + discordId + "`)");
+                return;
+            }
+
+            long verifiedRoleId = plugin.getConfig().getLong("verified-role-id");
+            long unverifiedRoleId = plugin.getConfig().getLong("unverified-role-id");
+            Role verifiedRole = module.getDiscordLinking().getJDA().getRoleById(verifiedRoleId);
+            Role unverifiedRole = module.getDiscordLinking().getJDA().getRoleById(unverifiedRoleId);
+
+            AtomicInteger successCount = new AtomicInteger(0);
+            AtomicInteger processedCount = new AtomicInteger(0);
+            int guildCount = module.getDiscordLinking().getJDA().getGuilds().size();
+
+            if (guildCount == 0) {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " from database. Failed to update in discord as Bot is not in server. Report this to any senior staff.", NamedTextColor.GREEN)));
-                    discordLinking.getLogger().sendLog("➖ " + (isAdmin ? "Admin (" + sender.getName() + ")" : "") + " Unlinked **" + targetName + "** (Bot not in any guilds, Discord ID: `" + discordId + "`)");
+                    sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " DB. Bot is not in any guilds.", NamedTextColor.YELLOW)));
+                    module.getDiscordLinking().getLogger().sendLog("➖ " + (isAdmin ? "Admin (" + sender.getName() + ")" : "") + " Unlinked **" + targetName + "** (Discord: " + user.getAsTag() + " ID: `" + discordId + "`)");
                 });
                 return;
             }
 
-            discordLinking.getJDA().getGuilds().forEach(guild -> {
-                guild.retrieveMemberById(discordId).submit()
-                        .whenComplete((member, memberError) -> {
-                            if (member != null) { // Member found
-                                plugin.getLogger().info("[Unlink] Found " + user.getName() + " in " + guild.getName() + ".");
-                                try {
-                                    long unverifiedRoleId = plugin.getConfig().getLong("unverified-role-id");
-                                    long verifiedRoleId = plugin.getConfig().getLong("verified-role-id");
-                                    Role unverifiedRole = guild.getRoleById(unverifiedRoleId);
-                                    Role verifiedRole = guild.getRoleById(verifiedRoleId);
-
-                                    if (verifiedRole != null) guild.removeRoleFromMember(member, verifiedRole).queue(s -> successCount.incrementAndGet(), e -> {});
-                                    if (unverifiedRole != null) guild.addRoleToMember(member, unverifiedRole).queue(s -> successCount.incrementAndGet(), e -> {});
-
-                                    member.modifyNickname(user.getName()).timeout(10, TimeUnit.SECONDS).queue(s -> successCount.incrementAndGet(), e -> plugin.getLogger().warning("[Unlink] Failed reset nick (" + guild.getName() + "): " + e.getMessage()));
-
-                                    if (!isAdmin && dmAttempted.compareAndSet(false, true)) {
-                                        EmbedBuilder eb = new EmbedBuilder().setColor(Color.ORANGE).setTitle("Account Unlinked")
-                                                .setDescription("Unlinked from Minecraft account: **" + targetName + "**.")
-                                                .addField("Status", "Roles/nickname reset.", false).setFooter("Use /discord link in-game to re-link.");
-                                        user.openPrivateChannel().flatMap(channel -> channel.sendMessageEmbeds(eb.build()))
-                                                .queue( s -> { successCount.incrementAndGet(); plugin.getLogger().info("[Unlink] Sent DM embed to " + user.getName()); },
-                                                        e -> plugin.getLogger().warning("[Unlink] Failed send DM embed to " + user.getName() + ": " + e.getMessage()));
-                                    }
-                                } catch (Exception e) {
-                                    plugin.getLogger().warning("[Unlink] Error during actions for " + user.getName() + " in " + guild.getName() + ": " + e.getMessage());
-                                }
-                            } else { // Member retrieval failed
-                                Throwable cause = memberError.getCause();
-                                if (!(cause instanceof ErrorResponseException ere && ere.getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER)) {
-                                    plugin.getLogger().warning("[Unlink] Failed retrieve member " + discordId + " from " + guild.getName() + ": " + memberError.getMessage());
-                                } // else: Unknown member is expected, ignore logging noise
+            module.getDiscordLinking().getJDA().getGuilds().forEach(guild -> {
+                guild.retrieveMember(user).whenComplete((member, throwable) -> {
+                    if (member != null) {
+                        try {
+                            if (verifiedRole != null && member.getRoles().contains(verifiedRole)) {
+                                guild.removeRoleFromMember(member, verifiedRole).queue(s -> successCount.incrementAndGet());
                             }
-
-                            // Check if last guild processed
-                            if (guildsProcessed.incrementAndGet() >= guildCount) {
-                                plugin.getServer().getScheduler().runTaskLater(plugin, () -> { // Final message/log after delay
-                                    if (successCount.get() > 0) {
-                                        sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " successfully.", NamedTextColor.GREEN)));
-                                    } else {
-                                        sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " DB. No Discord actions (user not found?).", NamedTextColor.GREEN)));
-                                    }
-                                    // Ensure log uses user.getAsTag() if user object is valid
-                                    discordLinking.getLogger().sendLog("➖ " + (isAdmin ? "Admin (" + sender.getName() + ")" : "") + " Unlinked **" + targetName + "** (Discord: " + user.getAsTag() + " ID: `" + discordId + "`)");
-                                }, 20L); // 1 sec delay
+                            if (unverifiedRole != null && !member.getRoles().contains(unverifiedRole)) {
+                                guild.addRoleToMember(member, unverifiedRole).queue(s -> successCount.incrementAndGet());
                             }
-                        }); // End whenComplete
-            }); // End forEach guild
+                            member.modifyNickname(null).queue();
+                            plugin.getLogger().info("Successfully removed roles/nick for " + user.getAsTag() + " in " + guild.getName());
+                        } catch (HierarchyException | InsufficientPermissionException e) {
+                            plugin.getLogger().warning("Failed to update roles/nick for " + user.getAsTag() + ": " + e.getMessage());
+                        }
 
-        }, failure -> { // Failure user retrieval
+                        EmbedBuilder dmEmbed = new EmbedBuilder()
+                                .setColor(Color.ORANGE)
+                                .setTitle("Account Unlinked")
+                                .setDescription("Your Discord account has been unlinked from the Minecraft account: **" + targetName + "**.")
+                                .setFooter(guild.getName(), guild.getIconUrl());
+                        module.getDiscordLinking().sendPrivateEmbed(user, dmEmbed.build());
+
+                    } else if (throwable != null) {
+                        if (throwable instanceof ErrorResponseException && ((ErrorResponseException) throwable).getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER) {
+                        } else {
+                            plugin.getLogger().warning("Failed to retrieve member " + user.getAsTag() + " from guild " + guild.getName() + ": " + throwable.getMessage());
+                        }
+                    }
+
+                    if (processedCount.incrementAndGet() == guildCount) {
+                        plugin.getServer().getScheduler().runTask(plugin, () -> {
+                            if (successCount.get() > 0) {
+                                sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " successfully.", NamedTextColor.GREEN)));
+                            } else {
+                                sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " DB. No Discord actions (user not found?).", NamedTextColor.GREEN)));
+                            }
+                            module.getDiscordLinking().getLogger().sendLog("➖ " + (isAdmin ? "Admin (" + sender.getName() + ")" : "") + " Unlinked **" + targetName + "** (Discord: " + user.getAsTag() + " ID: `" + discordId + "`)");
+                        });
+                    }
+                });
+            });
+
+        }, failure -> {
             plugin.getLogger().warning("[Unlink] Failed retrieve User ID " + discordId + ".");
             sender.sendMessage(prefix.append(Component.text("Unlinked " + targetName + " DB, but couldn't find Discord user.", NamedTextColor.GREEN)));
-            discordLinking.getLogger().sendLog("➖ " + (isAdmin ? "Admin (" + sender.getName() + ")" : "") + " Unlinked **" + targetName + "** (Discord User Not Found: ID `" + discordId + "`)");
+            module.getDiscordLinking().getLogger().sendLog("➖ " + (isAdmin ? "Admin (" + sender.getName() + ")" : "") + " Unlinked **" + targetName + "** (Discord User Not Found: ID `" + discordId + "`)");
         });
     }
 }

@@ -1,12 +1,13 @@
-package me.login.discord.linking; // <-- CHANGED
+package me.login.discord.linking;
 
 import me.login.Login;
-import me.login.discord.moderation.DiscordCommandLogger; // <-- CHANGED
-import me.login.discord.moderation.DiscordCommandManager; // <-- CHANGED
-import me.login.discord.moderation.DiscordCommandRegistrar; // <-- CHANGED
-import me.login.discord.moderation.DiscordModConfig; // <-- CHANGED
-import me.login.discord.moderation.DiscordModCommands; // <-- CHANGED
-import me.login.discord.moderation.DiscordRankCommand; // <-- CHANGED
+import me.login.discord.moderation.DiscordCommandLogger;
+import me.login.discord.moderation.DiscordCommandManager;
+import me.login.discord.moderation.DiscordCommandRegistrar;
+import me.login.discord.moderation.DiscordModConfig;
+import me.login.discord.moderation.DiscordModCommands;
+import me.login.discord.moderation.DiscordRankCommand;
+import me.login.misc.rank.RankManager; // <-- IMPORT
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -50,16 +51,19 @@ public class DiscordLinking extends ListenerAdapter {
     private final DiscordModConfig modConfig;
     private final DiscordLinkLogger logger;
     private final Component prefix;
+    private final RankManager rankManager; // <-- ADD
 
     private final Map<String, UUID> verificationCodes = new ConcurrentHashMap<>();
     private final Map<UUID, Long> linkedAccounts = new ConcurrentHashMap<>();
     private final Map<Long, UUID> reverseLinkedAccounts = new ConcurrentHashMap<>();
     private final Map<UUID, Long> codeCooldowns = new ConcurrentHashMap<>();
 
-    public DiscordLinking(Login plugin, DiscordModConfig modConfig, DiscordLinkLogger logger) {
+    // --- UPDATED CONSTRUCTOR ---
+    public DiscordLinking(Login plugin, DiscordModConfig modConfig, DiscordLinkLogger logger, RankManager rankManager) {
         this.plugin = plugin;
         this.modConfig = modConfig;
         this.logger = logger;
+        this.rankManager = rankManager; // <-- ADD
 
         String prefixStr = plugin.getConfig().getString("server_prefix");
         if (prefixStr == null || prefixStr.isEmpty()) {
@@ -96,7 +100,7 @@ public class DiscordLinking extends ListenerAdapter {
                             this,
                             new DiscordCommandManager(plugin, commandLogger),
                             new DiscordModCommands(plugin, modConfig, commandLogger),
-                            new DiscordRankCommand(plugin)
+                            new DiscordRankCommand(plugin, rankManager) // <-- PASS RANK MANAGER
                     );
 
             jda = builder.build().awaitReady();

@@ -1,25 +1,36 @@
 package me.login.discord.store;
 
 import me.login.Login;
-import me.login.discordlinking.DiscordLinking;
+import me.login.discord.linking.DiscordLinking;
+import me.login.misc.rank.RankManager; // <-- IMPORT
 import org.bukkit.Bukkit;
 
 public class TicketModule {
 
     private final Login plugin;
     private final DiscordLinking discordLinking;
+    private final RankManager rankManager; // <-- NEW
     private TicketDatabase ticketDatabase;
     private TicketSystem ticketSystem;
 
-    public TicketModule(Login plugin, DiscordLinking discordLinking) {
+    // --- UPDATED CONSTRUCTOR ---
+    public TicketModule(Login plugin, DiscordLinking discordLinking, RankManager rankManager) {
         this.plugin = plugin;
         this.discordLinking = discordLinking;
+        this.rankManager = rankManager; // <-- NEW
     }
 
     public void init() {
         // Initialize the database
         this.ticketDatabase = new TicketDatabase(plugin);
         this.ticketDatabase.connect();
+
+        if (discordLinking == null) {
+            plugin.getLogger().severe("Store Bot: DiscordLinking is null! Purchase command will not work.");
+        }
+        if (rankManager == null) {
+            plugin.getLogger().severe("Store Bot: RankManager is null! Store /rank command will not work.");
+        }
 
         // Start the bot asynchronously
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -28,7 +39,7 @@ public class TicketModule {
                 String mainBotToken = plugin.getConfig().getString("bot-token");
 
                 if (isConfigValueInvalid(storeBotToken, "YOUR_STORE_BOT_TOKEN_HERE")) {
-                    plugin.getLogger().warning("Store Bot Token is not set. Store ticket system will be disabled.");
+                    plugin.getLogger().warning("Store Bot Token ('store-bot-token') is not set. Store ticket system will be disabled.");
                     return;
                 }
 
@@ -37,8 +48,9 @@ public class TicketModule {
                     return;
                 }
 
-                // Pass main linking system and new store DB
-                this.ticketSystem = new TicketSystem(plugin, this.discordLinking, this.ticketDatabase);
+                // Pass main linking system, new store DB, and RankManager
+                // --- UPDATED CONSTRUCTOR CALL ---
+                this.ticketSystem = new TicketSystem(plugin, this.discordLinking, this.ticketDatabase, this.rankManager);
                 this.ticketSystem.startBot(storeBotToken);
                 // The TicketSystem now logs its own readiness
 
@@ -63,7 +75,6 @@ public class TicketModule {
         return value == null || value.isEmpty() || value.equals(placeholder);
     }
 
-    // You can add getters here if other modules need to access parts of this one
     public TicketDatabase getTicketDatabase() {
         return ticketDatabase;
     }

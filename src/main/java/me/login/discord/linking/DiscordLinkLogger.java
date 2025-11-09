@@ -48,8 +48,6 @@ public class DiscordLinkLogger {
                     null,
                     error -> plugin.getLogger().warning("Failed to send DiscordLink log: " + error.getMessage())
             );
-        } else {
-            plugin.getLogger().warning("DiscordLink log channel (" + logChannelId + ") not found.");
         }
     }
 }

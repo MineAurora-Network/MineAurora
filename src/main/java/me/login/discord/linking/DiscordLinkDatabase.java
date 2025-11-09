@@ -36,12 +36,12 @@ public class DiscordLinkDatabase {
     }
 
     public Connection getConnection() {
-        try { if (connection == null || connection.isClosed()) connect(); } catch (SQLException e) { e.printStackTrace(); }
+        try { if (connection == null || connection.isClosed()) connect(); } catch (SQLException e) { plugin.getLogger().severe("Link DB Conn Error:"); e.printStackTrace(); }
         return connection;
     }
 
     public void disconnect() {
-        try { if (connection != null && !connection.isClosed()) { connection.close(); plugin.getLogger().info("Disconnected Link SQLite DB."); } } catch (SQLException e) { e.printStackTrace(); }
+        try { if (connection != null && !connection.isClosed()) connection.close(); } catch (SQLException e) { plugin.getLogger().severe("Link DB Disconn Error:"); e.printStackTrace(); }
     }
 
     public void linkUser(long discordId, UUID uuid) {

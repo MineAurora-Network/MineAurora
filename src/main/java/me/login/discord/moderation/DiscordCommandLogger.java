@@ -63,7 +63,7 @@ public class DiscordCommandLogger {
                     error -> plugin.getLogger().warning("Failed to send Discord " + logType + " log: " + error.getMessage())
             );
         } else {
-            plugin.getLogger().warning("Discord " + logType + " log channel (" + channelId + ") not found.");
+            plugin.getLogger().warning("Discord " + logType + " Channel (" + channelId + ") not found.");
         }
     }
 }

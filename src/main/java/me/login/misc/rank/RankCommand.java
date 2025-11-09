@@ -12,11 +12,13 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -26,8 +28,8 @@ public class RankCommand implements CommandExecutor, TabCompleter {
     private final LuckPerms luckPerms;
     private final Component serverPrefix;
     private final MiniMessage mm = MiniMessage.miniMessage();
+    private final UUID CONSOLE_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
-    // Ranks to hide from non-op tab completion
     private final List<String> hiddenRanks = Arrays.asList("owner", "manager");
 
     public RankCommand(RankManager manager, LuckPerms luckPerms, Component serverPrefix) {
@@ -51,7 +53,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
         String subCommand = args[0].toLowerCase();
         switch (subCommand) {
             case "set":
-                // /rank set <player> <rank> <time>
                 if (args.length < 4) {
                     sender.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /rank set <player> <rank> <time|permanent></red>")));
                     return true;
@@ -59,7 +60,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
                 handleSetRank(sender, args[1], args[2], args[3]);
                 break;
             case "remove":
-                // /rank remove <player>
                 if (args.length != 2) {
                     sender.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /rank remove <player></red>")));
                     return true;
@@ -67,7 +67,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
                 handleRemoveRank(sender, args[1]);
                 break;
             case "info":
-                // /rank info <player>
                 if (args.length != 2) {
                     sender.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /rank info <player></red>")));
                     return true;
@@ -82,7 +81,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleSetRank(CommandSender sender, String playerName, String rankName, String timeString) {
-        // Parse time
         long durationMillis;
         try {
             durationMillis = TimeUtil.parseDuration(timeString);
@@ -91,18 +89,16 @@ public class RankCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // Get LP Group
         Group group = luckPerms.getGroupManager().getGroup(rankName);
         if (group == null) {
             sender.sendMessage(serverPrefix.append(mm.deserialize("<red>The rank '<white>" + rankName + "</white>' does not exist.</red>")));
             return;
         }
 
-        // Get target User (async)
         loadUser(playerName).whenComplete((targetUser, error) -> {
             if (error != null) {
                 sender.sendMessage(serverPrefix.append(mm.deserialize("<red>An error occurred loading user data.</red>")));
-                error.printStackTrace(); // Log the error
+                error.printStackTrace();
                 return;
             }
             if (targetUser == null) {
@@ -110,12 +106,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
                 return;
             }
 
-            // Check hierarchy
-            if (!manager.canModify(sender, targetUser)) {
-                return; // canModify sends its own messages
-            }
-
-            // All checks passed, set the rank
             manager.setRank(sender, targetUser, group, durationMillis);
         });
     }
@@ -124,7 +114,7 @@ public class RankCommand implements CommandExecutor, TabCompleter {
         loadUser(playerName).whenComplete((targetUser, error) -> {
             if (error != null) {
                 sender.sendMessage(serverPrefix.append(mm.deserialize("<red>An error occurred loading user data.</red>")));
-                error.printStackTrace(); // Log the error
+                error.printStackTrace();
                 return;
             }
             if (targetUser == null) {
@@ -132,12 +122,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
                 return;
             }
 
-            // Check hierarchy
-            if (!manager.canModify(sender, targetUser)) {
-                return;
-            }
-
-            // All checks passed, remove the rank
             manager.removeRank(sender, targetUser);
         });
     }
@@ -146,7 +130,7 @@ public class RankCommand implements CommandExecutor, TabCompleter {
         loadUser(playerName).whenComplete((targetUser, error) -> {
             if (error != null) {
                 sender.sendMessage(serverPrefix.append(mm.deserialize("<red>An error occurred loading user data.</red>")));
-                error.printStackTrace(); // Log the error
+                error.printStackTrace();
                 return;
             }
             if (targetUser == null) {
@@ -154,7 +138,6 @@ public class RankCommand implements CommandExecutor, TabCompleter {
                 return;
             }
 
-            // Get info and send it (replacing %nl% with newlines)
             String infoMessage = mm.serialize(manager.getRankInfo(targetUser));
             for (String line : infoMessage.split("%nl%")) {
                 sender.sendMessage(mm.deserialize(line));
@@ -162,24 +145,15 @@ public class RankCommand implements CommandExecutor, TabCompleter {
         });
     }
 
-    /**
-     * Loads a LuckPerms user asynchronously.
-     */
     private CompletableFuture<User> loadUser(String playerName) {
-        // --- THIS IS THE FIX ---
-        // Use Bukkit's method to find the player, even if offline
         @SuppressWarnings("deprecation")
         OfflinePlayer player = Bukkit.getOfflinePlayer(playerName);
 
         if (player.hasPlayedBefore() || player.isOnline()) {
-            // Player has a local profile, load by UUID
             return luckPerms.getUserManager().loadUser(player.getUniqueId());
         } else {
-            // Player has never joined this server.
-            // As requested, we will not check LuckPerms and just return null.
             return CompletableFuture.completedFuture(null);
         }
-        // --- END OF FIX ---
     }
 
     private void sendHelp(CommandSender sender) {
@@ -201,17 +175,15 @@ public class RankCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 2 && (args[0].equalsIgnoreCase("set") || args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("info"))) {
-            return null; // Bukkit's default player completion
+            return null;
         }
 
         if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            // Get all groups, sort by weight descending
             List<String> ranks = luckPerms.getGroupManager().getLoadedGroups().stream()
                     .sorted((g1, g2) -> g2.getWeight().orElse(0) - g1.getWeight().orElse(0))
                     .map(Group::getName)
                     .collect(Collectors.toList());
 
-            // Filter hidden ranks if sender is not OP
             if (!sender.isOp()) {
                 ranks.removeAll(hiddenRanks);
             }

@@ -1,11 +1,14 @@
 package me.login.discord.store;
 
 import me.login.Login;
-import me.login.discordlinking.DiscordLinking;
+import me.login.discord.linking.DiscordLinking;
+import me.login.misc.rank.RankManager;
+import me.login.misc.rank.util.TimeUtil;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.User;
@@ -15,168 +18,245 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
+import net.dv8tion.jda.api.exceptions.HierarchyException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.utils.messages.MessageCreateData;
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.model.group.Group;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.plugin.RegisteredServiceProvider;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.awt.Color;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 
 public class TicketListeners extends ListenerAdapter {
 
     private final Login plugin;
-    private final DiscordLinking discordLinking; // To check for linked accounts
+    private final DiscordLinking discordLinking;
     private final TicketDatabase ticketDatabase;
+    private final RankManager rankManager;
+    private final LuckPerms luckPerms;
 
-    public TicketListeners(Login plugin, DiscordLinking discordLinking, TicketDatabase ticketDatabase) {
+    // Config values
+    private long ticketChannelId;
+    private long staffRoleId;
+    private long ownerRoleId;
+    private long verificationChannelId;
+
+    public TicketListeners(Login plugin, DiscordLinking discordLinking, TicketDatabase ticketDatabase, RankManager rankManager) {
         this.plugin = plugin;
         this.discordLinking = discordLinking;
         this.ticketDatabase = ticketDatabase;
+        this.rankManager = rankManager;
+
+        // Load LuckPerms
+        RegisteredServiceProvider<LuckPerms> provider = Bukkit.getServicesManager().getRegistration(LuckPerms.class);
+        if (provider != null) {
+            this.luckPerms = provider.getProvider();
+        } else {
+            this.luckPerms = null;
+            plugin.getLogger().severe("Store Bot: LuckPerms API not found! /rank command will fail.");
+        }
     }
 
     @Override
     public void onReady(ReadyEvent event) {
-        plugin.getLogger().info("Store Bot (" + event.getJDA().getSelfUser().getAsTag() + ") is ready.");
-        // Setup the ticket creation panel
-        try {
-            long channelId = plugin.getConfig().getLong("store-ticket-channel");
-            TextChannel channel = event.getJDA().getTextChannelById(channelId);
-            if (channel == null) {
-                plugin.getLogger().warning("Store ticket channel (" + channelId + ") not found!");
-                return;
+        // Load config values
+        this.ticketChannelId = plugin.getConfig().getLong("store-ticket-channel-id", 0);
+        this.staffRoleId = plugin.getConfig().getLong("store-staff-role-id", 0);
+        this.ownerRoleId = plugin.getConfig().getLong("store-owner-role-id", 0);
+        this.verificationChannelId = plugin.getConfig().getLong("payment-verification-channel-id", 0);
+
+        if (ticketChannelId == 0) {
+            plugin.getLogger().warning("Store Bot: 'store-ticket-channel-id' is not set in config.yml. Ticket creation embed will not be sent.");
+            return;
+        }
+
+        TextChannel channel = event.getJDA().getTextChannelById(ticketChannelId);
+        if (channel == null) {
+            plugin.getLogger().warning("Store Bot: Cannot find 'store-ticket-channel-id': " + ticketChannelId);
+            return;
+        }
+
+        // Clear old bot messages
+        channel.getHistory().retrievePast(50).queue(messages -> {
+            List<Message> botMessages = messages.stream().filter(m -> m.getAuthor().equals(event.getJDA().getSelfUser())).toList();
+            if (botMessages.size() > 0) {
+                try {
+                    channel.deleteMessages(botMessages).queue(null, (error) -> plugin.getLogger().warning("Store Bot: Failed to clear old messages. Might lack MANAGE_MESSAGES perm."));
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Store Bot: Error clearing messages: " + e.getMessage());
+                }
             }
 
-            // Clear old messages (optional, good for cleanup)
-            channel.getHistory().retrievePast(10).queue(messages -> {
-                messages.forEach(msg -> {
-                    if (msg.getAuthor().equals(event.getJDA().getSelfUser())) {
-                        msg.delete().queue();
-                    }
-                });
+            // Send the new ticket creation panel
+            EmbedBuilder eb = new EmbedBuilder()
+                    .setColor(new Color(0x5865F2)) // Discord Blurple
+                    .setTitle("Create a Support Ticket")
+                    .setDescription("Please select a category below to open a ticket.\n\n" +
+                            "**Purchase:** For issues or confirmation of a purchase.\n" +
+                            "**Enquiry:** For any other questions about the store.");
 
-                // Send the new panel
-                EmbedBuilder eb = new EmbedBuilder()
-                        .setTitle("MineAurora Store Support")
-                        .setDescription("Welcome to the support center.\n\nPlease select an option below to create a ticket.")
-                        .setColor(Color.CYAN);
+            StringSelectMenu menu = StringSelectMenu.create("create-ticket")
+                    .setPlaceholder("Select a ticket type...")
+                    .addOption("Purchase", "purchase", "Open a ticket for a purchase.", net.dv8tion.jda.api.entities.emoji.Emoji.fromUnicode("🛒"))
+                    .addOption("Enquiry", "enquiry", "Ask a question about the store.", net.dv8tion.jda.api.entities.emoji.Emoji.fromUnicode("❓"))
+                    .build();
 
-                StringSelectMenu menu = StringSelectMenu.create("create-ticket-menu")
-                        .setPlaceholder("Choose a ticket type")
-                        .addOption("Enquiry", "enquiry", "For general questions about the store.")
-                        .addOption("Purchase", "purchase", "For issues or questions about a purchase.")
-                        .build();
-
-                channel.sendMessageEmbeds(eb.build()).setComponents(ActionRow.of(menu)).queue();
-                plugin.getLogger().info("Ticket creation panel sent to channel " + channel.getName());
-            });
-
-        } catch (Exception e) {
-            plugin.getLogger().severe("Failed to send ticket creation panel: " + e.getMessage());
-        }
+            channel.sendMessageEmbeds(eb.build()).setActionRow(menu).queue();
+        });
     }
 
     @Override
     public void onStringSelectInteraction(StringSelectInteractionEvent event) {
-        if (!event.getComponentId().equals("create-ticket-menu")) return;
+        if (!event.getComponentId().equals("create-ticket")) return;
+        if (event.getMember() == null) return;
 
-        String type = event.getValues().get(0); // "enquiry" or "purchase"
-        Member member = event.getMember();
-        if (member == null) return;
+        String selection = event.getValues().get(0); // "purchase" or "enquiry"
+        User user = event.getUser();
+        Guild guild = event.getGuild();
 
-        long staffRoleId = plugin.getConfig().getLong("store-staff-id");
-        Role staffRole = event.getGuild().getRoleById(staffRoleId);
-        if (staffRole == null) {
-            event.reply("Error: Staff role not configured. Please contact an admin.").setEphemeral(true).queue();
+        if (guild == null) {
+            event.reply("This must be used in a server.").setEphemeral(true).queue();
             return;
         }
 
-        String categoryName = type.substring(0, 1).toUpperCase() + type.substring(1); // "Enquiry" or "Purchase"
-        String channelName = type + "-" + member.getUser().getName();
-
-        // Find or create category
-        Category category = event.getGuild().getCategoriesByName(categoryName, true).stream().findFirst().orElse(null);
-        if (category == null) {
-            category = event.getGuild().createCategory(categoryName).complete();
+        Role staffRole = guild.getRoleById(staffRoleId);
+        if (staffRole == null) {
+            event.reply("Error: Staff role not found. Please contact an admin.").setEphemeral(true).queue();
+            plugin.getLogger().severe("Store Bot: 'store-staff-role-id' is invalid!");
+            return;
         }
 
-        // Create the private channel
-        final Category finalCategory = category;
-        event.getGuild().createTextChannel(channelName, finalCategory)
-                .addMemberPermissionOverride(member.getIdLong(), EnumSet.of(Permission.VIEW_CHANNEL), null)
-                .addRolePermissionOverride(staffRole.getIdLong(), EnumSet.of(Permission.VIEW_CHANNEL), null)
-                .addRolePermissionOverride(event.getGuild().getPublicRole().getIdLong(), null, EnumSet.of(Permission.VIEW_CHANNEL))
-                .queue(channel -> {
-                    // Send welcome message in the new channel
-                    EmbedBuilder eb = new EmbedBuilder()
-                            .setTitle("Welcome, " + member.getEffectiveName())
-                            .setDescription("You have created a **" + categoryName + "** ticket.\n\nPlease describe your issue, and a staff member will be with you shortly.")
-                            .setColor(Color.GREEN);
-                    channel.sendMessage(member.getAsMention() + " " + staffRole.getAsMention()).setEmbeds(eb.build()).queue();
+        // Find or create the category
+        String categoryName = selection.substring(0, 1).toUpperCase() + selection.substring(1); // "Purchase" or "Enquiry"
+        Category category = guild.getCategoriesByName(categoryName, true).stream().findFirst().orElse(null);
 
-                    // Reply to the interaction
-                    event.reply("Your ticket has been created: " + channel.getAsMention()).setEphemeral(true).queue();
+        if (category == null) {
+            // Create category with permissions for staff
+            guild.createCategory(categoryName)
+                    .addPermissionOverride(guild.getPublicRole(), null, EnumSet.of(Permission.VIEW_CHANNEL))
+                    .addPermissionOverride(staffRole, EnumSet.of(Permission.VIEW_CHANNEL), null)
+                    .queue(cat -> {
+                        createTicketChannel(cat, staffRole, user, selection);
+                    }, failure -> {
+                        event.reply("Error: Could not create ticket category. Does the bot have 'Manage Channels' permission?").setEphemeral(true).queue();
+                        plugin.getLogger().severe("Store Bot: Failed to create category: " + failure.getMessage());
+                    });
+        } else {
+            createTicketChannel(category, staffRole, user, selection);
+        }
+
+        event.reply("Your ticket has been created!").setEphemeral(true).queue();
+    }
+
+    private void createTicketChannel(Category category, Role staffRole, User user, String type) {
+        String channelName = type + "-" + user.getName().toLowerCase().replaceAll("[^a-z0-9-]", "").substring(0, Math.min(user.getName().length(), 20));
+
+        category.createTextChannel(channelName)
+                .addPermissionOverride(category.getGuild().getPublicRole(), null, EnumSet.of(Permission.VIEW_CHANNEL))
+                .addPermissionOverride(staffRole, EnumSet.of(Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND, Permission.MESSAGE_MANAGE), null)
+                .addPermissionOverride(Objects.requireNonNull(category.getGuild().getMember(user)), EnumSet.of(Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND, Permission.MESSAGE_ATTACH_FILES), null)
+                .queue(channel -> {
+                    EmbedBuilder eb = new EmbedBuilder()
+                            .setColor(Color.GREEN)
+                            .setTitle(type.substring(0, 1).toUpperCase() + type.substring(1) + " Ticket")
+                            .setDescription("Welcome, " + user.getAsMention() + "!\n\nPlease describe your issue, and a " + staffRole.getAsMention() + " will be with you shortly.");
+
+                    MessageCreateData message = MessageCreateData.fromContent(user.getAsMention() + " " + staffRole.getAsMention());
+                    message.setEmbeds(eb.build());
+                    channel.sendMessage(message).queue();
+                }, failure -> {
+                    plugin.getLogger().severe("Store Bot: Failed to create text channel: " + failure.getMessage());
                 });
     }
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        if (!event.getName().equals("purchase")) return;
+        if (event.getName().equals("purchase")) {
+            handlePurchase(event);
+        } else if (event.getName().equals("rank")) {
+            handleRank(event);
+        }
+    }
 
-        long userId = event.getUser().getIdLong();
-        // Check if user is linked
-        if (discordLinking.getLinkedUuid(userId) == null) {
-            event.reply("You must link your Minecraft account to use this command. Use `/discord link` in-game to link.").setEphemeral(true).queue();
+    private void handlePurchase(SlashCommandInteractionEvent event) {
+        if (discordLinking == null) {
+            event.reply("Error: Linking system is not available.").setEphemeral(true).queue();
             return;
         }
 
-        // Defer reply as this might take a moment
+        User user = event.getUser();
+        UUID linkedUuid = discordLinking.getLinkedUuid(user.getIdLong());
+        if (linkedUuid == null) {
+            event.replyEmbeds(new EmbedBuilder()
+                    .setColor(Color.RED)
+                    .setTitle("Account Not Linked")
+                    .setDescription("You must link your Minecraft account to your Discord account before submitting a purchase.\n" +
+                            "Please use the `/discord link` command on the main server.")
+                    .build()).setEphemeral(true).queue();
+            return;
+        }
+
+        // Get options
+        Message.Attachment screenshot = Objects.requireNonNull(event.getOption("screenshot")).getAsAttachment();
+        String txnId = Objects.requireNonNull(event.getOption("txn-id")).getAsString();
+        String purchaseItem = Objects.requireNonNull(event.getOption("purchase-item")).getAsString();
+        String paidAmount = Objects.requireNonNull(event.getOption("paid-amount")).getAsString();
+
+        if (!screenshot.isImage()) {
+            event.reply("The `screenshot` must be an image file.").setEphemeral(true).queue();
+            return;
+        }
+
+        TextChannel verificationChannel = event.getJDA().getTextChannelById(verificationChannelId);
+        if (verificationChannel == null) {
+            event.reply("Error: Payment verification channel not found. Please contact staff.").setEphemeral(true).queue();
+            plugin.getLogger().severe("Store Bot: 'payment-verification-channel-id' is invalid!");
+            return;
+        }
+
         event.deferReply(true).queue();
 
-        try {
-            long verificationChannelId = plugin.getConfig().getLong("payment-verification-channel-id");
-            TextChannel verificationChannel = event.getJDA().getTextChannelById(verificationChannelId);
-            if (verificationChannel == null) {
-                event.getHook().sendMessage("Error: Payment verification channel is not configured correctly.").queue();
-                return;
-            }
+        // Build Embed
+        EmbedBuilder eb = new EmbedBuilder()
+                .setColor(Color.YELLOW)
+                .setTitle("New Purchase Verification")
+                .setAuthor(user.getAsTag(), null, user.getEffectiveAvatarUrl())
+                .addField("User", user.getAsMention() + " (`" + user.getId() + "`)", false)
+                .addField("Transaction ID", "`" + txnId + "`", true)
+                .addField("Amount Paid", "`" + paidAmount + "`", true)
+                .addField("Item(s) Purchased", "```" + purchaseItem + "```", false)
+                .setImage(screenshot.getProxyUrl())
+                .setTimestamp(Instant.now())
+                .setFooter("Status: PENDING");
 
-            // Get options
-            String txnId = event.getOption("txn-id", OptionMapping::getAsString);
-            String purchaseItem = event.getOption("purchase-item", OptionMapping::getAsString);
-            String paidAmount = event.getOption("paid-amount", OptionMapping::getAsString);
-            String screenshotUrl = event.getOption("screenshot", OptionMapping::getAsAttachment).getUrl();
+        // Build Buttons
+        Button confirm = Button.success("confirm-purchase", "Confirm");
+        Button deny = Button.danger("deny-purchase", "Not Received");
+        Button hold = Button.secondary("hold-purchase", "Hold");
 
-            EmbedBuilder eb = new EmbedBuilder()
-                    .setAuthor(event.getUser().getAsTag() + " (" + userId + ")", null, event.getUser().getAvatarUrl())
-                    .setTitle("New Purchase Submission")
-                    .setColor(Color.ORANGE)
-                    .addField("Item(s)", purchaseItem, false)
-                    .addField("Amount Paid", paidAmount, true)
-                    .addField("Transaction ID", txnId, true)
-                    .setImage(screenshotUrl)
-                    .setTimestamp(event.getTimeCreated());
-
-            ActionRow buttons = ActionRow.of(
-                    Button.success("confirm-purchase", "Confirm"),
-                    Button.danger("deny-purchase", "Not Received"),
-                    Button.secondary("hold-purchase", "Hold")
-            );
-
-            // Send to verification channel
-            final String finalPurchaseItem = purchaseItem;
-            verificationChannel.sendMessageEmbeds(eb.build()).setComponents(buttons).queue(message -> {
-                // Log this purchase to the database
-                ticketDatabase.logPurchase(message.getIdLong(), userId, finalPurchaseItem);
-                event.getHook().sendMessage("Your purchase has been submitted for verification.").queue();
-            });
-
-        } catch (Exception e) {
-            event.getHook().sendMessage("An error occurred while submitting your purchase.").queue();
-            e.printStackTrace();
-        }
+        verificationChannel.sendMessageEmbeds(eb.build()).setActionRow(confirm, deny, hold).queue(message -> {
+            // Save to database
+            ticketDatabase.addPurchase(message.getIdLong(), user.getIdLong(), purchaseItem);
+            event.getHook().sendMessage("Your purchase submission has been sent to the staff for review!").setEphemeral(true).queue();
+        }, failure -> {
+            event.getHook().sendMessage("Failed to send purchase verification. Please try again or contact staff.").setEphemeral(true).queue();
+        });
     }
 
     @Override
@@ -186,68 +266,70 @@ public class TicketListeners extends ListenerAdapter {
             return;
         }
 
-        event.deferReply(true).queue(); // Acknowledge the click
+        if (event.getMember() == null || event.getMember().getRoles().stream().noneMatch(r -> r.getIdLong() == staffRoleId)) {
+            event.reply("You do not have permission to use this button.").setEphemeral(true).queue();
+            return;
+        }
+
+        event.deferEdit().queue();
         long messageId = event.getMessageIdLong();
+        String staffName = event.getUser().getName();
 
-        // Get purchase data from DB
-        TicketDatabase.PurchaseData purchaseData = ticketDatabase.getPurchase(messageId);
-        if (purchaseData == null) {
-            event.getHook().sendMessage("Error: Could not find a purchase record for this message. It might be too old.").queue();
+        TicketDatabase.PurchaseData data = ticketDatabase.getPurchase(messageId);
+        if (data == null) {
+            event.getHook().sendMessage("Error: Could not find this purchase in the database.").setEphemeral(true).queue();
             return;
         }
 
-        // Check if already handled
-        if (purchaseData.status != 0) {
-            event.getHook().sendMessage("This purchase has already been handled.").queue();
+        if (data.status != 0) {
+            event.getHook().sendMessage("This purchase has already been actioned.").setEphemeral(true).queue();
             return;
         }
 
-        // Get the user who made the purchase
-        event.getJDA().retrieveUserById(purchaseData.userId).queue(user -> {
-            String staffName = event.getMember().getEffectiveName();
-            MessageEmbed originalEmbed = event.getMessage().getEmbeds().get(0);
+        MessageEmbed originalEmbed = event.getMessage().getEmbeds().get(0);
+        if (originalEmbed == null) {
+            event.getHook().sendMessage("Error: Could not read original embed.").setEphemeral(true).queue();
+            return;
+        }
 
+        event.getJDA().retrieveUserById(data.userId).queue(user -> {
             switch (componentId) {
                 case "confirm-purchase":
-                    // Send DM to user
-                    EmbedBuilder confirmEb = new EmbedBuilder()
-                            .setTitle("Payment Confirmed!")
-                            .setColor(Color.GREEN)
-                            .setDescription("We have successfully received your payment. Your **" + purchaseData.purchaseItem + "** will be delivered within 24 hours.")
-                            .setFooter("Thank you for your purchase!");
-                    sendPrivateEmbed(user, confirmEb.build());
-
                     // Update database
                     ticketDatabase.updatePurchaseStatus(messageId, 1);
 
+                    // Send DM
+                    EmbedBuilder confirmDm = new EmbedBuilder()
+                            .setColor(Color.GREEN)
+                            .setTitle("Payment Confirmed!")
+                            .setDescription("We have received your payment for **" + data.purchaseItem + "**.\n\nYour item(s) will be delivered within 24 hours. Thank you!");
+                    sendPrivateEmbed(user, confirmDm.build());
+
                     // Edit original message
                     EmbedBuilder newConfirmEmbed = new EmbedBuilder(originalEmbed)
-                            .setTitle("Purchase Confirmed")
+                            .setTitle("Purchase VERIFIED")
                             .setColor(Color.GREEN)
                             .setFooter("Confirmed by " + staffName);
-                    event.getMessage().editMessageEmbeds(newConfirmEmbed.build()).setComponents().queue(); // Remove buttons
-                    event.getHook().sendMessage("Purchase confirmed. User has been notified.").queue();
+                    event.getMessage().editMessageEmbeds(newConfirmEmbed.build()).setComponents().queue();
                     break;
 
                 case "deny-purchase":
-                    // Send DM to user
-                    EmbedBuilder denyEb = new EmbedBuilder()
-                            .setTitle("Payment Not Received")
-                            .setColor(Color.RED)
-                            .setDescription("We were unable to confirm your payment for **" + purchaseData.purchaseItem + "**.\n\nIf you believe this is an error, please open a new ticket to speak with staff.")
-                            .setFooter("Please do not reply to this message.");
-                    sendPrivateEmbed(user, denyEb.build());
-
                     // Update database
                     ticketDatabase.updatePurchaseStatus(messageId, 2);
 
+                    // Send DM
+                    EmbedBuilder denyDm = new EmbedBuilder()
+                            .setColor(Color.RED)
+                            .setTitle("Payment Not Received")
+                            .setDescription("We were unable to confirm your payment for **" + data.purchaseItem + "**.\n\nIf you believe this is a mistake, please open an enquiry ticket to speak with staff.");
+                    sendPrivateEmbed(user, denyDm.build());
+
                     // Edit original message
                     EmbedBuilder newDenyEmbed = new EmbedBuilder(originalEmbed)
-                            .setTitle("Purchase Denied")
+                            .setTitle("Purchase DENIED")
                             .setColor(Color.RED)
                             .setFooter("Denied by " + staffName);
                     event.getMessage().editMessageEmbeds(newDenyEmbed.build()).setComponents().queue();
-                    event.getHook().sendMessage("Purchase denied. User has been notified.").queue();
                     break;
 
                 case "hold-purchase":
@@ -260,18 +342,133 @@ public class TicketListeners extends ListenerAdapter {
                             .setColor(Color.GRAY)
                             .setFooter("Put on hold by " + staffName);
                     event.getMessage().editMessageEmbeds(newHoldEmbed.build()).setComponents().queue();
-                    event.getHook().sendMessage("Purchase has been put on hold.").queue();
                     break;
             }
         }, failure -> {
-            event.getHook().sendMessage("Error: Could not find the user who made this purchase.").queue();
+            event.getHook().sendMessage("Error: Could not find the user who made this purchase.").setEphemeral(true).queue();
+        });
+    }
+
+    // --- New Rank Command Logic for Store Bot ---
+    private void handleRank(SlashCommandInteractionEvent event) {
+        Member senderMember = event.getMember();
+        if (senderMember == null) {
+            event.reply("This command must be used in a server.").setEphemeral(true).queue();
+            return;
+        }
+
+        // Check for Store Owner Role
+        if (senderMember.getRoles().stream().noneMatch(r -> r.getIdLong() == ownerRoleId) && !senderMember.isOwner()) {
+            event.reply("You do not have permission to use this command.").setEphemeral(true).queue();
+            return;
+        }
+
+        if (luckPerms == null || rankManager == null) {
+            event.reply("Error: The Rank System is not connected. Please contact an admin.").setEphemeral(true).queue();
+            return;
+        }
+
+        String subcommand = event.getSubcommandName();
+        if (subcommand == null) return;
+
+        if (subcommand.equals("info")) {
+            handleRankInfo(event);
+        } else if (subcommand.equals("set")) {
+            handleRankSet(event);
+        }
+    }
+
+    private void handleRankSet(SlashCommandInteractionEvent event) {
+        User discordTarget = Objects.requireNonNull(event.getOption("user")).getAsUser();
+        String rankName = Objects.requireNonNull(event.getOption("rank")).getAsString();
+        String durationString = Objects.requireNonNull(event.getOption("duration")).getAsString();
+        User discordSender = event.getUser();
+
+        event.deferReply().queue();
+
+        // 1. Get target's linked UUID (from main linking system)
+        UUID targetUuid = discordLinking.getLinkedUuid(discordTarget.getIdLong());
+        if (targetUuid == null) {
+            event.getHook().sendMessage("Target user " + discordTarget.getAsMention() + " does not have a linked Minecraft account.").queue();
+            return;
+        }
+
+        // 2. Parse duration
+        long durationMillis;
+        try {
+            durationMillis = TimeUtil.parseDuration(durationString);
+        } catch (IllegalArgumentException e) {
+            event.getHook().sendMessage("Invalid time format: `" + durationString + "`. Use `1h`, `7d`, `perm`, etc.").queue();
+            return;
+        }
+
+        // 3. Get LP Group
+        Group group = luckPerms.getGroupManager().getGroup(rankName);
+        if (group == null) {
+            event.getHook().sendMessage("The rank `" + rankName + "` does not exist.").queue();
+            return;
+        }
+
+        // 4. Load LP data and set rank
+        luckPerms.getUserManager().loadUser(targetUuid).thenAcceptAsync(targetUser -> {
+            if (targetUser == null) {
+                event.getHook().sendMessage("Could not load Minecraft user data for " + discordTarget.getAsTag()).queue();
+                return;
+            }
+
+            OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetUuid);
+            String targetName = targetPlayer.getName() != null ? targetPlayer.getName() : "Unknown";
+
+            // Use the Discord Sender's name and a console UUID for the manager
+            UUID consoleUuid = UUID.fromString("00000000-0000-0000-0000-000000000000");
+            rankManager.setRank(discordSender.getName(), consoleUuid, targetUser, group, durationMillis);
+
+            String timeString = TimeUtil.formatDuration(durationMillis);
+            EmbedBuilder eb = new EmbedBuilder()
+                    .setColor(Color.GREEN)
+                    .setTitle("Rank Updated")
+                    .setDescription(String.format("Successfully set **%s's** rank to **%s** for **%s**.",
+                            targetName, rankName, timeString))
+                    .addField("Moderator", discordSender.getAsMention(), false);
+            event.getHook().sendMessageEmbeds(eb.build()).queue();
+
+        });
+    }
+
+    private void handleRankInfo(SlashCommandInteractionEvent event) {
+        User discordTarget = Objects.requireNonNull(event.getOption("user")).getAsUser();
+        event.deferReply().queue();
+
+        UUID targetUuid = discordLinking.getLinkedUuid(discordTarget.getIdLong());
+        if (targetUuid == null) {
+            event.getHook().sendMessage("User " + discordTarget.getAsMention() + " does not have a linked Minecraft account.").queue();
+            return;
+        }
+
+        luckPerms.getUserManager().loadUser(targetUuid).thenAcceptAsync(targetUser -> {
+            if (targetUser == null) {
+                event.getHook().sendMessage("Could not load Minecraft user data.").queue();
+                return;
+            }
+            Component infoComponent = rankManager.getRankInfo(targetUser);
+            String plainInfo = PlainTextComponentSerializer.plainText().serialize(infoComponent).replace("%nl%", "\n");
+            OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetUuid);
+            String targetName = targetPlayer.getName() != null ? targetPlayer.getName() : "Unknown";
+
+            EmbedBuilder eb = new EmbedBuilder()
+                    .setColor(Color.CYAN)
+                    .setAuthor(targetName + "'s Rank Info", null, "https://crafatar.com/avatars/" + targetUuid + "?overlay")
+                    .setDescription(plainInfo);
+            event.getHook().sendMessageEmbeds(eb.build()).queue();
         });
     }
 
     private void sendPrivateEmbed(User user, MessageEmbed embed) {
         user.openPrivateChannel().queue(
-                channel -> channel.sendMessageEmbeds(embed).queue(),
-                error -> plugin.getLogger().warning("Failed to send DM to " + user.getAsTag() + ": " + error.getMessage())
+                channel -> channel.sendMessageEmbeds(embed).queue(null, (error) ->
+                        plugin.getLogger().log(Level.WARNING, "Failed to send DM to " + user.getAsTag(), error)
+                ),
+                error -> plugin.getLogger().log(Level.WARNING, "Failed to open DM with " + user.getAsTag(), error)
         );
     }
 }

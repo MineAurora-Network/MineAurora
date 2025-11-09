@@ -46,13 +46,17 @@ public class DiscordModConfig {
         }
     }
 
-    public void saveConfig() {
+    private void saveConfig() {
         try {
             config.save(configFile);
         } catch (IOException e) {
             plugin.getLogger().severe("Could not save discord.yml!");
             e.printStackTrace();
         }
+    }
+
+    public FileConfiguration getConfig() {
+        return config;
     }
 
     public int getMaxWarnings() {
@@ -103,5 +107,17 @@ public class DiscordModConfig {
     public void clearWarnings(long userId) {
         config.set("warnings." + userId, null);
         saveConfig();
+    }
+
+    /**
+     * Gets all user IDs that have warnings.
+     * @return A Set of user ID strings.
+     */
+    public Set<String> getWarnedUserIds() {
+        ConfigurationSection section = config.getConfigurationSection("warnings");
+        if (section == null) {
+            return Set.of();
+        }
+        return section.getKeys(false);
     }
 }

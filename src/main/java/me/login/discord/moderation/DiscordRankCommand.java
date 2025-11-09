@@ -1,16 +1,22 @@
-package me.login.discord.moderation; // <-- CHANGED
+package me.login.discord.moderation;
 
 import me.login.Login;
+import me.login.misc.rank.RankManager; // <-- IMPORT
+import me.login.misc.rank.util.TimeUtil; // <-- IMPORT
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.luckperms.api.LuckPerms;
-import net.luckperms.api.model.user.User;
-import net.luckperms.api.node.Node;
-import net.luckperms.api.node.types.InheritanceNode;
+import net.luckperms.api.model.group.Group;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.RegisteredServiceProvider;
+
+// Kyori/MiniMessage for parsing rank info
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.awt.Color;
 import java.util.UUID;
@@ -20,9 +26,12 @@ public class DiscordRankCommand extends ListenerAdapter {
     private final Login plugin;
     private final LuckPerms luckPerms;
     private final long staffChannelId;
+    private final RankManager rankManager; // <-- NEW
 
-    public DiscordRankCommand(Login plugin) {
+    // --- UPDATED CONSTRUCTOR ---
+    public DiscordRankCommand(Login plugin, RankManager rankManager) {
         this.plugin = plugin;
+        this.rankManager = rankManager; // <-- NEW
         this.staffChannelId = Long.parseLong(plugin.getConfig().getString("staff-bot-channel", "0"));
 
         // Get the LuckPerms API
@@ -31,67 +40,145 @@ public class DiscordRankCommand extends ListenerAdapter {
             this.luckPerms = provider.getProvider();
         } else {
             this.luckPerms = null;
-            plugin.getLogger().severe("LuckPerms API not found. DiscordRankCommand will not work.");
+            plugin.getLogger().severe("LuckPerms API not found! /rank command disabled.");
         }
     }
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!event.getName().equals("rank")) return;
-        if (luckPerms == null) {
-            event.reply("This command is disabled because the LuckPerms API is not available.").setEphemeral(true).queue();
+        if (luckPerms == null || rankManager == null) {
+            event.reply("Error: The Rank System is not connected. Please contact an admin.").setEphemeral(true).queue();
+            return;
+        }
+        // This command is only for staff, so we check the channel
+        if (event.getChannel().getIdLong() != staffChannelId) {
+            event.reply("This command can only be used in the staff channel.").setEphemeral(true).queue();
             return;
         }
 
-        // Example: /rank set <player_name> <rank_name>
-        if (event.getOption("set") != null) {
-            handleRankSet(event);
+        String subcommand = event.getSubcommandName();
+        if (subcommand == null) {
+            event.reply("Error: Unknown subcommand.").setEphemeral(true).queue();
             return;
         }
 
-        // Example: /rank check (for self)
-        handleRankCheck(event);
+        switch (subcommand) {
+            case "set":
+                handleSetRank(event);
+                break;
+            case "info":
+                handleRankInfo(event);
+                break;
+        }
     }
 
-    private void handleRankCheck(SlashCommandInteractionEvent event) {
-        User user = event.getUser();
-        UUID uuid = plugin.getDiscordLinking().getLinkedUuid(user.getIdLong());
+    private void handleSetRank(SlashCommandInteractionEvent event) {
+        User discordTarget = event.getOption("user").getAsUser();
+        String rankName = event.getOption("rank").getAsString();
+        String durationString = event.getOption("duration").getAsString();
+        User discordSender = event.getUser();
 
-        if (uuid == null) {
-            event.reply("Your Discord account is not linked to a Minecraft account. Use `/discord link` in-game.").setEphemeral(true).queue();
+        event.deferReply().queue(); // Defer the reply
+
+        // 1. Get sender's linked UUID
+        UUID senderUuid = plugin.getDiscordLinking().getLinkedUuid(discordSender.getIdLong());
+        if (senderUuid == null) {
+            event.getHook().sendMessage("You must have a linked account to use this command.").queue();
             return;
         }
 
-        OfflinePlayer player = Bukkit.getOfflinePlayer(uuid);
-        String playerName = player.getName() != null ? player.getName() : "Unknown";
+        // 2. Get target's linked UUID
+        UUID targetUuid = plugin.getDiscordLinking().getLinkedUuid(discordTarget.getIdLong());
+        if (targetUuid == null) {
+            event.getHook().sendMessage("Target user " + discordTarget.getAsMention() + " does not have a linked Minecraft account.").queue();
+            return;
+        }
 
-        luckPerms.getUserManager().loadUser(uuid).thenAccept(lpUser -> {
-            String primaryGroup = lpUser.getPrimaryGroup();
-            String playtime = "Unknown"; // You would get this from your playtime manager
-            // String nextRank = "Unknown"; // You would get this from your rank manager
-            // String nextRankTime = "N/A"; // You would get this from your rank manager
+        // 3. Parse duration
+        long durationMillis;
+        try {
+            durationMillis = TimeUtil.parseDuration(durationString);
+        } catch (IllegalArgumentException e) {
+            event.getHook().sendMessage("Invalid time format: `" + durationString + "`. Use `1h`, `7d`, `perm`, etc.").queue();
+            return;
+        }
 
-            EmbedBuilder eb = new EmbedBuilder()
-                    .setColor(Color.GREEN)
-                    .setTitle("Rank Info for " + playerName)
-                    .addField("Current Rank", primaryGroup, true)
-                    .addField("Total Playtime", playtime, true)
-                    // .addField("Next Rank", nextRank, true)
-                    // .addField("Time to Next Rank", nextRankTime, false)
-                    .setFooter("User: " + user.getAsTag());
+        // 4. Get LP Group
+        Group group = luckPerms.getGroupManager().getGroup(rankName);
+        if (group == null) {
+            event.getHook().sendMessage("The rank `" + rankName + "` does not exist.").queue();
+            return;
+        }
 
-            event.replyEmbeds(eb.build()).setEphemeral(true).queue();
+        // 5. Load LP data and perform checks (async)
+        luckPerms.getUserManager().loadUser(senderUuid).thenAcceptAsync(senderUser -> {
+            luckPerms.getUserManager().loadUser(targetUuid).thenAcceptAsync(targetUser -> {
+                OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetUuid);
+                String targetName = targetPlayer.getName() != null ? targetPlayer.getName() : "Unknown";
 
-        }).exceptionally(ex -> {
-            event.reply("An error occurred while loading your player data.").setEphemeral(true).queue();
-            ex.printStackTrace();
-            return null;
+                // 6. Check hierarchy
+                int senderWeight = rankManager.getWeight(senderUser.getPrimaryGroup());
+                int targetWeight = rankManager.getWeight(targetUser.getPrimaryGroup());
+
+                // Allow server owner to bypass
+                boolean isOwner = event.getMember() != null && event.getMember().isOwner();
+                if (senderWeight <= targetWeight && !isOwner) {
+                    event.getHook().sendMessage("You cannot modify the rank of a player with an equal or higher rank.").queue();
+                    return;
+                }
+
+                // 7. All checks passed, set the rank!
+                // Get the OfflinePlayer for the sender to pass to the manager
+                OfflinePlayer senderPlayer = Bukkit.getOfflinePlayer(senderUuid);
+                rankManager.setRank(senderPlayer, targetUser, group, durationMillis);
+
+                String timeString = (durationMillis == -1) ? "permanent" : TimeUtil.formatDuration(durationMillis);
+                EmbedBuilder eb = new EmbedBuilder()
+                        .setColor(Color.GREEN)
+                        .setTitle("Rank Updated")
+                        .setDescription(String.format("Successfully set **%s's** rank to **%s** for **%s**.",
+                                targetName, rankName, timeString))
+                        .addField("Moderator", discordSender.getAsMention(), false);
+                event.getHook().sendMessageEmbeds(eb.build()).queue();
+
+            });
         });
     }
 
-    private void handleRankSet(SlashCommandInteractionEvent event) {
-        // This is a placeholder for a sub-command that doesn't exist yet
-        // You would need to register "set" as a subcommand
-        event.reply("Setting ranks is not yet implemented via this command.").setEphemeral(true).queue();
+    private void handleRankInfo(SlashCommandInteractionEvent event) {
+        User discordTarget = event.getOption("user").getAsUser();
+        event.deferReply().queue();
+
+        UUID targetUuid = plugin.getDiscordLinking().getLinkedUuid(discordTarget.getIdLong());
+        if (targetUuid == null) {
+            event.getHook().sendMessage("User " + discordTarget.getAsMention() + " does not have a linked Minecraft account.").queue();
+            return;
+        }
+
+        luckPerms.getUserManager().loadUser(targetUuid).thenAcceptAsync(targetUser -> {
+            if (targetUser == null) {
+                event.getHook().sendMessage("Could not load Minecraft user data.").queue();
+                return;
+            }
+            // Get the rank info Component from the manager
+            Component infoComponent = rankManager.getRankInfo(targetUser);
+
+            // Convert the MiniMessage Component to a plain string for Discord
+            // We replace the placeholder %nl% with a real newline
+            String plainInfo = PlainTextComponentSerializer.plainText().serialize(infoComponent);
+            plainInfo = plainInfo.replace("%nl%", "\n");
+
+            // Get the player's name
+            OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetUuid);
+            String targetName = targetPlayer.getName() != null ? targetPlayer.getName() : "Unknown";
+
+            EmbedBuilder eb = new EmbedBuilder()
+                    .setColor(Color.CYAN)
+                    .setAuthor(targetName + "'s Rank Info", null, "https://crafatar.com/avatars/" + targetUuid + "?overlay")
+                    .setDescription(plainInfo);
+
+            event.getHook().sendMessageEmbeds(eb.build()).queue();
+        });
     }
 }

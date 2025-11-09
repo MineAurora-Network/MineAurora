@@ -33,8 +33,8 @@ public class DiscordStaffCommands extends ListenerAdapter {
         if (!event.getName().equals("staffchat")) return;
 
         Member member = event.getMember();
-        if (member == null || !member.hasPermission(Permission.MESSAGE_MANAGE)) { // Or your own mod check
-            event.reply("You don't have permission for staff chat.").setEphemeral(true).queue();
+        if (member == null || !member.hasPermission(Permission.MESSAGE_MANAGE)) {
+            event.reply("You do not have permission to use this command.").setEphemeral(true).queue();
             return;
         }
 
@@ -53,7 +53,11 @@ public class DiscordStaffCommands extends ListenerAdapter {
                 .setAuthor(senderName + " (Discord Staff)", null, senderAvatar)
                 .setDescription(message);
 
-        // --- UPDATED TO USE LOGGER ---
+        // --- UPDATED TO USE LOGGER ---\
+        // We bypass the logger's simple message and just send the embed to the staff channel
+        // This requires getting the channel from the logger, or just getting the ID from config
+        // Using the logger is cleaner
+
         // This is a special case. The logger is for simple text.
         // We will send an embed to the staff channel.
         long staffChannelId = plugin.getConfig().getLong("staff-bot-channel", 0);
