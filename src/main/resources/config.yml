@@ -1,8 +1,14 @@
 bot-token: ""
 logger-bot-token: ""
 
+
 normal-bot-channel: 1434006801011048621
 staff-bot-channel: 1434006967357145168
+
+store-bot-token: "YOUR_STORE_BOT_TOKEN_HERE"
+store-ticket-channel: "CHANNEL_ID_FOR_TICKET_PANEL"
+store-staff-id: "STAFF_ROLE_ID_TO_VIEW_TICKETS"
+payment-verification-channel-id: "CHANNEL_ID_FOR_PURCHASE_EMBEDS"
 
 coinflip-log-channel-id: 1431926295847243858
 coinflip-admin-log-channel-id: 1435165917779591218
@@ -16,6 +22,7 @@ token-shop-channel-id: 1435894542334169138
 token-admin-channel-id: 1435894607027109918
 creator-code-channel-id: 1436624030814965832
 rank-log-channel-id: 1436623612571553896
+link-system-log-channel-id: 0
 
 verification-channel-id: 1430953529463279696
 verified-role-id: 1430766504575635508

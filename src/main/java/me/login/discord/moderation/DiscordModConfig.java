@@ -1,4 +1,4 @@
-package me.login.discordcommand;
+package me.login.discord.moderation; // <-- CHANGED
 
 import me.login.Login;
 import org.bukkit.configuration.ConfigurationSection;
@@ -41,11 +41,9 @@ public class DiscordModConfig {
                 e.printStackTrace();
             }
         }
-        config = YamlConfiguration.loadConfiguration(configFile);
-    }
-
-    public FileConfiguration getConfig() {
-        return config;
+        if (config == null) {
+            config = YamlConfiguration.loadConfiguration(configFile);
+        }
     }
 
     public void saveConfig() {
@@ -55,10 +53,6 @@ public class DiscordModConfig {
             plugin.getLogger().severe("Could not save discord.yml!");
             e.printStackTrace();
         }
-    }
-
-    public void reloadConfig() {
-        config = YamlConfiguration.loadConfiguration(configFile);
     }
 
     public int getMaxWarnings() {
@@ -107,7 +101,7 @@ public class DiscordModConfig {
      * @param userId The Discord user's ID.
      */
     public void clearWarnings(long userId) {
-        config.set("warnings." + userId, null); // Remove the user's section
+        config.set("warnings." + userId, null);
         saveConfig();
     }
 }

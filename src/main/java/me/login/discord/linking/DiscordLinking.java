@@ -1,14 +1,12 @@
-package me.login.discordlinking; // Correct package
+package me.login.discord.linking; // <-- CHANGED
 
-import club.minnced.discord.webhook.WebhookClient;
-import me.login.Login; // Import from base package
-// --- FIX: ADD IMPORTS ---
-import me.login.discordcommand.DiscordCommandManager;
-import me.login.discordcommand.DiscordCommandRegistrar;
-import me.login.discordcommand.DiscordModConfig;
-import me.login.discordcommand.DiscordModCommands;
-import me.login.discordcommand.DiscordRankCommand;
-// --- END IMPORTS ---
+import me.login.Login;
+import me.login.discord.moderation.DiscordCommandLogger; // <-- CHANGED
+import me.login.discord.moderation.DiscordCommandManager; // <-- CHANGED
+import me.login.discord.moderation.DiscordCommandRegistrar; // <-- CHANGED
+import me.login.discord.moderation.DiscordModConfig; // <-- CHANGED
+import me.login.discord.moderation.DiscordModCommands; // <-- CHANGED
+import me.login.discord.moderation.DiscordRankCommand; // <-- CHANGED
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -22,16 +20,21 @@ import net.dv8tion.jda.api.exceptions.HierarchyException;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
-import net.dv8tion.jda.api.utils.cache.CacheFlag; // <-- IMPORT ADDED
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+
 import java.awt.Color;
 import java.util.ArrayList;
-import java.util.EnumSet; // <-- IMPORT ADDED
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -44,36 +47,39 @@ public class DiscordLinking extends ListenerAdapter {
 
     private final Login plugin;
     private JDA jda;
-    private final WebhookClient logWebhook;
-    private final DiscordModConfig modConfig; // <-- FIX: ADDED FIELD
+    private final DiscordModConfig modConfig;
+    private final DiscordLinkLogger logger;
+    private final Component prefix;
 
     private final Map<String, UUID> verificationCodes = new ConcurrentHashMap<>();
     private final Map<UUID, Long> linkedAccounts = new ConcurrentHashMap<>();
     private final Map<Long, UUID> reverseLinkedAccounts = new ConcurrentHashMap<>();
     private final Map<UUID, Long> codeCooldowns = new ConcurrentHashMap<>();
 
-    // --- FIX: UPDATED CONSTRUCTOR ---
-    public DiscordLinking(Login plugin, WebhookClient logWebhook, DiscordModConfig modConfig) {
+    public DiscordLinking(Login plugin, DiscordModConfig modConfig, DiscordLinkLogger logger) {
         this.plugin = plugin;
-        this.logWebhook = logWebhook;
-        this.modConfig = modConfig; // <-- Store this
-    }
-    // --- END FIX ---
+        this.modConfig = modConfig;
+        this.logger = logger;
 
-    public JDA getJDA() { return jda; }
+        String prefixStr = plugin.getConfig().getString("server_prefix");
+        if (prefixStr == null || prefixStr.isEmpty()) {
+            prefixStr = plugin.getConfig().getString("server_prefix_2", "&cError: Prefix not found. ");
+        }
 
-    public void sendLogMessage(String content) {
-        plugin.getLogger().info("[DiscordLink Log] " + ChatColor.stripColor(content.replace("`", "").replace("*", "")));
-        if (logWebhook != null) {
-            logWebhook.send(content).exceptionally(error -> {
-                plugin.getLogger().warning("Failed send link webhook: " + error.getMessage());
-                return null;
-            });
+        if (prefixStr.contains("<")) {
+            this.prefix = MiniMessage.miniMessage().deserialize(prefixStr);
+        } else {
+            this.prefix = LegacyComponentSerializer.legacyAmpersand().deserialize(prefixStr);
         }
     }
 
-    // --- **FIX: MODIFIED STARTBOT METHOD** ---
-    public void startBot(String token) {
+    public JDA getJDA() { return jda; }
+
+    public DiscordLinkLogger getLogger() {
+        return this.logger;
+    }
+
+    public JDA startBot(String token, DiscordCommandLogger commandLogger) {
         try {
             JDABuilder builder = JDABuilder.createLight(token)
                     .enableIntents(GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
@@ -88,8 +94,8 @@ public class DiscordLinking extends ListenerAdapter {
                     ))
                     .addEventListeners(
                             this,
-                            new DiscordCommandManager(plugin),
-                            new DiscordModCommands(plugin, modConfig),
+                            new DiscordCommandManager(plugin, commandLogger),
+                            new DiscordModCommands(plugin, modConfig, commandLogger),
                             new DiscordRankCommand(plugin)
                     );
 
@@ -101,14 +107,13 @@ public class DiscordLinking extends ListenerAdapter {
                 reverseLinkedAccounts.put(discordId, uuid);
             });
             plugin.getLogger().info("Loaded " + linkedAccounts.size() + " links.");
+            return jda;
         } catch (Exception e) {
             plugin.getLogger().severe("Error during JDA startup: " + e.getMessage());
             e.printStackTrace();
-            plugin.getServer().getPluginManager().disablePlugin(plugin);
+            return null;
         }
     }
-
-    // --- **END OF FIX** ---
 
     public void shutdown() { if (jda != null) jda.shutdownNow(); }
 
@@ -185,8 +190,7 @@ public class DiscordLinking extends ListenerAdapter {
                     if (error instanceof HierarchyException) plugin.getLogger().warning("Failed set nick (Hierarchy): " + member.getUser().getName());
                     else plugin.getLogger().warning("Failed set nick: " + error.getMessage());
                 });
-                // Log moved here ensures mcName is resolved and includes tag
-                sendLogMessage("✅ **" + member.getUser().getAsTag() + "** linked to **" + mcName + "** (UUID: `" + uuid + "`)");
+                logger.sendLog("✅ **" + member.getUser().getAsTag() + "** linked to **" + mcName + "** (UUID: `" + uuid + "`)");
             } catch (Exception e) { plugin.getLogger().severe("[DEBUG] Error in async linkUser name/log:"); e.printStackTrace(); }
         });
         return assignedRoles;
@@ -214,7 +218,7 @@ public class DiscordLinking extends ListenerAdapter {
             plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
                 OfflinePlayer offlinePlayer = plugin.getServer().getOfflinePlayer(uuid);
                 String mcName = offlinePlayer.getName() != null ? offlinePlayer.getName() : "UnknownPlayer";
-                sendLogMessage("❌ **" + event.getUser().getAsTag() + "** left Discord. Link with **" + mcName + "** removed.");
+                logger.sendLog("❌ **" + event.getUser().getAsTag() + "** left Discord. Link with **" + mcName + "** removed.");
             });
         }
     }
@@ -230,8 +234,6 @@ public class DiscordLinking extends ListenerAdapter {
         String code = event.getMessage().getContentRaw().trim();
         Member member = event.getMember();
 
-        // --- BUG FIX ---
-        // Atomically remove the code. If it's null, it was invalid or already used.
         UUID playerUUID = verificationCodes.remove(code);
 
         if (playerUUID == null || member == null) {
@@ -242,7 +244,6 @@ public class DiscordLinking extends ListenerAdapter {
             return;
         }
 
-        // If we are here, the code was valid and has been removed.
         codeCooldowns.remove(playerUUID);
 
         long discordId = member.getIdLong();
@@ -266,7 +267,6 @@ public class DiscordLinking extends ListenerAdapter {
             OfflinePlayer offlinePlayer = plugin.getServer().getOfflinePlayer(playerUUID);
             String mcName = offlinePlayer.getName() != null ? offlinePlayer.getName() : "Player";
 
-            // --- NEW FEATURE: Send DM to User ---
             try {
                 EmbedBuilder dmEmbed = new EmbedBuilder()
                         .setColor(Color.GREEN)
@@ -277,7 +277,6 @@ public class DiscordLinking extends ListenerAdapter {
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to send private message during link: " + e.getMessage());
             }
-            // --- END NEW FEATURE ---
 
 
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
@@ -304,12 +303,12 @@ public class DiscordLinking extends ListenerAdapter {
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             Player player = Bukkit.getPlayer(playerUUID);
             if (player != null && player.isOnline()) {
-                player.sendMessage("§a§lSUCCESS! §aDiscord linked to " + member.getUser().getAsTag() + "!");
+                player.sendMessage(prefix.append(Component.text("SUCCESS! ", NamedTextColor.GREEN, TextDecoration.BOLD))
+                        .append(Component.text("Discord linked to " + member.getUser().getAsTag() + "!", NamedTextColor.GREEN)));
             }
         });
     }
 
-    // These helpers remain
     private void sendPrivateMessage(User user, String message) { user.openPrivateChannel().queue( c -> c.sendMessage(message).queue(), e -> {}); }
     public void sendPrivateEmbed(User user, MessageEmbed embed) { user.openPrivateChannel().queue( c -> c.sendMessageEmbeds(embed).queue(), e -> {}); }
 }

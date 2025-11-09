@@ -2,6 +2,7 @@ package me.login.lifesteal;
 
 // --- REMOVED WEBHOOK IMPORTS ---
 import me.login.Login;
+import me.login.utility.TextureToHead; // <-- IMPORT ADDED
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -68,13 +69,25 @@ public class ItemManager {
     }
 
     public ItemStack getHeartItem(int amount) {
+        // --- MODIFIED (Request 5) ---
+        String materialName = itemsConfig.getString("heart-item.material", "RED_DYE").toUpperCase();
+        Material material;
+        try {
+            material = Material.valueOf(materialName);
+        } catch (IllegalArgumentException e) {
+            plugin.getLogger().warning("Invalid material '" + materialName + "' in items.yml for heart-item. Defaulting to RED_DYE.");
+            material = Material.RED_DYE;
+        }
+
         return createItem(
-                Material.RED_DYE,
+                material,
                 amount,
                 itemsConfig.getString("heart-item.name", "<red>Heart</red>"),
                 itemsConfig.getStringList("heart-item.lore"),
-                heartItemKey
+                heartItemKey,
+                itemsConfig.getString("heart-item.texture") // Pass texture URL
         );
+        // --- END MODIFICATION ---
     }
 
     public ItemStack getReviveBeaconItem(int amount) {
@@ -83,11 +96,13 @@ public class ItemManager {
                 amount,
                 itemsConfig.getString("revive-beacon.name", "<aqua>Revive Beacon</aqua>"),
                 itemsConfig.getStringList("revive-beacon.lore"),
-                beaconItemKey
+                beaconItemKey,
+                null // Pass null for texture
         );
     }
 
-    private ItemStack createItem(Material material, int amount, String name, List<String> lore, NamespacedKey key) {
+    // --- MODIFIED (Request 5) ---
+    private ItemStack createItem(Material material, int amount, String name, List<String> lore, NamespacedKey key, String textureUrl) {
         ItemStack item = new ItemStack(material, amount);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
@@ -101,9 +116,22 @@ public class ItemManager {
 
         meta.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
-        item.setItemMeta(meta);
+        item.setItemMeta(meta); // Set meta BEFORE applying texture
+
+        // --- CUSTOM TEXTURE LOGIC ---
+        if (material == Material.PLAYER_HEAD && textureUrl != null && !textureUrl.isEmpty()) {
+            try {
+                // Assuming TextureToHead.applyTexture returns the modified ItemStack
+                item = TextureToHead.applyTexture(item, textureUrl);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to apply texture '" + textureUrl + "': " + e.getMessage());
+            }
+        }
+        // --- END CUSTOM TEXTURE LOGIC ---
+
         return item;
     }
+    // --- END MODIFICATION ---
 
     // --- REMOVED ALL WEBHOOK METHODS (sendLog, initializeWebhook, closeWebhook) ---
 

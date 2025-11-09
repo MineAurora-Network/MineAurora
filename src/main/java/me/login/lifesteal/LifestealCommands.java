@@ -43,6 +43,15 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        // --- WORLD CHECK (Request 4) ---
+        if (sender instanceof Player player) {
+            if (!lifestealManager.getLifestealWorlds().contains(player.getWorld().getName())) {
+                player.sendMessage(itemManager.formatMessage("<red>You can only use Lifesteal commands in lifesteal-enabled worlds."));
+                return true;
+            }
+        }
+        // --- END WORLD CHECK ---
+
         String cmdName = command.getName().toLowerCase();
 
         // Handle the standalone /withdrawhearts command
@@ -173,7 +182,7 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
             }
         } else if (itemName.equals("revive_beacon") || itemName.equals("beacon")) {
             player.getInventory().addItem(itemManager.getReviveBeaconItem(amount));
-            player.sendMessage(itemManager.formatMessage("<green>Gave you " + amount + " revive beacon(s)."));
+            player.sendMessage(itemManager.formatMessage("<green>GGave you " + amount + " revive beacon(s)."));
             if (logger != null) {
                 logger.logAdmin("Admin `" + player.getName() + "` gave themselves " + amount + " revive beacon(s).");
             }
@@ -338,6 +347,14 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
     @Nullable
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+
+        // --- WORLD CHECK (Request 4) ---
+        if (sender instanceof Player player) {
+            if (!lifestealManager.getLifestealWorlds().contains(player.getWorld().getName())) {
+                return new ArrayList<>(); // Return empty list if not in correct world
+            }
+        }
+        // --- END WORLD CHECK ---
 
         if (command.getName().equalsIgnoreCase("lifesteal") || command.getName().equalsIgnoreCase("ls")) {
             if (args.length == 1) {

@@ -1,4 +1,4 @@
-package me.login.discordlinking; // Correct package
+package me.login.discord.linking; // <-- CHANGED
 
 import me.login.Login; // Import from base package
 

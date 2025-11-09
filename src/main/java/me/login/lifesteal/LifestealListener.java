@@ -1,6 +1,8 @@
 package me.login.lifesteal;
 
 import me.login.Login;
+import net.kyori.adventure.text.Component; // <-- IMPORT ADDED
+import org.bukkit.Bukkit; // <-- IMPORT ADDED
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -44,8 +46,11 @@ public class LifestealListener implements Listener {
         Player player = event.getPlayer();
         lifestealManager.loadPlayerData(player);
         if (deadPlayerManager.isDead(player.getUniqueId())) {
-            player.setGameMode(GameMode.SPECTATOR);
-            player.sendMessage(itemManager.formatMessage("<red>You are dead! A player must revive you using a Revive Beacon."));
+            // Player is dead, kick them
+            final Component kickMessage = itemManager.formatMessage("<red>You are dead! A player must revive you using a Revive Beacon.");
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                player.kick(kickMessage);
+            });
         }
     }
 
@@ -70,14 +75,20 @@ public class LifestealListener implements Listener {
             lifestealManager.removeHearts(victim.getUniqueId(), 1);
             victim.sendMessage(itemManager.formatMessage("<red>You lost a heart!"));
         } else {
+            // --- MODIFIED (Request 1) ---
             deadPlayerManager.addDeadPlayer(victim.getUniqueId(), victim.getName());
-            victim.setGameMode(GameMode.SPECTATOR);
-            victim.sendMessage(itemManager.formatMessage("<dark_red>You have lost your final life. You are now dead.</dark_red>"));
+
+            final Component kickMessage = itemManager.formatMessage("<dark_red>You have lost your final life. You are now dead.</dark_red>");
+            // Kick player on the next tick to ensure death event processing is complete
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                victim.kick(kickMessage);
+            });
+            // --- END MODIFICATION ---
 
             // --- LOGGING UPDATED ---
             if (logger != null) {
                 String killerName = (killer != null) ? killer.getName() : "Unknown Causes";
-                logger.logNormal("Player `" + victim.getName() + "` lost their final life (killed by `" + killerName + "`) and is now dead.");
+                logger.logNormal("Player `" + victim.getName() + "` lost their final life (killed by `" + killerName + "`) and was kicked.");
             }
         }
 
@@ -91,8 +102,6 @@ public class LifestealListener implements Listener {
             }
         }
     }
-
-    // --- (onHeartUse, onBeaconPlace... remain the same) ---
 
     @EventHandler
     public void onHeartUse(PlayerInteractEvent event) {
@@ -112,15 +121,28 @@ public class LifestealListener implements Listener {
         }
     }
 
+    // --- REMOVED onBeaconPlace ---
+
+    // --- ADDED (Request 2 & 3) ---
     @EventHandler
-    public void onBeaconPlace(BlockPlaceEvent event) {
+    public void onBeaconUse(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+
         Player player = event.getPlayer();
-        ItemStack item = event.getItemInHand();
+        ItemStack item = player.getInventory().getItemInMainHand();
 
         if (item.getType() == Material.AIR || !item.hasItemMeta()) return;
 
         if (item.getItemMeta().getPersistentDataContainer().has(itemManager.beaconItemKey, PersistentDataType.BYTE)) {
             event.setCancelled(true);
+
+            // Prevent opening menu if right-clicking an interactable block (like a chest)
+            if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
+                if (event.getClickedBlock().getType().isInteractable()) {
+                    return;
+                }
+            }
 
             if (!player.hasPermission("lifesteal.revive")) {
                 player.sendMessage(itemManager.formatMessage("<red>You do not have permission to use this."));
@@ -128,6 +150,10 @@ public class LifestealListener implements Listener {
             }
 
             reviveMenu.openMenu(player, 0, null);
+
+            // Consume the beacon
+            item.setAmount(item.getAmount() - 1);
         }
     }
+    // --- END ADDITION ---
 }

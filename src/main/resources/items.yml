@@ -4,6 +4,8 @@
 # <red>, <green>, <#FF00FF>, <gradient:#RRGGBB:#RRGGBB>, <bold>, <italic>, etc.
 
 heart-item:
+  material: PLAYER_HEAD
+  texture: "http://textures.minecraft.net/texture/d45f4d139c9e89262ec06b27aaad73fa488ab49290d2ccd685a2554725373c9b"
   name: "<red><b>Heart</b></red>"
   lore:
     - "<gray>A fragment of a player's life."
@@ -16,7 +18,7 @@ revive-beacon:
   lore:
     - "<gray>A sacred artifact."
     - ""
-    - "<yellow>Place this beacon</yellow>"
+    - "<yellow>Right-click this beacon</yellow>"
     - "<yellow>to open the revive menu.</yellow>"
 
 # ============================

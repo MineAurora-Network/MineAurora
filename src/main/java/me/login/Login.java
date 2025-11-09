@@ -2,8 +2,9 @@ package me.login;
 
 import club.minnced.discord.webhook.WebhookClient;
 import club.minnced.discord.webhook.WebhookClientBuilder;
+import me.login.discord.store.TicketModule; // IMPORT THE NEW TICKET MODULE
 import me.login.discordlinking.*;
-import me.login.discordcommand.DiscordCommandRegistrar;
+// import me.login.discordcommand.DiscordCommandRegistrar; // No longer needed here
 import me.login.discordcommand.DiscordModConfig;
 import me.login.loginsystem.*;
 import me.login.misc.dailyreward.DailyRewardDatabase; // IMPORT DailyRewardDatabase
@@ -52,9 +53,8 @@ import net.luckperms.api.LuckPerms;
 
 
 public class Login extends JavaPlugin implements Listener {
-    private DiscordLinking discordLinking;
-    private DiscordLinkDatabase discordLinkDatabase;
-    private WebhookClient linkWebhookClient;
+    private DiscordLinkDatabase discordLinkDatabase; // This is populated by the module
+    private DiscordLinkingModule discordLinkingModule; // <-- NEW
     private LoginSystem loginSystem;
     private LoginDatabase loginDatabase;
     private WebhookClient loginWebhookClient;
@@ -89,6 +89,10 @@ public class Login extends JavaPlugin implements Listener {
     private CreatorCodeModule creatorCodeModule; // ADD CreatorCodeModule INSTANCE
     private RankModule rankModule; // ADD RankModule INSTANCE
 
+    // --- ADDED FOR STORE TICKET SYSTEM ---
+    private TicketModule ticketModule;
+    // --- END STORE TICKET SYSTEM ---
+
 
     @Override
     public void onEnable() {
@@ -115,10 +119,6 @@ public class Login extends JavaPlugin implements Listener {
             this.luckPermsApi = null;
         }
 
-        this.discordLinkDatabase = new DiscordLinkDatabase(this);
-        discordLinkDatabase.connect();
-        if (discordLinkDatabase.getConnection() == null) { disableWithError("Link DB failed."); return; }
-
         this.loginDatabase = new LoginDatabase(this);
         loginDatabase.connect();
         if (loginDatabase.getConnection() == null) { disableWithError("Login DB failed."); return; }
@@ -140,7 +140,6 @@ public class Login extends JavaPlugin implements Listener {
 
         this.moderationDatabase = new ModerationDatabase(this);
 
-        this.linkWebhookClient = initializeWebhook("link-system-log-webhook", "Link-System");
         this.loginWebhookClient = initializeWebhook("login-system-log-webhook", "Login-System");
         this.orderWebhookClient = initializeWebhook("order-system-log-webhook", "Order-System");
         this.staffWebhookClient = initializeWebhook("staff-system-log-webhook", "Staff-System");
@@ -148,8 +147,6 @@ public class Login extends JavaPlugin implements Listener {
 
         this.loginSystem = new LoginSystem(this, loginDatabase, discordLinkDatabase, loginWebhookClient);
         getServer().getPluginManager().registerEvents(loginSystem, this);
-
-        this.discordLinking = new DiscordLinking(this, linkWebhookClient, discordModConfig);
 
         this.damageIndicator = new DamageIndicator(this);
         getServer().getPluginManager().registerEvents(damageIndicator, this);
@@ -185,146 +182,130 @@ public class Login extends JavaPlugin implements Listener {
             getLogger().warning("Skript not found! Scoreboard variables via SkriptUtils will not work.");
         }
 
+        // --- NEW STARTUP LOGIC ---
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!isEnabled() || Bukkit.isStopping()) {
                 getLogger().warning("Plugin disabled before Discord startup. Skipping bot init.");
                 return;
             }
-            Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-                try {
-                    String botToken = getConfig().getString("bot-token");
-                    if (isConfigValueInvalid(botToken, "YOUR_MAIN_BOT_TOKEN_HERE")) {
-                        disableWithError("Bot token invalid.");
+
+            // This task now ONLY starts the LagClearLogger
+            this.lagClearLogger = new LagClearLogger(this);
+            getLogger().info("LagClear Logger initialization requested...");
+
+            new BukkitRunnable() {
+                int attempts = 0;
+                final int maxAttempts = 10; // Wait 10 seconds (10 * 20 ticks)
+
+                @Override
+                public void run() {
+                    if (!isEnabled()) {
+                        this.cancel();
                         return;
                     }
 
-                    discordLinking.startBot(botToken);
-                    getLogger().info("Discord bot connected successfully and ready.");
+                    if (lagClearLogger != null && lagClearLogger.getJDA() != null && lagClearLogger.getJDA().getStatus() == JDA.Status.CONNECTED) {
+                        getLogger().info("LagClear Logger JDA is now connected. Initializing JDA-dependent modules...");
 
-                    if (!isEnabled() || Bukkit.isStopping()) {
-                        getLogger().warning("Plugin disabled during Discord startup. Shutting down JDA.");
-                        if (discordLinking.getJDA() != null) {
-                            discordLinking.getJDA().shutdownNow();
+                        // --- NEW: INITIALIZE DISCORD LINKING MODULE ---
+                        getLogger().info("Initializing DiscordLinkingModule...");
+                        discordLinkingModule = new DiscordLinkingModule(Login.this);
+                        if (!discordLinkingModule.init(lagClearLogger, discordModConfig)) {
+                            getLogger().severe("Failed to initialize DiscordLinking Module! Disabling plugin.");
+                            getServer().getPluginManager().disablePlugin(Login.this);
+                            this.cancel();
+                            return;
                         }
+                        // Assign database from module for other classes that need it
+                        Login.this.discordLinkDatabase = discordLinkingModule.getDiscordLinkDatabase();
+                        // --- END NEW ---
+
+                        getLogger().info("Initializing LifestealLogger...");
+                        lifestealLogger = new LifestealLogger(Login.this, lagClearLogger.getJDA());
+
+                        getLogger().info("Initializing LifestealModule...");
+                        lifestealModule = new LifestealModule(Login.this, luckPermsApi, lifestealLogger);
+                        if (!lifestealModule.init()) {
+                            getLogger().severe("Failed to initialize Lifesteal Module!");
+                        }
+
+                        getLogger().info("Initializing Coinflip system...");
+                        coinflipModule.initLogicAndListeners();
+
+                        // --- ADDED DAILY REWARD MODULE INITIALIZATION ---
+                        getLogger().info("Initializing DailyRewardModule...");
+                        dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
+                        if (!dailyRewardModule.init()) {
+                            getLogger().severe("Failed to initialize DailyReward Module!");
+                        }
+                        // --- END DAILY REWARD ---
+
+                        // --- ADDED PLAYTIME REWARD MODULE INITIALIZATION ---
+                        getLogger().info("Initializing PlaytimeRewardModule...");
+                        playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
+                        if (!playtimeRewardModule.init()) {
+                            getLogger().severe("Failed to initialize PlaytimeReward Module!");
+                        }
+                        // --- END PLAYTIME REWARD ---
+
+                        // --- ADDED TOKEN MODULE INITIALIZATION ---
+                        getLogger().info("Initializing TokenModule...");
+                        tokenModule = new TokenModule(Login.this, luckPermsApi, dailyRewardDatabase);
+                        if (!tokenModule.init()) {
+                            getLogger().severe("Failed to initialize Token Module!");
+                        }
+                        // --- END TOKEN MODULE ---
+
+                        // --- ADDED CREATOR CODE MODULE INITIALIZATION ---
+                        getLogger().info("Initializing CreatorCodeModule...");
+                        creatorCodeModule = new CreatorCodeModule(Login.this);
+                        if (!creatorCodeModule.init(lagClearLogger)) {
+                            getLogger().severe("Failed to initialize Creator Code Module!");
+                        }
+                        // --- END CREATOR CODE MODULE ---
+
+                        // --- ADDED RANK MODULE INITIALIZATION ---
+                        getLogger().info("Initializing RankModule...");
+                        if (luckPermsApi == null) {
+                            getLogger().severe("LuckPerms API not found! RankModule will be disabled.");
+                        } else {
+                            rankModule = new RankModule(Login.this);
+                            if (!rankModule.init(lagClearLogger, luckPermsApi)) {
+                                getLogger().severe("Failed to initialize Rank Module!");
+                            }
+                        }
+                        // --- END RANK MODULE INITIALIZATION ---
+
+                        // --- ADDED TICKET MODULE INITIALIZATION ---
+                        getLogger().info("Initializing TicketModule...");
+                        // Pass the getDiscordLinking() instance from the newly initialized module
+                        ticketModule = new TicketModule(Login.this, discordLinkingModule.getDiscordLinking());
+                        ticketModule.init(); // This will start the bot asynchronously
+                        // --- END TICKET MODULE ---
+
+                        this.cancel();
                         return;
                     }
 
-                    Bukkit.getScheduler().runTask(this, () -> {
-                        try {
-                            if (!isEnabled() || Bukkit.isStopping()) {
-                                getLogger().warning("Plugin disabled before post-start steps. Aborting.");
-                                if (discordLinking.getJDA() != null) {
-                                    discordLinking.getJDA().shutdownNow();
-                                }
-                                return;
-                            }
-                            DiscordCommandRegistrar.register(discordLinking.getJDA());
-                            getLogger().info("Discord slash command listeners registered.");
-
-                            this.lagClearLogger = new LagClearLogger(this);
-                            getLogger().info("LagClear Logger initialization requested...");
-
-                            new BukkitRunnable() {
-                                int attempts = 0;
-                                final int maxAttempts = 10; // Wait 10 seconds (10 * 20 ticks)
-
-                                @Override
-                                public void run() {
-                                    if (!isEnabled()) {
-                                        this.cancel();
-                                        return;
-                                    }
-
-                                    if (lagClearLogger != null && lagClearLogger.getJDA() != null && lagClearLogger.getJDA().getStatus() == JDA.Status.CONNECTED) {
-                                        getLogger().info("LagClear Logger JDA is now connected. Initializing JDA-dependent modules...");
-
-                                        getLogger().info("Initializing LifestealLogger...");
-                                        lifestealLogger = new LifestealLogger(Login.this, lagClearLogger.getJDA());
-
-                                        getLogger().info("Initializing LifestealModule...");
-                                        lifestealModule = new LifestealModule(Login.this, luckPermsApi, lifestealLogger);
-                                        if (!lifestealModule.init()) {
-                                            getLogger().severe("Failed to initialize Lifesteal Module!");
-                                        }
-
-                                        getLogger().info("Initializing Coinflip system...");
-                                        coinflipModule.initLogicAndListeners();
-
-                                        // --- ADDED DAILY REWARD MODULE INITIALIZATION ---
-                                        getLogger().info("Initializing DailyRewardModule...");
-                                        dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
-                                        if (!dailyRewardModule.init()) {
-                                            getLogger().severe("Failed to initialize DailyReward Module!");
-                                        }
-                                        // --- END DAILY REWARD ---
-
-                                        // --- ADDED PLAYTIME REWARD MODULE INITIALIZATION ---
-                                        getLogger().info("Initializing PlaytimeRewardModule...");
-                                        playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
-                                        if (!playtimeRewardModule.init()) {
-                                            getLogger().severe("Failed to initialize PlaytimeReward Module!");
-                                        }
-                                        // --- END PLAYTIME REWARD ---
-
-                                        // --- ADDED TOKEN MODULE INITIALIZATION ---
-                                        getLogger().info("Initializing TokenModule...");
-                                        tokenModule = new TokenModule(Login.this, luckPermsApi, dailyRewardDatabase);
-                                        if (!tokenModule.init()) {
-                                            getLogger().severe("Failed to initialize Token Module!");
-                                        }
-                                        // --- END TOKEN MODULE ---
-
-                                        // --- ADDED CREATOR CODE MODULE INITIALIZATION ---
-                                        getLogger().info("Initializing CreatorCodeModule...");
-                                        creatorCodeModule = new CreatorCodeModule(Login.this);
-                                        if (!creatorCodeModule.init(lagClearLogger)) {
-                                            getLogger().severe("Failed to initialize Creator Code Module!");
-                                        }
-                                        // --- END CREATOR CODE MODULE ---
-
-                                        // --- ADDED RANK MODULE INITIALIZATION ---
-                                        getLogger().info("Initializing RankModule...");
-                                        if (luckPermsApi == null) {
-                                            getLogger().severe("LuckPerms API not found! RankModule will be disabled.");
-                                        } else {
-                                            rankModule = new RankModule(Login.this);
-                                            if (!rankModule.init(lagClearLogger, luckPermsApi)) {
-                                                getLogger().severe("Failed to initialize Rank Module!");
-                                            }
-                                        }
-                                        // --- END RANK MODULE INITIALIZATION ---
-
-                                        this.cancel();
-                                        return;
-                                    }
-
-                                    attempts++;
-                                    if (attempts >= maxAttempts) {
-                                        getLogger().severe("LagClear Logger JDA did not connect after 10 seconds. Coinflip & Lifesteal logging will be disabled.");
-                                        getLogger().severe("DailyRewardModule will also fail to initialize logging!");
-                                        getLogger().severe("PlaytimeRewardModule will also fail to initialize logging!");
-                                        getLogger().severe("TokenModule will also fail to initialize logging!");
-                                        getLogger().severe("CreatorCodeModule will also fail to initialize logging!");
-                                        getLogger().severe("RankModule will also fail to initialize!");
-                                        this.cancel();
-                                    }
-                                }
-                            }.runTaskTimer(Login.this, 20L, 20L);
-
-                        } catch (Throwable postErr) {
-                            getLogger().severe("Post-start Discord steps failed: " + postErr.getMessage());
-                            postErr.printStackTrace();
-                            if (discordLinking.getJDA() != null) {
-                                discordLinking.getJDA().shutdownNow();
-                            }
-                        }
-                    });
-                } catch (Exception e) {
-                    getLogger().severe("Async Discord startup failed: " + e.getMessage());
-                    e.printStackTrace();
+                    attempts++;
+                    if (attempts >= maxAttempts) {
+                        getLogger().severe("LagClear Logger JDA did not connect after 10 seconds.");
+                        getLogger().severe("DiscordLinkingModule, Coinflip, & Lifesteal logging will be disabled.");
+                        getLogger().severe("DailyRewardModule will also fail to initialize logging!");
+                        getLogger().severe("PlaytimeRewardModule will also fail to initialize logging!");
+                        getLogger().severe("TokenModule will also fail to initialize logging!");
+                        getLogger().severe("CreatorCodeModule will also fail to initialize logging!");
+                        getLogger().severe("RankModule will also fail to initialize!");
+                        // --- ADDED TICKET MODULE ---
+                        getLogger().severe("TicketModule will also fail to initialize!");
+                        // --- END TICKET MODULE ---
+                        this.cancel();
+                    }
                 }
-            });
+            }.runTaskTimer(Login.this, 20L, 20L);
+
         }, 20L);
+        // --- END NEW STARTUP LOGIC ---
 
         getLogger().info(getName() + " v" + getDescription().getVersion() + " Enabled Successfully!");
     }
@@ -371,15 +352,14 @@ public class Login extends JavaPlugin implements Listener {
     private void disableWithError(String message) { getLogger().severe(message + " Disabling plugin."); getServer().getPluginManager().disablePlugin(this); }
 
     private void registerCommands() {
-        if (discordLinking == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || moderationDatabase == null) {
+        if (discordLinkingModule == null || loginSystem == null || orderSystem == null || orderMenu == null || orderManage == null || orderAdminMenu == null || vaultEconomy == null || moderationDatabase == null) {
             getLogger().severe("Cannot register commands - one or more systems failed initialization!"); return;
         }
 
-        DiscordLinkCmd discordCmd = new DiscordLinkCmd(this, discordLinking, discordLinkDatabase);
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase);
         OrderCmd orderCmd = new OrderCmd(this, orderSystem, orderMenu, orderManage, orderAdminMenu);
 
-        setCommandExecutor("discord", discordCmd); setCommandExecutor("unlink", discordCmd); setCommandExecutor("adminunlink", discordCmd);
+        // Discord link commands are registered inside the module
         setCommandExecutor("register", loginCmd); setCommandExecutor("login", loginCmd);
         setCommandExecutor("changepassword", loginCmd);
         setCommandExecutor("unregister", loginCmd); setCommandExecutor("loginhistory", loginCmd); setCommandExecutor("checkalt", loginCmd);
@@ -479,7 +459,16 @@ public class Login extends JavaPlugin implements Listener {
                 rankModule.shutdown();
             }
 
-            if (discordLinkDatabase != null) discordLinkDatabase.disconnect();
+            // --- ADDED TICKET MODULE ---
+            if (ticketModule != null) {
+                ticketModule.shutdown();
+            }
+            // --- END TICKET MODULE ---
+
+            if (discordLinkingModule != null) {
+                discordLinkingModule.shutdown();
+            }
+
             if (loginDatabase != null) loginDatabase.disconnect();
             if (ordersDatabase != null) ordersDatabase.disconnect();
             if (coinflipModule != null && coinflipModule.getDatabase() != null) {
@@ -487,16 +476,10 @@ public class Login extends JavaPlugin implements Listener {
             }
             if (moderationDatabase != null) moderationDatabase.closeConnection();
 
-            if (discordLinking != null && discordLinking.getJDA() != null) {
-                getLogger().info("Shutting down Discord JDA...");
-                discordLinking.getJDA().shutdownNow();
-            }
-
             if (lagClearLogger != null) {
                 lagClearLogger.shutdown();
             }
 
-            if(linkWebhookClient != null) linkWebhookClient.close();
             if(loginWebhookClient != null) loginWebhookClient.close();
             if(orderWebhookClient != null) orderWebhookClient.close();
             if(staffWebhookClient != null) staffWebhookClient.close();
@@ -520,7 +503,7 @@ public class Login extends JavaPlugin implements Listener {
     public DiscordLinkDatabase getDatabase() { return discordLinkDatabase; }
     public LoginDatabase getLoginDatabase() { return loginDatabase; }
     public OrdersDatabase getOrdersDatabase() { return ordersDatabase; }
-    public DiscordLinking getDiscordLinking() { return discordLinking; }
+    public DiscordLinking getDiscordLinking() { return (discordLinkingModule != null) ? discordLinkingModule.getDiscordLinking() : null; }
     public LoginSystem getLoginSystem() { return loginSystem; }
     public OrderSystem getOrderSystem() { return orderSystem; }
     public Login getPlugin() { return this; }

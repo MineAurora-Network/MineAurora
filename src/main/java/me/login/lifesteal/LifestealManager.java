@@ -120,6 +120,12 @@ public class LifestealManager {
     public int getMaxHearts() { return MAX_HEARTS; }
     public int getMinHearts() { return MIN_HEARTS; }
 
+    // --- ADDED (Request 4) ---
+    public Set<String> getLifestealWorlds() {
+        return lifestealWorlds;
+    }
+    // --- END ADDITION ---
+
     public boolean withdrawHearts(Player player, int amount) {
         if (amount <= 0) return false;
 

@@ -37,6 +37,10 @@ dependencies {
     }
     implementation 'net.kyori:adventure-text-minimessage:4.17.0'
     compileOnly 'net.luckperms:api:5.4'
+
+    // --- THIS IS THE NEW LINE YOU NEED ---
+    compileOnly 'com.mojang:authlib:1.5.21'
+    // --- END ---
 }
 
 shadowJar {
