@@ -49,7 +49,7 @@ public class DiscordDataHelper {
         Comparator<OfflinePlayer> comparator = switch (category) {
             case "kills" -> Comparator.comparingLong(p -> p.getStatistic(Statistic.PLAYER_KILLS));
             case "deaths" -> Comparator.comparingLong(p -> p.getStatistic(Statistic.DEATHS));
-            case "playtime" -> Comparator.comparingLong(p -> p.getStatistic(Statistic.PLAY_ONE_MINUTE)); // Ticks
+            case "playtime" -> Comparator.comparingLong(p -> p.getStatistic(Statistic.PLAY_ONE_MINUTE));
             case "balance" -> Comparator.comparingLong(this::getPlayerBalance);
             case "credits" -> Comparator.comparingLong(p -> getSkriptVarAsLong(p, "credits_%player's uuid%"));
             case "lifesteal" -> Comparator.comparingLong(p -> getSkriptVarAsLong(p, "lifesteal_level_%player's uuid%"));
@@ -128,7 +128,7 @@ public class DiscordDataHelper {
         }
 
         try {
-            Object value = SkriptVarParse.getVariable(varName);
+            Object value = SkriptUtils.getVar(varName);
 
             if (value instanceof Number) {
                 return ((Number) value).longValue();

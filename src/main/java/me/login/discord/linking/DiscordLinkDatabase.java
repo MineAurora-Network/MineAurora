@@ -1,6 +1,6 @@
-package me.login.discord.linking; // <-- CHANGED
+package me.login.discord.linking;
 
-import me.login.Login; // Import from base package
+import me.login.Login;
 
 import java.io.File;
 import java.sql.*;
@@ -8,7 +8,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-// Renamed from LocalDatabase
 public class DiscordLinkDatabase {
 
     private final String url;
@@ -19,7 +18,7 @@ public class DiscordLinkDatabase {
         this.plugin = plugin;
         File dataFolder = plugin.getDataFolder();
         if (!dataFolder.exists()) dataFolder.mkdirs();
-        this.url = "jdbc:sqlite:" + dataFolder.getAbsolutePath() + File.separator + "data.db"; // Still uses data.db
+        this.url = "jdbc:sqlite:" + dataFolder.getAbsolutePath() + File.separator + "data.db";
     }
 
     public void connect() {
@@ -76,5 +75,24 @@ public class DiscordLinkDatabase {
             ps.setString(1, uuid.toString()); try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
         } catch (SQLException e) { plugin.getLogger().warning("Failed check link DB:"); e.printStackTrace(); }
         return false;
+    }
+
+    public Long getLinkedDiscordId(UUID uuid) {
+        if (getConnection() == null) {
+            plugin.getLogger().warning("Link DB Conn Null - Cannot check link status");
+            return null;
+        }
+        try (PreparedStatement ps = getConnection().prepareStatement("SELECT discord_id FROM linked_accounts WHERE uuid = ?")) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong("discord_id");
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed check link DB:");
+            e.printStackTrace();
+        }
+        return null;
     }
 }

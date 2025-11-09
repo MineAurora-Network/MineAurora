@@ -56,6 +56,7 @@ public class LoginSystem implements Listener {
 
     private final Component serverPrefixComponent;
     private final Component titlePrefixComponent;
+    private final String legacyTitlePrefixString;
     private final String legacyPrefixPlain;
     private final LegacyComponentSerializer legacySerializer = LegacyComponentSerializer.legacyAmpersand();
     private final MiniMessage mm = MiniMessage.miniMessage();
@@ -92,6 +93,7 @@ public class LoginSystem implements Listener {
         this.legacyPrefixPlain = LegacyComponentSerializer.legacySection().serialize(mm.deserialize(prefixString));
 
         String titlePrefixString = plugin.getConfig().getString("server-prefix-2", "&b&lᴍɪɴᴇᴀᴜʀᴏʀᴀ&f: ");
+        this.legacyTitlePrefixString = legacySerializer.serialize(legacySerializer.deserialize(titlePrefixString));
         this.titlePrefixComponent = legacySerializer.deserialize(titlePrefixString + " ");
 
         this.bookEnabled = plugin.getConfig().getBoolean("login-book.enabled", true);
@@ -184,10 +186,10 @@ public class LoginSystem implements Listener {
 
                 if (isReg) {
                     sendPrefixedMessage(p, "<white>You are not logged in, use <yellow>/login <pass></yellow>, you have <yellow>" + MAX_LOGIN_ATTEMPTS + "</yellow> <white>attempts left.</white>");
-                    p.sendTitle(titlePrefixComponent.content(), "§fUse §e/login <pass> §fto login", 10, 100, 20);
+                    p.sendTitle(legacyTitlePrefixString, "§fUse §e/login <pass> §fto login", 10, 100, 20);
                 } else {
                     sendPrefixedMessage(p, "<white>You are not registered use <green>/register <pass> <pass></green></white>");
-                    p.sendTitle(titlePrefixComponent.content(), "§fYou are not registered use §a/register <pass> <pass>", 10, 100, 20);
+                    p.sendTitle(legacyTitlePrefixString, "§fYou are not registered use §a/register <pass> <pass>", 10, 100, 20);
                 }
             });
         });
@@ -249,7 +251,7 @@ public class LoginSystem implements Listener {
         stopBossbarTask(uuid);
 
         int timeLeft = loginTimeLeft.getOrDefault(uuid, (int) LOGIN_TIMEOUT_SECONDS);
-        String bossBarTitle = titlePrefixComponent.content() + "§eYou have " + timeLeft + "s left to log in.";
+        String bossBarTitle = legacyTitlePrefixString + "§eYou have " + timeLeft + "s left to log in.";
         BossBar bossBar = Bukkit.createBossBar(bossBarTitle, BarColor.YELLOW, BarStyle.SOLID);
 
         bossBar.setProgress(1.0);
@@ -268,7 +270,7 @@ public class LoginSystem implements Listener {
                 int newTimeLeft = loginTimeLeft.getOrDefault(uuid, 0);
                 if (newTimeLeft < 0) newTimeLeft = 0;
 
-                String bossBarTitleUpdate = titlePrefixComponent.content() + "§eYou have " + newTimeLeft + "s left to log in.";
+                String bossBarTitleUpdate = legacyTitlePrefixString + "§eYou have " + newTimeLeft + "s left to log in.";
                 bossBar.setTitle(bossBarTitleUpdate);
                 bossBar.setProgress((double) newTimeLeft / LOGIN_TIMEOUT_SECONDS);
 
@@ -390,7 +392,7 @@ public class LoginSystem implements Listener {
                 sendPrefixedMessage(player, "<red>Registered already! /login</red>");
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     needsRegistration.put(uuid, false);
-                    player.sendTitle(titlePrefixComponent.content(), "§f/login <password>", 10, 100, 20);
+                    player.sendTitle(legacyTitlePrefixString, "§f/login <password>", 10, 100, 20);
                 });
                 return;
             }
@@ -443,7 +445,7 @@ public class LoginSystem implements Listener {
                     stopBossbarTask(uuid);
                     loginTimeLeft.put(uuid, (int) LOGIN_TIMEOUT_SECONDS);
                     startBossbarTask(player);
-                    player.sendTitle(titlePrefixComponent.content(), "§a/register <pass> <pass>", 10, 100, 20);
+                    player.sendTitle(legacyTitlePrefixString, "§a/register <pass> <pass>", 10, 100, 20);
                 });
                 return;
             }
@@ -502,7 +504,7 @@ public class LoginSystem implements Listener {
                 .map(line -> line.replace("<server_prefix>", legacyPrefixPlain))
                 .collect(Collectors.joining("\n"));
         String processedPage = legacySerializer.serialize(legacySerializer.deserialize(singlePageContent));
-        meta.addPage(Component.text(processedPage));
+        meta.addPage(processedPage);
         book.setItemMeta(meta);
 
         player.getInventory().addItem(book);

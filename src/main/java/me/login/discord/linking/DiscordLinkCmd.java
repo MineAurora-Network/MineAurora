@@ -161,7 +161,7 @@ public class DiscordLinkCmd implements CommandExecutor {
             }
 
             module.getDiscordLinking().getJDA().getGuilds().forEach(guild -> {
-                guild.retrieveMember(user).whenComplete((member, throwable) -> {
+                guild.retrieveMember(user).submit().whenComplete((member, throwable) -> {
                     if (member != null) {
                         try {
                             if (verifiedRole != null && member.getRoles().contains(verifiedRole)) {

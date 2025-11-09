@@ -556,4 +556,16 @@ public class Login extends JavaPlugin implements Listener {
             scoreboardManager.updateScoreboard(event.getPlayer());
         }
     }
+
+    public void sendStaffLog(String message) {
+        if (loginSystemLogger != null) {
+            loginSystemLogger.log(message);
+        } else if (lifestealLogger != null) {
+            lifestealLogger.logNormal(message);
+        } else if (lagClearLogger != null) {
+            lagClearLogger.sendLog(message);
+        } else {
+            getLogger().info("[StaffLog] " + message);
+        }
+    }
 }
