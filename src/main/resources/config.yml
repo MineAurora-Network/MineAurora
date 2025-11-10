@@ -50,9 +50,15 @@ code-expiry-seconds: 60
 
 server_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>: "
 server_prefix_2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
-server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
+server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
 cleaner_prefix: "<b><gradient:#F04747:#FF00F6>ᴄʟᴇᴀɴᴇʀ</gradient></b><white>:"
 cleaner_prefix_2: "&x&F&0&4&7&4&7&lᴄ&x&F&3&3&B&6&4&lʟ&x&F&5&2&F&8&1&lᴇ&x&F&8&2&4&9&F&lᴀ&x&F&A&1&8&B&C&lɴ&x&F&D&0&C&D&9&lᴇ&x&F&F&0&0&F&6&lʀ&f:"
+
+# --- NEW: Alert prefix for Order System (Req 3) ---
+alert_prefix: "<gray>[<red>ALERT</red>]<white> "
+
+# --- NEW: World for offline deliveries (Req 5) ---
+lifesteal-world: "lifesteal"
 
 
 discord-server-link: "your-discord.gg/invite"
@@ -87,10 +93,20 @@ coinflip:
 # ============================
 link-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
 login-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-order-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-# coinflip-system-log-webhook: "..." # <-- [REMOVED FOR REQ 9]
+# --- REMOVED: old order-system-log-webhook ---
 staff-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
 discord-staff-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+
+# --- NEW: Discord Bot Logging (Req 11) ---
+# These channel IDs must be set for the logger-bot-token to use.
+discord-logging:
+  order-channels:
+    creation: "0"
+    filling: "0"
+    management: "0"
+    admin: "0"
+    errors: "0"
+
 # ============================
 # Order System Configuration
 # ============================
@@ -102,6 +118,9 @@ overlord-order-limit: 9
 immortal-order-limit: 11
 supreme-order-limit: 13
 phantom-order-limit: 15
+
+# --- REMOVED OLD FLAT ORDER CHANNEL KEYS ---
+
 
 # =======================================================
 # Scoreboard Configuration - Edit your scoreboards here!
@@ -145,7 +164,7 @@ scoreboard:
       - '&6&l╏ &fMoney: &a%vault_eco_balance_formatted%'
       - "&6&l╏ &fLevel: &a{lifesteal_level_%player's uuid%}"
       - '&6&l╏ &fHeart: &a%player_health_rounded%'
-      - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
+      - "&6&lVfCredits: &a{credits.%player's uuid%}"
       - '&6&l╏ &fPing: &a%player_ping%'
       - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'

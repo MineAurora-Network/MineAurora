@@ -15,6 +15,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent; // [Req 6] IMPORT ADDED
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -35,6 +36,7 @@ public class CoinflipManageMenu implements Listener {
     private final Economy economy;
     private final MessageManager msg; // [Req 1]
     private final CoinflipLogger logger; // [Req 9]
+    private final CoinflipSystem coinflipSystem; // [Req 4]
 
     private static final int GUI_SIZE = 54;
     private static final int GAMES_PER_PAGE = 45;
@@ -44,12 +46,13 @@ public class CoinflipManageMenu implements Listener {
     public static final String GUI_MANAGE_METADATA = "CoinflipManageMenu";
 
 
-    public CoinflipManageMenu(Login plugin, CoinflipDatabase database, Economy economy, MessageManager msg, CoinflipLogger logger) {
+    public CoinflipManageMenu(Login plugin, CoinflipDatabase database, Economy economy, MessageManager msg, CoinflipLogger logger, CoinflipSystem coinflipSystem) {
         this.plugin = plugin;
         this.database = database;
         this.economy = economy;
         this.msg = msg; // [Req 1]
         this.logger = logger; // [Req 9]
+        this.coinflipSystem = coinflipSystem; // [Req 4]
         this.gameIdKey = new NamespacedKey(plugin, "cf_manage_game_id");
         this.gameAmountKey = new NamespacedKey(plugin, "cf_manage_game_amount");
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
@@ -109,7 +112,7 @@ public class CoinflipManageMenu implements Listener {
             else meta.setOwner(game.getCreatorName());
 
             // --- FIX: Removed bold ---
-            meta.displayName(Component.text("Your Coinflip", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
+            meta.displayName(Component.text("Your Coinflip (ID: " + game.getGameId() + ")", NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false)); // [Req 4] Show ID
 
             List<Component> lore = new ArrayList<>();
             lore.add(Component.text("Amount: ", NamedTextColor.GRAY).append(Component.text(economy.format(game.getAmount()), NamedTextColor.GOLD)).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
@@ -208,6 +211,15 @@ public class CoinflipManageMenu implements Listener {
         }
     }
 
+    // [Req 6] ADDED: InventoryCloseEvent to remove metadata
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        Player player = (Player) event.getPlayer();
+        if (player.hasMetadata(GUI_MANAGE_METADATA)) {
+            player.removeMetadata(GUI_MANAGE_METADATA, plugin);
+        }
+    }
+
     private void handleCancelCoinflip(Player player, long gameId, double amount, int currentPage) {
         // --- FIX: Lock is now added in the click event *before* the delay ---
         // playersCancelling.add(player.getUniqueId()); // [Req 2] Add lock
@@ -224,6 +236,9 @@ public class CoinflipManageMenu implements Listener {
                     }
 
                     if (success) {
+                        // [Req 4] Also remove from cache
+                        coinflipSystem.getPendingGames(false).join().removeIf(g -> g.getGameId() == gameId);
+
                         EconomyResponse refundResp = economy.depositPlayer(player, amount);
                         if (refundResp.transactionSuccess()) {
                             msg.send(player, "&aCoinflip cancelled and " + economy.format(amount) + " refunded.");
@@ -239,7 +254,10 @@ public class CoinflipManageMenu implements Listener {
                     }
                 } finally {
                     playersCancelling.remove(playerUUID); // [Req 2] Remove lock
-                    openManageMenu(player, currentPage); // Refresh menu
+                    // Refresh menu only if the player is still online and has the menu open
+                    if (player.isOnline() && player.hasMetadata(GUI_MANAGE_METADATA)) {
+                        openManageMenu(player, currentPage); // Refresh menu
+                    }
                 }
             });
         });

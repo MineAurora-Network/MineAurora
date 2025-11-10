@@ -79,8 +79,9 @@ public class CoinflipDatabase {
                 player_name VARCHAR(16) NOT NULL,
                 wins INTEGER NOT NULL DEFAULT 0,
                 losses INTEGER NOT NULL DEFAULT 0,
-                cooldown BIGINT NOT NULL DEFAULT 0
-            )""";
+                cooldown BIGINT NOT NULL DEFAULT 0,
+                message_toggle BOOLEAN NOT NULL DEFAULT 1
+            )"""; // [Req 3] Added message_toggle column
 
         String statsIndex = "CREATE INDEX IF NOT EXISTS idx_coinflips_status ON coinflips (status)";
         String creatorIndex = "CREATE INDEX IF NOT EXISTS idx_coinflips_creator ON coinflips (creator_uuid, status)";
@@ -296,6 +297,49 @@ public class CoinflipDatabase {
                 future.complete(null);
             } catch (SQLException e) {
                 future.completeExceptionally(e);
+            }
+        });
+        return future;
+    }
+
+    // --- [Req 3] Message Toggle Methods ---
+    public CompletableFuture<Void> saveMessageToggle(UUID uuid, boolean enabled) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            Connection conn = getConnection();
+            if (conn == null) { future.completeExceptionally(new SQLException("DB not connected")); return; }
+            String query = "INSERT INTO coinflip_stats (player_uuid, player_name, message_toggle) VALUES (?, ?, ?) ON CONFLICT(player_uuid) DO UPDATE SET message_toggle = excluded.message_toggle";
+            try (PreparedStatement ps = conn.prepareStatement(query)) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, "Unknown"); // Name will be updated on next stat update
+                ps.setBoolean(3, enabled);
+                ps.executeUpdate();
+                future.complete(null);
+            } catch (SQLException e) {
+                future.completeExceptionally(e);
+            }
+        });
+        return future;
+    }
+
+    public CompletableFuture<Boolean> loadMessageToggle(UUID uuid) {
+        CompletableFuture<Boolean> future = new CompletableFuture<>();
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            Connection conn = getConnection();
+            if (conn == null) { future.complete(true); return; } // Default to true
+            String query = "SELECT message_toggle FROM coinflip_stats WHERE player_uuid = ?";
+            try (PreparedStatement ps = conn.prepareStatement(query)) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        future.complete(rs.getBoolean("message_toggle"));
+                    } else {
+                        future.complete(true); // Default to true if no record
+                    }
+                }
+            } catch (SQLException e) {
+                future.completeExceptionally(e);
+                future.complete(true); // Default to true on error
             }
         });
         return future;

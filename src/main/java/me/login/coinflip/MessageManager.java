@@ -10,22 +10,27 @@ import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.stream.Collectors;
+
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 public class MessageManager {
 
     private final Login plugin;
+    private final CoinflipDatabase database; // [Req 3]
     private final Component serverPrefix;
     private final List<String> broadcastWorlds;
 
-    private File dataFile;
-    private FileConfiguration dataConfig;
+    // [Req 3] Removed dataFile and dataConfig
 
-    public MessageManager(Login plugin) {
+    public MessageManager(Login plugin, CoinflipDatabase database) {
         this.plugin = plugin;
+        this.database = database; // [Req 3]
 
         // Load prefixes
         String prefixString = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>:");
@@ -46,34 +51,27 @@ public class MessageManager {
             plugin.getLogger().warning("No 'coinflip.broadcast-worlds' defined in config.yml. Broadcasts will not be sent.");
         }
 
-        // Load data file for toggles
-        setupDataFile();
+        // [Req 3] Removed setupDataFile() call
     }
 
-    private void setupDataFile() {
-        dataFile = new File(plugin.getDataFolder(), "coinflip-data.yml");
-        if (!dataFile.exists()) {
-            try {
-                dataFile.createNewFile();
-            } catch (IOException e) {
-                plugin.getLogger().severe("Could not create coinflip-data.yml!");
-            }
-        }
-        dataConfig = YamlConfiguration.loadConfiguration(dataFile);
-    }
+    // [Req 3] Removed setupDataFile()
 
     public void saveToggle(UUID uuid, boolean value) {
-        dataConfig.set("players." + uuid.toString(), value);
-        try {
-            dataConfig.save(dataFile);
-        } catch (IOException e) {
-            plugin.getLogger().severe("Could not save coinflip-data.yml!");
-        }
+        // [Req 3] Save to database
+        database.saveMessageToggle(uuid, value).exceptionally(ex -> {
+            plugin.getLogger().log(Level.SEVERE, "Failed to save coinflip message toggle for " + uuid, ex);
+            return null;
+        });
     }
 
     public boolean getToggle(UUID uuid) {
-        // Default to true (on)
-        return dataConfig.getBoolean("players." + uuid.toString(), true);
+        // [Req 3] Load from database (blocking, as this is checked during broadcasts)
+        try {
+            return database.loadMessageToggle(uuid).join();
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to load coinflip message toggle for " + uuid, e);
+            return true; // Default to true on error
+        }
     }
 
     /**
@@ -93,6 +91,37 @@ public class MessageManager {
     public void send(Player player, String legacyText) {
         player.sendMessage(format(legacyText));
     }
+
+    /**
+     * [Req 2] Sends multiple lines of text as a single message with one prefix.
+     * @param player The player.
+     * @param legacyLines The legacy text lines (e.g., "&eLine 1", "&eLine 2").
+     */
+    public void send(Player player, String... legacyLines) {
+        if (legacyLines.length == 0) {
+            return;
+        }
+        if (legacyLines.length == 1) {
+            send(player, legacyLines[0]);
+            return;
+        }
+
+        // Join lines with MiniMessage newline tag
+        String joinedLegacyText = Arrays.stream(legacyLines)
+                .collect(Collectors.joining("<br>"));
+
+        player.sendMessage(serverPrefix.append(LegacyComponentSerializer.legacyAmpersand().deserialize(joinedLegacyText)));
+    }
+
+    /**
+     * [Req 2] Sends multiple lines of text as a single message with one prefix.
+     * @param player The player.
+     * @param legacyLines The list of legacy text lines.
+     */
+    public void send(Player player, List<String> legacyLines) {
+        send(player, legacyLines.toArray(new String[0]));
+    }
+
 
     /**
      * Broadcasts a message to all players in the configured worlds who have toggles enabled.

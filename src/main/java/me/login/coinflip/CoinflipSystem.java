@@ -20,6 +20,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
@@ -36,6 +37,12 @@ public class CoinflipSystem {
     private final Random random = ThreadLocalRandom.current();
     private final Set<UUID> playersChallenging;
 
+    // [Req 4] Cache logic moved from CoinflipMenu
+    private List<CoinflipGame> pendingGamesCache = Collections.synchronizedList(new ArrayList<>());
+    private long lastCacheUpdateTime = 0;
+    private final long CACHE_DURATION_MS = 10 * 1000;
+    private boolean isRefreshingCache = false;
+
     private static final int ANIMATION_GUI_SIZE = 27;
     private static final int ANIMATION_DURATION_TICKS = 5 * 20;
     private static final int ANIMATION_SLIDE_SPEED_TICKS = 4;
@@ -50,11 +57,45 @@ public class CoinflipSystem {
         this.logger = logger; // [Req 9]
         this.msg = msg; // [Req 1]
         this.playersChallenging = playersChallenging;
+        getPendingGames(true); // [Req 4] Initial cache load
     }
 
     // [Req 8] Getter for admin menu
     public Map<UUID, BukkitTask> getActiveAnimations() {
         return activeAnimations;
+    }
+
+    // [Req 4] Cache logic moved from CoinflipMenu
+    public CompletableFuture<List<CoinflipGame>> getPendingGames(boolean force) {
+        long now = System.currentTimeMillis();
+        if (isRefreshingCache) {
+            return CompletableFuture.completedFuture(new ArrayList<>(pendingGamesCache));
+        }
+        if (!force && (now - lastCacheUpdateTime < CACHE_DURATION_MS)) {
+            return CompletableFuture.completedFuture(new ArrayList<>(pendingGamesCache)); // Return copy
+        }
+
+        isRefreshingCache = true;
+        return database.loadPendingCoinflips().whenComplete((games, error) -> {
+            if (games != null) {
+                this.pendingGamesCache = Collections.synchronizedList(games); // Update cache
+                this.lastCacheUpdateTime = System.currentTimeMillis();
+            }
+            if (error != null) {
+                plugin.getLogger().log(Level.SEVERE, "Failed to refresh coinflip games cache", error);
+            }
+            isRefreshingCache = false;
+        });
+    }
+
+    // [Req 4] Helper for /cf join <id>
+    public CoinflipGame getPendingGameById(long gameId) {
+        // Force a refresh if cache is old, but don't wait for it
+        getPendingGames(false);
+        return pendingGamesCache.stream()
+                .filter(g -> g.getGameId() == gameId)
+                .findFirst()
+                .orElse(null);
     }
 
     public void startCoinflipGame(Player challenger, CoinflipGame game) {
@@ -110,6 +151,9 @@ public class CoinflipSystem {
                     return;
                 }
 
+                // [Req 4] Remove game from pending cache
+                pendingGamesCache.removeIf(g -> g.getGameId() == game.getGameId());
+
                 msg.send(challenger, "&eYou challenged " + creator.getName() + "'s coinflip for " + economy.format(amount) + "!");
                 msg.send(creator, "&e" + challenger.getName() + " challenged your coinflip for " + economy.format(amount) + "!");
                 // [Req 9]
@@ -145,7 +189,8 @@ public class CoinflipSystem {
         ItemStack p2Head = getPlayerHead(p2.getName());
 
         gui.setItem(10, p1Head);
-        gui.setItem(16, p2Head);
+        // [Req 5] FIN: Do not set the right-side (p2) head. The animation will fill this space.
+        // gui.setItem(16, p2Head);
 
         p1.openInventory(gui);
         p2.openInventory(gui);
@@ -305,6 +350,9 @@ public class CoinflipSystem {
         UUID p1UUID = game.getCreatorUUID();
         UUID p2UUID = game.getChallengerUUID();
         double amount = game.getAmount();
+
+        // [Req 4] Remove from cache if it's pending
+        pendingGamesCache.removeIf(g -> g.getGameId() == game.getGameId());
 
         // Check if game is 'ACTIVE' (in an animation)
         if (activeAnimations.containsKey(p1UUID) || (p2UUID != null && activeAnimations.containsKey(p2UUID))) {

@@ -11,7 +11,9 @@ import me.login.misc.tokens.TokenModule;
 import me.login.misc.creatorcode.CreatorCodeModule;
 import me.login.misc.rank.RankManager;
 import me.login.misc.rank.RankModule;
-import me.login.ordersystem.*;
+// --- REMOVED OLD ORDER SYSTEM IMPORTS ---
+import me.login.ordersystem.OrderModule; // --- ADDED NEW MODULE IMPORT
+import me.login.ordersystem.gui.OrderAlertMenu; // --- ADDED FOR GETTER
 import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
@@ -54,12 +56,10 @@ public class Login extends JavaPlugin implements Listener {
     private LoginSystem loginSystem;
     private LoginDatabase loginDatabase;
     private LoginSystemLogger loginSystemLogger;
-    private OrdersDatabase ordersDatabase;
-    private OrderSystem orderSystem;
-    private OrderMenu orderMenu;
-    private OrderFilling orderFilling;
-    private OrderManage orderManage;
-    private OrderAdminMenu orderAdminMenu;
+
+    // --- REMOVED OLD ORDER SYSTEM FIELDS ---
+    private OrderModule orderModule; // --- ADDED NEW MODULE FIELD ---
+
     private DamageIndicator damageIndicator;
     private int defaultOrderLimit;
     private ScoreboardManager scoreboardManager;
@@ -90,7 +90,7 @@ public class Login extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(new me.login.misc.GuiCleanup.MetaDataRemover(this), this);
 
         this.discordModConfig = new DiscordModConfig(this);
-        this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3);
+        this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3); // Kept for OrderCreate
 
         if (!setupEconomy()) {
             disableWithError("Vault dependency not found or no Economy plugin detected! Coinflip and Order systems require Vault.");
@@ -115,12 +115,7 @@ public class Login extends JavaPlugin implements Listener {
             return;
         }
 
-        this.ordersDatabase = new OrdersDatabase(this);
-        ordersDatabase.connect();
-        if (ordersDatabase.getConnection() == null) {
-            disableWithError("Orders DB failed.");
-            return;
-        }
+        // --- REMOVED OLD ORDERSDATABASE CONNECT ---
 
         this.coinflipModule = new CoinflipModule(this);
         if (!coinflipModule.initDatabase()) {
@@ -137,13 +132,9 @@ public class Login extends JavaPlugin implements Listener {
         this.damageIndicator = new DamageIndicator(this);
         getServer().getPluginManager().registerEvents(damageIndicator, this);
 
-        this.orderSystem = new OrderSystem(this, ordersDatabase, null);
-        this.orderFilling = new OrderFilling(this, orderSystem);
-        this.orderMenu = new OrderMenu(this, orderSystem, orderFilling);
-        this.orderManage = new OrderManage(this, orderSystem);
-        this.orderAdminMenu = new OrderAdminMenu(this, orderSystem);
+        // --- REMOVED OLD ORDER SYSTEM INITIALIZATION ---
+        // --- REMOVED OLD OrderAdminMenu LISTENER REGISTRATION ---
 
-        getServer().getPluginManager().registerEvents(orderAdminMenu, this);
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
 
         this.leaderboardModule = new LeaderboardModule(this);
@@ -232,6 +223,12 @@ public class Login extends JavaPlugin implements Listener {
                             getLogger().severe("Failed to initialize Lifesteal Module!");
                         }
 
+                        // --- ADDED NEW ORDER MODULE INITIALIZATION ---
+                        getLogger().info("Initializing OrderModule...");
+                        orderModule = new OrderModule(Login.this);
+                        orderModule.enable();
+                        // --- END ADD ---
+
                         getLogger().info("Initializing Coinflip system...");
                         coinflipModule.initLogicAndListeners();
 
@@ -302,14 +299,16 @@ public class Login extends JavaPlugin implements Listener {
     }
 
     private void registerCommands() {
-        if (loginSystem == null || orderSystem == null || moderationDatabase == null) {
-            getLogger().severe("Cannot register Bukkit commands - one or more core systems (Login, Order, Mod) failed initialization!");
+        // --- MODIFIED IF CHECK (Removed orderSystem) ---
+        if (loginSystem == null || moderationDatabase == null) {
+            getLogger().severe("Cannot register Bukkit commands - one or more core systems (Login, Mod) failed initialization!");
             return;
         }
 
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase, loginSystemLogger);
         LoginSystemAdminCmd adminLoginCmd = new LoginSystemAdminCmd(this, loginSystem, loginDatabase, discordLinkDatabase, loginSystemLogger);
-        OrderCmd orderCmd = new OrderCmd(this, orderSystem, orderMenu, orderManage, orderAdminMenu);
+
+        // --- REMOVED OLD OrderCmd INITIALIZATION AND REGISTRATION ---
 
         setCommandExecutor("register", loginCmd);
         setCommandExecutor("login", loginCmd);
@@ -320,7 +319,7 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("checkalt", adminLoginCmd);
         setCommandExecutor("adminchangepass", adminLoginCmd);
 
-        setCommandExecutor("order", orderCmd);
+        // --- REMOVED setCommandExecutor("order", orderCmd); ---
 
         MuteCommand muteExecutor = new MuteCommand(this, moderationDatabase);
         setCommandExecutor("mute", muteExecutor);
@@ -418,11 +417,20 @@ public class Login extends JavaPlugin implements Listener {
             if (ticketModule != null) {
                 ticketModule.shutdown();
             }
+
+            // --- ADDED NEW MODULE DISABLE ---
+            if (orderModule != null) {
+                orderModule.disable();
+            }
+            // --- END ADD ---
+
             if (discordLinkingModule != null) {
                 discordLinkingModule.shutdown();
             }
             if (loginDatabase != null) loginDatabase.disconnect();
-            if (ordersDatabase != null) ordersDatabase.disconnect();
+
+            // --- REMOVED OLD ordersDatabase.disconnect() ---
+
             if (coinflipModule != null && coinflipModule.getDatabase() != null) {
                 coinflipModule.getDatabase().disconnect();
             }
@@ -453,9 +461,9 @@ public class Login extends JavaPlugin implements Listener {
     public LoginDatabase getLoginDatabase() {
         return loginDatabase;
     }
-    public OrdersDatabase getOrdersDatabase() {
-        return ordersDatabase;
-    }
+
+    // --- REMOVED OLD ORDER SYSTEM GETTERS ---
+
     public DiscordLinking getDiscordLinking() {
         return (discordLinkingModule != null) ? discordLinkingModule.getDiscordLinking() : null;
     }
@@ -465,24 +473,17 @@ public class Login extends JavaPlugin implements Listener {
     public LoginSystemLogger getLoginSystemLogger() {
         return loginSystemLogger;
     }
-    public OrderSystem getOrderSystem() {
-        return orderSystem;
-    }
+
     public Login getPlugin() {
         return this;
     }
-    public OrderMenu getOrderMenu() {
-        return orderMenu;
+
+    // --- ADDED GETTER FOR OrderCmd ---
+    public OrderAlertMenu getOrderAlertMenu() {
+        return (orderModule != null) ? orderModule.getAlertMenu() : null;
     }
-    public OrderFilling getOrderFilling() {
-        return orderFilling;
-    }
-    public OrderManage getOrderManage() {
-        return orderManage;
-    }
-    public OrderAdminMenu getOrderAdminMenu() {
-        return orderAdminMenu;
-    }
+
+
     public int getDefaultOrderLimit() {
         return defaultOrderLimit;
     }
@@ -567,5 +568,10 @@ public class Login extends JavaPlugin implements Listener {
         } else {
             getLogger().info("[StaffLog] " + message);
         }
+    }
+
+    // --- ADDED FOR JDA ---
+    public JDA getJda() {
+        return (lagClearLogger != null) ? lagClearLogger.getJDA() : null;
     }
 }

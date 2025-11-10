@@ -3,6 +3,7 @@ package me.login.coinflip;
 import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.command.Command;
@@ -15,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.logging.Level;
 
 public class CoinflipCmd implements CommandExecutor, TabCompleter {
@@ -61,6 +63,10 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
             case "create":
                 handleCreate(player, args);
                 return true;
+            // [Req 4] Added 'join' command
+            case "join":
+                handleJoin(player, args);
+                return true;
             case "manage":
                 manageMenu.openManageMenu(player, 0);
                 return true;
@@ -90,6 +96,43 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
                 sendHelpMessage(player);
                 return true;
         }
+    }
+
+    // [Req 4] Added handleJoin method
+    private void handleJoin(Player player, String[] args) {
+        if (args.length != 2) {
+            msg.send(player, "&cUsage: /coinflip join <id>");
+            return;
+        }
+
+        long gameId;
+        try {
+            gameId = Long.parseLong(args[1]);
+        } catch (NumberFormatException e) {
+            msg.send(player, "&c'" + args[1] + "' is not a valid game ID.");
+            return;
+        }
+
+        // Prevent double-clicks
+        // [FIX] Changed to coinflipMenu
+        if (coinflipMenu.getPlayersChallengingSet().contains(player.getUniqueId())) {
+            return;
+        }
+
+        CoinflipGame gameToJoin = coinflipSystem.getPendingGameById(gameId);
+
+        if (gameToJoin == null) {
+            msg.send(player, "&cCould not find a pending coinflip with that ID. It may have started or been cancelled.");
+            return;
+        }
+
+        // Add lock
+        // [FIX] Changed to coinflipMenu
+        coinflipMenu.getPlayersChallengingSet().add(player.getUniqueId());
+
+        // Run the join logic
+        // This method is async and handles removing the lock on success/fail
+        coinflipSystem.startCoinflipGame(player, gameToJoin);
     }
 
     // [FIX] Added handleCreate method back
@@ -145,9 +188,20 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
                             msg.send(player, "&aCoinflip created for " + economy.format(amount) + " on " + chosenSide.name().toLowerCase() + "!");
 
                             // [Req 4] & [Req 9] Broadcast and Log
-                            String broadcastMsg = "<yellow>" + player.getName() + "</yellow> created a coinflip for <gold>" + economy.format(amount) + "</gold>!";
-                            msg.broadcast(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(broadcastMsg));
+                            // String broadcastMsg = "<yellow>" + player.getName() + "</yellow> created a coinflip for <gold>" + economy.format(amount) + "</gold>!";
+
+                            // [Req 4] Create clickable broadcast message
+                            String clickCommand = "/cf join " + gameId;
+                            Component broadcastComponent = MiniMessage.miniMessage().deserialize(
+                                    "<yellow>" + player.getName() + "</yellow> created a coinflip for <gold>" + economy.format(amount) + "</gold>! " +
+                                            "(ID: " + gameId + ") <green><click:suggest_command:'" + clickCommand + "'>[Click to Join]</click></green>"
+                            );
+                            msg.broadcast(broadcastComponent);
+
                             logger.logGame(player.getName() + " created a coinflip (ID: " + gameId + ") for `" + economy.format(amount) + "` on `" + chosenSide.name() + "`");
+
+                            // [Req 4] Manually refresh cache after creation
+                            coinflipSystem.getPendingGames(true);
                         }
                     });
                 });
@@ -192,21 +246,27 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
     }
 
     // [FIX] Renamed and re-added 'create' command to help
+    // [Req 2] Updated to use new multi-line send method
     private void sendHelpMessage(Player player) {
-        msg.send(player, "&b&lCoinflip Help Menu");
-        msg.send(player, "&e/cf create <heads/tails> <amount> &7- Create a new coinflip.");
-        msg.send(player, "&e/cf menu &7- Opens the main coinflip menu.");
-        msg.send(player, "&e/cf manage &7- Manage your pending coinflips.");
-        msg.send(player, "&e/cf msgtoggle &7- Toggles coinflip broadcast messages.");
+        List<String> helpLines = new ArrayList<>();
+        helpLines.add("&b&lCoinflip Help Menu");
+        helpLines.add("&e/cf create <heads/tails> <amount> &7- Create a new coinflip.");
+        helpLines.add("&e/cf join <id> &7- Join a pending coinflip by its ID.");
+        helpLines.add("&e/cf menu &7- Opens the main coinflip menu.");
+        helpLines.add("&e/cf manage &7- Manage your pending coinflips.");
+        helpLines.add("&e/cf msgtoggle &7- Toggles coinflip broadcast messages.");
+
         if (player.hasPermission("login.coinflip.admin")) {
-            msg.send(player, "&c/cf adminmenu &7- Opens the admin menu to cancel games.");
+            helpLines.add("&c/cf adminmenu &7- Opens the admin menu to cancel games.");
         }
+
+        msg.send(player, helpLines);
     }
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
-            List<String> completions = new ArrayList<>(Arrays.asList("help", "manage", "msgtoggle", "menu", "create")); // [FIX] Added 'create' and 'menu'
+            List<String> completions = new ArrayList<>(Arrays.asList("help", "manage", "msgtoggle", "menu", "create", "join")); // [Req 4] Added 'join'
             if (sender.hasPermission("login.coinflip.admin")) {
                 completions.add("adminmenu");
             }
@@ -221,6 +281,14 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("create")) {
             return Arrays.asList("1k", "10k", "100k", "1m");
+        }
+        // [Req 4] Tab complete for /cf join
+        if (args.length == 2 && args[0].equalsIgnoreCase("join")) {
+            // Suggest IDs of pending games
+            return coinflipSystem.getPendingGames(false).join().stream()
+                    .map(g -> String.valueOf(g.getGameId()))
+                    .filter(s -> s.startsWith(args[1]))
+                    .toList();
         }
         return new ArrayList<>();
     }

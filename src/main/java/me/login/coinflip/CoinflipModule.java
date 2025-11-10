@@ -67,13 +67,17 @@ public class CoinflipModule implements Listener {
         plugin.getLogger().info("LagClear Logger JDA is now connected. Initializing Coinflip system...");
 
         // 1. Initialize all components
-        this.coinflipMessageManager = new MessageManager(plugin);
+        // [Req 3] Pass database to MessageManager
+        this.coinflipMessageManager = new MessageManager(plugin, coinflipDatabase);
         this.coinflipLogger = new CoinflipLogger(plugin);
 
+        // [Req 4] CoinflipMenu no longer needs database (for cache)
         this.coinflipMenu = new CoinflipMenu(plugin, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger);
+        // [Req 4] CoinflipSystem now needs database (for cache)
         this.coinflipSystem = new CoinflipSystem(plugin, coinflipDatabase, vaultEconomy, coinflipLogger, coinflipMessageManager, coinflipMenu.getPlayersChallengingSet());
         this.coinflipMenu.setCoinflipSystem(coinflipSystem);
-        this.coinflipManageMenu = new CoinflipManageMenu(plugin, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger);
+        // [FIX] Added coinflipSystem to constructor
+        this.coinflipManageMenu = new CoinflipManageMenu(plugin, coinflipDatabase, vaultEconomy, coinflipMessageManager, coinflipLogger, coinflipSystem);
         this.coinflipAdminMenu = new CoinflipAdminMenu(plugin, coinflipDatabase, coinflipSystem, vaultEconomy, coinflipMessageManager, coinflipLogger);
 
         // 2. Register Listeners
@@ -104,10 +108,22 @@ public class CoinflipModule implements Listener {
         UUID playerUUID = player.getUniqueId();
 
         // This check ensures the module has been initialized.
-        if (coinflipDatabase == null || vaultEconomy == null) {
+        if (coinflipDatabase == null || vaultEconomy == null || coinflipSystem == null) {
             return;
         }
 
+        // [Req 6] Remove all metadata on quit to prevent "stuck" GUIs
+        if (player.hasMetadata(CoinflipMenu.GUI_MAIN_METADATA)) {
+            player.removeMetadata(CoinflipMenu.GUI_MAIN_METADATA, plugin);
+        }
+        if (player.hasMetadata(CoinflipManageMenu.GUI_MANAGE_METADATA)) {
+            player.removeMetadata(CoinflipManageMenu.GUI_MANAGE_METADATA, plugin);
+        }
+        if (player.hasMetadata(CoinflipAdminMenu.GUI_ADMIN_METADATA)) {
+            player.removeMetadata(CoinflipAdminMenu.GUI_ADMIN_METADATA, plugin);
+        }
+
+        // [Req 7] This logic handles refunding pending coinflips on quit. It seems correct.
         coinflipDatabase.loadPlayerPendingCoinflips(playerUUID).whenCompleteAsync((games, error) -> {
             if (error != null || games == null || games.isEmpty()) {
                 return;
@@ -121,6 +137,13 @@ public class CoinflipModule implements Listener {
             if (totalRefund <= 0) {
                 return;
             }
+
+            // [Req 4] Also remove them from the cache
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                for (Long gameId : gameIds) {
+                    coinflipSystem.getPendingGames(false).join().removeIf(g -> g.getGameId() == gameId);
+                }
+            });
 
             CompletableFuture<?>[] removalFutures = gameIds.stream()
                     .map(coinflipDatabase::removeCoinflip)

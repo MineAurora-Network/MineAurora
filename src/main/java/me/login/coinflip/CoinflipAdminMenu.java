@@ -14,6 +14,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent; // [Req 6] IMPORT ADDED
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -254,6 +255,16 @@ public class CoinflipAdminMenu implements Listener {
         }
     }
 
+    // [Req 6] ADDED: InventoryCloseEvent to remove metadata
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        Player player = (Player) event.getPlayer();
+        if (player.hasMetadata(GUI_ADMIN_METADATA)) {
+            player.removeMetadata(GUI_ADMIN_METADATA, plugin);
+        }
+    }
+
+    // [FIX] Removed 'static' keyword from the method definition
     private void handleAdminCancel(Player admin, CoinflipGame game, int currentPage) {
         // --- FIX: Lock is now added in onInventoryClick ---
         // playersCancelling.add(admin.getUniqueId()); // [Req 2] Add lock
@@ -269,7 +280,11 @@ public class CoinflipAdminMenu implements Listener {
             public void run() {
                 playersCancelling.remove(admin.getUniqueId()); // [Req 2] Remove lock
                 refreshAllGamesCache(true);
-                openAdminMenu(admin, currentPage);
+
+                // [Req 6] Check if player is still online and has menu open
+                if (admin.isOnline() && admin.hasMetadata(GUI_ADMIN_METADATA)) {
+                    openAdminMenu(admin, currentPage);
+                }
             }
         }.runTaskLater(plugin, 10L); // 10 ticks to allow DB operations to complete
     }

@@ -3,6 +3,7 @@ package me.login.coinflip;
 import de.rapha149.signgui.SignGUI;
 import me.login.Login;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -16,6 +17,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType; // <-- Was missing in my previous output, added now
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent; // [Req 6] IMPORT ADDED
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -38,10 +40,11 @@ public class CoinflipMenu implements Listener {
     private final MessageManager msg; // [Req 1]
     private final CoinflipLogger logger; // [Req 9]
 
-    private List<CoinflipGame> pendingGamesCache = Collections.synchronizedList(new ArrayList<>());
-    private long lastCacheUpdateTime = 0;
-    private final long CACHE_DURATION_MS = 10 * 1000;
-    private boolean isRefreshingCache = false;
+    // [Req 4] Cache logic moved to CoinflipSystem
+    // private List<CoinflipGame> pendingGamesCache = Collections.synchronizedList(new ArrayList<>());
+    // private long lastCacheUpdateTime = 0;
+    // private final long CACHE_DURATION_MS = 10 * 1000;
+    // private boolean isRefreshingCache = false;
 
     private static final int GUI_SIZE = 36;
     private static final int GAMES_PER_PAGE = 27;
@@ -60,7 +63,7 @@ public class CoinflipMenu implements Listener {
         this.logger = logger; // [Req 9]
         this.gameIdKey = new NamespacedKey(plugin, "cf_game_id");
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        getPendingGames(true);
+        // [Req 4] Removed getPendingGames(true); (now handled by CoinflipSystem)
     }
 
     public void setCoinflipSystem(CoinflipSystem coinflipSystem) {
@@ -71,30 +74,12 @@ public class CoinflipMenu implements Listener {
         return playersChallenging;
     }
 
-    private CompletableFuture<List<CoinflipGame>> getPendingGames(boolean force) {
-        long now = System.currentTimeMillis();
-        if (isRefreshingCache) {
-            return CompletableFuture.completedFuture(new ArrayList<>(pendingGamesCache));
-        }
-        if (!force && (now - lastCacheUpdateTime < CACHE_DURATION_MS)) {
-            return CompletableFuture.completedFuture(new ArrayList<>(pendingGamesCache)); // Return copy
-        }
-
-        isRefreshingCache = true;
-        return database.loadPendingCoinflips().whenComplete((games, error) -> {
-            if (games != null) {
-                this.pendingGamesCache = Collections.synchronizedList(games); // Update cache
-                this.lastCacheUpdateTime = System.currentTimeMillis();
-            }
-            if (error != null) {
-                plugin.getLogger().log(Level.SEVERE, "Failed to refresh coinflip games cache", error);
-            }
-            isRefreshingCache = false;
-        });
-    }
+    // [Req 4] Cache logic moved to CoinflipSystem
+    // private CompletableFuture<List<CoinflipGame>> getPendingGames(boolean force) { ... }
 
     public void openMainMenu(Player player, int page) {
-        CompletableFuture<List<CoinflipGame>> gamesFuture = getPendingGames(false);
+        // [Req 4] Get games from CoinflipSystem
+        CompletableFuture<List<CoinflipGame>> gamesFuture = coinflipSystem.getPendingGames(false);
         CompletableFuture<CoinflipStats> statsFuture = database.loadPlayerStats(player.getUniqueId());
 
         CompletableFuture.allOf(gamesFuture, statsFuture).whenCompleteAsync((v, error) -> {
@@ -165,6 +150,9 @@ public class CoinflipMenu implements Listener {
                     Component.text("Tails", NamedTextColor.LIGHT_PURPLE);
             lore.add(Component.text("Side: ", NamedTextColor.GRAY).append(side).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
 
+            // [Req 4] Add Game ID to lore
+            lore.add(Component.text("ID: ", NamedTextColor.GRAY).append(Component.text(game.getGameId(), NamedTextColor.DARK_GRAY)).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
+
             lore.add(Component.empty()); // Empty line
             lore.add(Component.text("► Click to Challenge!", NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, false));
             // --- END FIX ---
@@ -227,7 +215,8 @@ public class CoinflipMenu implements Listener {
                 else if (slot == 35) openMainMenu(player, currentPage + 1);
             } else if (type == Material.CLOCK && slot == 31) {
                 msg.send(player, "&aRefreshing list...");
-                getPendingGames(true).thenRun(() ->
+                // [Req 4] Get games from system
+                coinflipSystem.getPendingGames(true).thenRun(() ->
                         Bukkit.getScheduler().runTask(plugin, () -> openMainMenu(player, currentPage))
                 );
             } else if (type == Material.OAK_SIGN && slot == 29) {
@@ -248,10 +237,8 @@ public class CoinflipMenu implements Listener {
                 if (gameIdLong == null) return;
                 long gameId = gameIdLong;
 
-                CoinflipGame gameToJoin = pendingGamesCache.stream()
-                        .filter(g -> g.getGameId() == gameId)
-                        .findFirst()
-                        .orElse(null);
+                // [Req 4] Get game from system cache
+                CoinflipGame gameToJoin = coinflipSystem.getPendingGameById(gameId);
 
                 if (gameToJoin != null) {
                     playersChallenging.add(player.getUniqueId()); // [Req 2] Add lock
@@ -264,11 +251,21 @@ public class CoinflipMenu implements Listener {
                     // --- END FIX ---
                 } else {
                     msg.send(player, "&cThis coinflip is no longer available. Refreshing...");
-                    getPendingGames(true).thenRun(() ->
+                    // [Req 4] Get games from system
+                    coinflipSystem.getPendingGames(true).thenRun(() ->
                             Bukkit.getScheduler().runTask(plugin, () -> openMainMenu(player, currentPage))
                     );
                 }
             }
+        }
+    }
+
+    // [Req 6] ADDED: InventoryCloseEvent to remove metadata
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        Player player = (Player) event.getPlayer();
+        if (player.hasMetadata(GUI_MAIN_METADATA)) {
+            player.removeMetadata(GUI_MAIN_METADATA, plugin);
         }
     }
 
@@ -393,9 +390,20 @@ public class CoinflipMenu implements Listener {
                                                     msg.send(p, "&aCoinflip created for " + economy.format(amount) + " on " + chosenSide.name().toLowerCase() + "!");
 
                                                     // [Req 4] & [Req 9] Broadcast and Log
-                                                    String broadcastMsg = "<yellow>" + p.getName() + "</yellow> created a coinflip for <gold>" + economy.format(amount) + "</gold>!";
-                                                    msg.broadcast(MiniMessage.miniMessage().deserialize(broadcastMsg));
+                                                    // String broadcastMsg = "<yellow>" + p.getName() + "</yellow> created a coinflip for <gold>" + economy.format(amount) + "</gold>!";
+
+                                                    // [Req 4] Create clickable broadcast message
+                                                    String clickCommand = "/cf join " + gameId;
+                                                    Component broadcastComponent = MiniMessage.miniMessage().deserialize(
+                                                            "<yellow>" + p.getName() + "</yellow> created a coinflip for <gold>" + economy.format(amount) + "</gold>! " +
+                                                                    "(ID: " + gameId + ") <green><click:suggest_command:'" + clickCommand + "'>[Click to Join]</click></green>"
+                                                    );
+                                                    msg.broadcast(broadcastComponent);
+
                                                     logger.logGame(p.getName() + " created a coinflip (ID: " + gameId + ") for `" + economy.format(amount) + "` on `" + chosenSide.name() + "`");
+
+                                                    // [Req 4] Manually refresh cache after creation
+                                                    coinflipSystem.getPendingGames(true);
                                                 }
                                             } finally {
                                                 playersCreating.remove(p.getUniqueId()); // [Req 2] Remove lock on completion
