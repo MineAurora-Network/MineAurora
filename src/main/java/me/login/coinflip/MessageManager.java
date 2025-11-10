@@ -12,7 +12,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map; // <-- ADD IMPORT
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap; // <-- ADD IMPORT
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
@@ -25,6 +27,7 @@ public class MessageManager {
     private final CoinflipDatabase database; // [Req 3]
     private final Component serverPrefix;
     private final List<String> broadcastWorlds;
+    private final Map<UUID, Boolean> toggleCache = new ConcurrentHashMap<>(); // <-- ADD CACHE
 
     // [Req 3] Removed dataFile and dataConfig
 
@@ -56,7 +59,11 @@ public class MessageManager {
 
     // [Req 3] Removed setupDataFile()
 
+    // --- FIX FOR SERVER FREEZE ---
     public void saveToggle(UUID uuid, boolean value) {
+        // Update the cache immediately
+        toggleCache.put(uuid, value);
+
         // [Req 3] Save to database
         database.saveMessageToggle(uuid, value).exceptionally(ex -> {
             plugin.getLogger().log(Level.SEVERE, "Failed to save coinflip message toggle for " + uuid, ex);
@@ -65,14 +72,22 @@ public class MessageManager {
     }
 
     public boolean getToggle(UUID uuid) {
-        // [Req 3] Load from database (blocking, as this is checked during broadcasts)
-        try {
-            return database.loadMessageToggle(uuid).join();
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to load coinflip message toggle for " + uuid, e);
-            return true; // Default to true on error
-        }
+        // Read from the cache. This is instantaneous and safe.
+        // Defaults to true if not in cache (e.g., player just joined)
+        return toggleCache.getOrDefault(uuid, true);
     }
+    // --- END FIX ---
+
+    // --- ADD METHODS FOR CACHE LISTENER ---
+    public void addPlayerToCache(UUID uuid, boolean value) {
+        toggleCache.put(uuid, value);
+    }
+
+    public void removePlayerFromCache(UUID uuid) {
+        toggleCache.remove(uuid);
+    }
+    // --- END ADD ---
+
 
     /**
      * Formats a legacy message string with the MiniMessage prefix.
@@ -134,6 +149,7 @@ public class MessageManager {
             World world = Bukkit.getWorld(worldName);
             if (world != null) {
                 for (Player player : world.getPlayers()) {
+                    // This now reads from the cache and is extremely fast
                     if (getToggle(player.getUniqueId())) {
                         player.sendMessage(message);
                     }

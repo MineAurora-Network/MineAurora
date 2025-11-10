@@ -10,10 +10,10 @@ import me.login.misc.playtimerewards.PlaytimeRewardModule;
 import me.login.misc.tokens.TokenModule;
 import me.login.misc.creatorcode.CreatorCodeModule;
 import me.login.misc.rank.RankManager;
-import me.login.misc.rank.RankModule;
-// --- REMOVED OLD ORDER SYSTEM IMPORTS ---
+import me.login.misc.rank.RankModule;// ... other imports ...
 import me.login.ordersystem.OrderModule; // --- ADDED NEW MODULE IMPORT
 import me.login.ordersystem.gui.OrderAlertMenu; // --- ADDED FOR GETTER
+import me.login.ordersystem.gui.OrderMenu; // --- ADD THIS LINE ---
 import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
@@ -455,6 +455,20 @@ public class Login extends JavaPlugin implements Listener {
         }
     }
 
+    // ADD THIS METHOD TO YOUR Login.java CLASS
+
+    /**
+     * Getter for the OrderModule's OrderMenu.
+     * This is needed by OrderFilling.java.
+     */
+    public OrderMenu getOrderMenu() {
+        if (this.orderModule == null) {
+            return null;
+        }
+        // This correctly calls the getOrderMenu() method from your OrderModule
+        return this.orderModule.getOrderMenu();
+    }
+
     public DiscordLinkDatabase getDatabase() {
         return discordLinkDatabase;
     }
@@ -478,11 +492,10 @@ public class Login extends JavaPlugin implements Listener {
         return this;
     }
 
-    // --- ADDED GETTER FOR OrderCmd ---
+    // Rename your method and fix the return line
     public OrderAlertMenu getOrderAlertMenu() {
-        return (orderModule != null) ? orderModule.getAlertMenu() : null;
+        return (orderModule != null) ? orderModule.getOrderAlertMenu() : null;
     }
-
 
     public int getDefaultOrderLimit() {
         return defaultOrderLimit;

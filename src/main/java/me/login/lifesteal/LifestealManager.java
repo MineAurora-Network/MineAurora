@@ -1,6 +1,8 @@
 package me.login.lifesteal;
 
 import me.login.Login;
+import net.kyori.adventure.text.Component; // <-- IMPORT ADDED
+import net.kyori.adventure.text.format.NamedTextColor; // <-- IMPORT ADDED
 import org.bukkit.Bukkit;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
@@ -131,8 +133,13 @@ public class LifestealManager {
 
         int currentHearts = getHearts(player.getUniqueId());
         if ((currentHearts - amount) < MIN_HEARTS) {
-            player.sendMessage(itemManager.formatMessage("<red>You don't have enough hearts to withdraw!"));
-            player.sendMessage(itemManager.formatMessage("<red>You need to keep at least " + MIN_HEARTS + " heart(s)."));
+            // --- MODIFIED (Request 1) ---
+            // Combine two messages into one
+            Component message = Component.text("You don't have enough hearts to withdraw!", NamedTextColor.RED)
+                    .append(Component.newline())
+                    .append(Component.text("You need to keep at least " + MIN_HEARTS + " heart(s).", NamedTextColor.RED));
+            player.sendMessage(itemManager.formatMessage(message));
+            // --- END MODIFICATION ---
             return false;
         }
 

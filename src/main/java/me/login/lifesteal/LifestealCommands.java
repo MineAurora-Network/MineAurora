@@ -165,7 +165,12 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
                 return true;
             }
         } catch (NumberFormatException e) {
-            player.sendMessage(itemManager.formatMessage("<red>Invalid amount. Please enter a number."));
+            // --- MODIFIED (Request 1) ---
+            Component message = Component.text("Invalid amount. Please enter a number.", NamedTextColor.RED)
+                    .append(Component.newline())
+                    .append(Component.text("Usage: /ls give <heart | revive_beacon> <amount>", NamedTextColor.RED));
+            player.sendMessage(itemManager.formatMessage(message));
+            // --- END MODIFICATION ---
             return true;
         }
 
@@ -182,7 +187,7 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
             }
         } else if (itemName.equals("revive_beacon") || itemName.equals("beacon")) {
             player.getInventory().addItem(itemManager.getReviveBeaconItem(amount));
-            player.sendMessage(itemManager.formatMessage("<green>GGave you " + amount + " revive beacon(s)."));
+            player.sendMessage(itemManager.formatMessage("<green>Gave you " + amount + " revive beacon(s)."));
             if (logger != null) {
                 logger.logAdmin("Admin `" + player.getName() + "` gave themselves " + amount + " revive beacon(s).");
             }

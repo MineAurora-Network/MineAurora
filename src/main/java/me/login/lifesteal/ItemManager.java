@@ -1,8 +1,8 @@
 package me.login.lifesteal;
 
-// --- REMOVED WEBHOOK IMPORTS ---
+// --- IMPORT ADDED ---
+import me.login.utility.TextureToHead;
 import me.login.Login;
-import me.login.utility.TextureToHead; // <-- IMPORT ADDED
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -26,7 +26,6 @@ public class ItemManager {
     private FileConfiguration itemsConfig;
 
     private final Component serverPrefix;
-    // --- REMOVED logWebhook FIELD ---
 
     public final NamespacedKey heartItemKey;
     public final NamespacedKey beaconItemKey;
@@ -42,8 +41,6 @@ public class ItemManager {
         // Load prefix from main config.yml using the correct key
         String prefixString = plugin.getConfig().getString("server_prefix", "<gray>[Lifesteal]</gray> ");
         this.serverPrefix = miniMessage.deserialize(prefixString);
-
-        // --- REMOVED Webhook Initialization ---
     }
 
     private void loadItemsConfig() {
@@ -69,7 +66,7 @@ public class ItemManager {
     }
 
     public ItemStack getHeartItem(int amount) {
-        // --- MODIFIED (Request 5) ---
+        // --- MODIFIED (Request 2) ---
         String materialName = itemsConfig.getString("heart-item.material", "RED_DYE").toUpperCase();
         Material material;
         try {
@@ -101,13 +98,26 @@ public class ItemManager {
         );
     }
 
-    // --- MODIFIED (Request 5) ---
+    // --- MODIFIED (Request 2) & FIXED (Attempt 3) ---
     private ItemStack createItem(Material material, int amount, String name, List<String> lore, NamespacedKey key, String textureUrl) {
         ItemStack item = new ItemStack(material, amount);
         ItemMeta meta = item.getItemMeta();
-        if (meta == null) return item;
+        if (meta == null) return item; // Return item, even if meta is somehow null
 
-        meta.displayName(miniMessage.deserialize(name));
+        // --- NEW FIX ---
+        // Deserialize the MiniMessage name *once*
+        Component componentName = miniMessage.deserialize(name);
+
+        // 1. Set the MODERN (Adventure) display name. This is what players see.
+        meta.displayName(componentName);
+
+        // 2. Set the LEGACY (String) display name.
+        // This is what the TextureToHead.java utility
+        // is trying to read with 'headMeta.getDisplayName()'.
+        // This ensures the GameProfile name is not null.
+        meta.setDisplayName(ItemManager.toLegacy(componentName));
+        // --- END NEW FIX ---
+
 
         List<Component> componentLore = lore.stream()
                 .map(miniMessage::deserialize)
@@ -116,24 +126,24 @@ public class ItemManager {
 
         meta.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
-        item.setItemMeta(meta); // Set meta BEFORE applying texture
 
-        // --- CUSTOM TEXTURE LOGIC ---
+        // Set the meta (display name, lore) FIRST.
+        item.setItemMeta(meta);
+
+        // THEN, apply the texture.
         if (material == Material.PLAYER_HEAD && textureUrl != null && !textureUrl.isEmpty()) {
             try {
-                // Assuming TextureToHead.applyTexture returns the modified ItemStack
+                // Now, when applyTexture calls head.getItemMeta().getDisplayName(),
+                // it will get the legacy string we just set.
                 item = TextureToHead.applyTexture(item, textureUrl);
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to apply texture '" + textureUrl + "': " + e.getMessage());
             }
         }
-        // --- END CUSTOM TEXTURE LOGIC ---
 
         return item;
     }
     // --- END MODIFICATION ---
-
-    // --- REMOVED ALL WEBHOOK METHODS (sendLog, initializeWebhook, closeWebhook) ---
 
     // --- Adventure Component Helpers ---
     public static String toLegacy(Component component) {

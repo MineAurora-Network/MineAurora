@@ -91,6 +91,10 @@ public class CoinflipModule implements Listener {
         plugin.getServer().getPluginManager().registerEvents(coinflipManageMenu, plugin);
         plugin.getServer().getPluginManager().registerEvents(coinflipAdminMenu, plugin);
 
+        // --- FIX: REGISTER THE NEW CACHE LISTENER ---
+        plugin.getServer().getPluginManager().registerEvents(new CoinflipCacheListener(plugin, coinflipDatabase, coinflipMessageManager), plugin);
+        // --- END FIX ---
+
         // 3. Register Command
         CoinflipCmd coinflipCmd = new CoinflipCmd(plugin, coinflipDatabase, vaultEconomy, coinflipMenu, coinflipManageMenu, coinflipAdminMenu, coinflipSystem, coinflipMessageManager, coinflipLogger);
         plugin.getCommand("coinflip").setExecutor(coinflipCmd);

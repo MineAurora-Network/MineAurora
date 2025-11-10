@@ -2,9 +2,11 @@ package me.login.lifesteal;
 
 import me.login.Login;
 import net.kyori.adventure.text.Component; // <-- IMPORT ADDED
+import net.kyori.adventure.text.format.NamedTextColor; // <-- IMPORT ADDED
 import org.bukkit.Bukkit; // <-- IMPORT ADDED
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.World; // <-- IMPORT ADDED
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -47,6 +49,8 @@ public class LifestealListener implements Listener {
         lifestealManager.loadPlayerData(player);
         if (deadPlayerManager.isDead(player.getUniqueId())) {
             // Player is dead, kick them
+            // --- MODIFIED (Request 1) ---
+            // Using a slightly different message as per your request to ensure they know they can be revived
             final Component kickMessage = itemManager.formatMessage("<red>You are dead! A player must revive you using a Revive Beacon.");
             Bukkit.getScheduler().runTask(plugin, () -> {
                 player.kick(kickMessage);
@@ -75,10 +79,26 @@ public class LifestealListener implements Listener {
             lifestealManager.removeHearts(victim.getUniqueId(), 1);
             victim.sendMessage(itemManager.formatMessage("<red>You lost a heart!"));
         } else {
-            // --- MODIFIED (Request 1) ---
+            // --- MODIFIED (Request 3) ---
             deadPlayerManager.addDeadPlayer(victim.getUniqueId(), victim.getName());
 
             final Component kickMessage = itemManager.formatMessage("<dark_red>You have lost your final life. You are now dead.</dark_red>");
+
+            // --- BROADCAST (Request 3) ---
+            Component broadcastMessage = Component.text(victim.getName(), NamedTextColor.RED)
+                    .append(Component.text(" has been banned for running out of hearts.", NamedTextColor.GRAY));
+
+            for (String worldName : lifestealManager.getLifestealWorlds()) {
+                World world = Bukkit.getWorld(worldName);
+                if (world != null) {
+                    for (Player playerInWorld : world.getPlayers()) {
+                        // Use the ItemManager to format the broadcast with the server prefix
+                        playerInWorld.sendMessage(itemManager.formatMessage(broadcastMessage));
+                    }
+                }
+            }
+            // --- END BROADCAST ---
+
             // Kick player on the next tick to ensure death event processing is complete
             Bukkit.getScheduler().runTask(plugin, () -> {
                 victim.kick(kickMessage);

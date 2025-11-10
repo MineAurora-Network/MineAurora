@@ -116,7 +116,7 @@ public class DatabaseManager {
                 if (rs.next()) {
                     hearts = rs.getInt("hearts");
                 } else {
-                    setHearts(uuid, DEFAULT_HEARTS); // This is async
+                    setHearts(uuid, DEFAULT_HEARTS); // This will now call the modified sync method
                 }
 
                 final int finalHeartsToCallback = hearts;
@@ -150,11 +150,13 @@ public class DatabaseManager {
         }
     }
 
+    // --- FIX FOR onDisable ERROR ---
+    // Removed the BukkitRunnable wrapper. This method now runs synchronously
+    // on whatever thread it was called from.
     public void setHearts(UUID uuid, int hearts) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            setHeartsSync(uuid, hearts);
-        });
+        setHeartsSync(uuid, hearts);
     }
+    // --- END FIX ---
 
     // This was line 155
     private void setHeartsSync(UUID uuid, int hearts) {
