@@ -21,6 +21,19 @@ revive-beacon:
     - "<yellow>Right-click this beacon</yellow>"
     - "<yellow>to open the revive menu.</yellow>"
 
+firesale:
+  heart_fragment:
+    material: "PLAYER_HEAD"
+    texture: "http://textures.minecraft.net/texture/..." # Your texture URL
+    name: "<red>Heart Fragment"
+    lore:
+      - "<gray>A fragment of a lost soul."
+  god_apple:
+    material: "ENCHANTED_GOLDEN_APPLE"
+    name: "<gold>God Apple"
+    lore:
+      - "<yellow>Very shiny."
+
 # ============================
 # NEW: Token Shop Items
 # ============================

@@ -6,6 +6,11 @@ depend: [Vault, Citizens, Skript, LuckPerms] # Hard dependencies
 softdepend: [Essentials, PlaceholderAPI, Citizens ] # PAPI is already here, perfect!
 
 commands:
+  firesale:
+    description: Manages the firesale system.
+    aliases: [ fs ]
+    permission: login.firesale.admin
+
   order:
     description: Manage item orders
     usage: /order create | /order menu | /order manage

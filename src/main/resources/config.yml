@@ -88,6 +88,15 @@ coinflip:
     - "nether"
     - "end"
 
+firesale:
+  # The Citizens NPC ID that players click to open the menu.
+  fire-npc-id: -1
+  # The Discord channel ID for logging all firesale activity.
+  log-channel-id: ""
+  # Message sent to players on join/world-change (in 'lifesteal' world)
+  # %nl% = new line.
+  join-message: "<green>A firesale is currently active!%nl%<aqua><item_name></aqua> (<white>x<quantity></white>)%nl%Price: <gold><price> Credits</gold>%nl%Time Left: <yellow><time></yellow>"
+
 # ============================
 # Logging Configuration
 # ============================

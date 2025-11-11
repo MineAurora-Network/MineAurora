@@ -6,6 +6,7 @@ import me.login.discord.moderation.DiscordModConfig;
 import me.login.loginsystem.*;
 import me.login.misc.dailyreward.DailyRewardDatabase;
 import me.login.misc.dailyreward.DailyRewardModule;
+import me.login.misc.firesale.FiresaleModule; // --- FIRESALE: ADDED ---
 import me.login.misc.playtimerewards.PlaytimeRewardModule;
 import me.login.misc.tokens.TokenModule;
 import me.login.misc.creatorcode.CreatorCodeModule;
@@ -18,6 +19,8 @@ import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
 import me.login.clearlag.LagClearModule;
+import net.kyori.adventure.text.Component; // --- FIRESALE: ADDED ---
+import net.kyori.adventure.text.minimessage.MiniMessage; // --- FIRESALE: ADDED ---
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -82,11 +85,22 @@ public class Login extends JavaPlugin implements Listener {
     private CreatorCodeModule creatorCodeModule;
     private RankModule rankModule;
     private TicketModule ticketModule;
+    private FiresaleModule firesaleModule; // --- FIRESALE: ADDED ---
+
+    private MiniMessage miniMessage; // --- FIRESALE: ADDED ---
+    private String serverPrefix; // --- FIRESALE: ADDED ---
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         saveResource("items.yml", false);
+
+        // --- FIRESALE: ADDED ---
+        // Initialize MiniMessage and server prefix for the whole plugin
+        this.miniMessage = MiniMessage.miniMessage();
+        this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
+        // --- FIRESALE: END ADD ---
+
         getServer().getPluginManager().registerEvents(new me.login.misc.GuiCleanup.MetaDataRemover(this), this);
 
         this.discordModConfig = new DiscordModConfig(this);
@@ -260,6 +274,12 @@ public class Login extends JavaPlugin implements Listener {
                         ticketModule = new TicketModule(Login.this, discordLinkingModule.getDiscordLinking(), rankManager);
                         ticketModule.init();
 
+                        // --- FIRESALE: ADDED ---
+                        getLogger().info("Initializing FiresaleModule...");
+                        firesaleModule = new FiresaleModule(Login.this);
+                        firesaleModule.init();
+                        // --- FIRESALE: END ADD ---
+
                         this.cancel();
                         return;
                     }
@@ -358,6 +378,10 @@ public class Login extends JavaPlugin implements Listener {
                     return true;
                 }
                 this.reloadConfig();
+                // --- FIRESALE: ADDED ---
+                // Reload server prefix when config reloads
+                this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
+                // --- FIRESALE: END ADD ---
                 if (scoreboardManager != null) {
                     scoreboardManager.loadConfig();
                     Bukkit.getOnlinePlayers().forEach(scoreboardManager::updateScoreboard);
@@ -417,6 +441,12 @@ public class Login extends JavaPlugin implements Listener {
             if (ticketModule != null) {
                 ticketModule.shutdown();
             }
+
+            // --- FIRESALE: ADDED ---
+            if (firesaleModule != null) {
+                firesaleModule.disable();
+            }
+            // --- FIRESALE: END ADD ---
 
             // --- ADDED NEW MODULE DISABLE ---
             if (orderModule != null) {
@@ -587,4 +617,22 @@ public class Login extends JavaPlugin implements Listener {
     public JDA getJda() {
         return (lagClearLogger != null) ? lagClearLogger.getJDA() : null;
     }
+
+    // --- FIRESALE: ADDED ---
+    /**
+     * Gets the Kyori MiniMessage instance for parsing components.
+     * @return The MiniMessage instance.
+     */
+    public MiniMessage getComponentSerializer() {
+        return miniMessage;
+    }
+
+    /**
+     * Gets the configured server prefix for messages.
+     * @return The server prefix string (with MiniMessage tags).
+     */
+    public String getServerPrefix() {
+        return serverPrefix;
+    }
+    // --- FIRESALE: END ADD ---
 }
