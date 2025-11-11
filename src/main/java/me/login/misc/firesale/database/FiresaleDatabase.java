@@ -27,7 +27,7 @@ public class FiresaleDatabase {
 
     private Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
-            File dbFile = new File(plugin.getDataFolder(), "firesale.db");
+            File dbFile = new File(plugin.getDataFolder(), "database/firesale.db");
             String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
             connection = DriverManager.getConnection(url);
         }

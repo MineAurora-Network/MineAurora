@@ -16,7 +16,6 @@ commands:
     usage: /order create | /order menu | /order manage
     aliases: [orders]
 
-    # Discord integration
   discord:
     description: Link your Minecraft account with Discord
     usage: /discord link
@@ -27,7 +26,24 @@ commands:
     description: Admin Command to unlink a Minecraft account
     usage: /adminunlink <player>
 
-    # Login system
+  commandhologram:
+    description: Creates a command-based hologram.
+    permission: mineaurora.command.hologram
+    permission-message: You do not have permission to use this command.
+
+  schedule:
+    description: Schedules a server maintenance or restart.
+    permission: login.admin.schedule
+    usage: /schedule <maintenance|restart> <time>
+  maintenance:
+    description: Turns off maintenance mode.
+    permission: login.admin.maintenance
+    usage: /maintenance off
+  worldmanager:
+    description: Locks or unlocks a world.
+    permission: login.admin.worldmanager
+    usage: /worldmanager <lock|unlock> <worldname>
+
   register:
     description: Register your account
     usage: /register <password> <confirmPassword>
@@ -50,13 +66,11 @@ commands:
     description: Force change a player's password and DM them (Admin)
     usage: /adminchangepass <player>
 
-  # Scoreboard
   scoreboard:
     description: Reloads the scoreboard configuration.
     usage: /scoreboard reload
     aliases: [sb]
 
-  # Coinflip
   coinflip:
     description: Manage coinflip games.
     usage: /<command> create <heads/tails> <amount> | /<command> manage | /<command> help
@@ -73,13 +87,11 @@ commands:
     permission: leaderboards.admin
     aliases: [ klb, removeleaderboard ]
 
-  # ADDED LAGCLEAR COMMAND
   lagclear:
     description: Manages the lag clearing utility.
     usage: /lagclear <clean>
     permission: lagclear.admin
 
-  # --- STAFF SYSTEM COMMANDS ---
   mute:
     description: Mutes a player for a specified duration.
     usage: /mute <player> <duration> <reason>
@@ -120,9 +132,7 @@ commands:
     description: Opens a view of a player's inventory, allowing item removal.
     usage: /admincheckinv <player>
     permission: staff.admincheckinv
-  # --- END STAFF SYSTEM COMMANDS ---
 
-  # --- LIFESTEAL COMMANDS (MODIFIED) ---
   withdrawhearts:
     description: Withdraws hearts as items.
     usage: /withdrawhearts <amount>
@@ -132,43 +142,24 @@ commands:
     description: Lifesteal main command.
     usage: /lifesteal <give|sethearts|checkhearts|revive>
     aliases: [ls]
-  # --- END LIFESTEAL COMMANDS ---
 
-  # --- ISLAND COMMANDS ---
-  csummon:
-    description: Spawns a custom mob.
-    usage: /csummon <mob_name>
-    permission: mineaurora.island.summon
-  ckill:
-    description: Kills nearby custom mobs.
-    usage: /ckill
-    permission: mineaurora.island.kill
-  # --- END ISLAND COMMANDS ---
-
-  # --- ADDED DAILY REWARD COMMAND ---
   dailyreward:
     description: Claim your daily reward.
     usage: /dailyreward
     aliases: [dr]
-  # --- END DAILY REWARD COMMAND ---
 
-  # --- ADDED PLAYTIME REWARD COMMAND ---
   playtimerewards:
     description: Claim your playtime rewards.
     usage: /playtimerewards
     aliases: [ptrewards]
-  # --- END PLAYTIME REWARD COMMAND ---
 
-  # --- ADDED TOKEN COMMANDS ---
   tokenshop:
     description: Opens the token shop.
     usage: /tokenshop
   token:
     description: Manage your tokens or admin tokens.
     usage: /token <balance|add|remove|set>
-  # --- END TOKEN COMMANDS ---
 
-  # --- CREATOR CODE COMMANDS ---
   creditcode:
     description: Apply a creator code.
     usage: /creditcode
@@ -181,14 +172,11 @@ commands:
     description: Admin command to remove a creator code.
     usage: /removecreditcode <name>
     permission: login.creatorcode.admin
-  # --- END CREATOR CODE COMMANDS ---
 
-  # --- RANK MODULE COMMANDS ---
   rank:
     description: Manages player ranks.
     usage: /rank <set|remove|info>
     permission: login.rank.admin
-  # --- END RANK MODULE COMMANDS ---
 
 permissions:
   logincore.admin:
@@ -216,12 +204,10 @@ permissions:
     description: Allows users to create and manage leaderboards.
     default: op
 
-  # ADDED LAGCLEAR PERMISSION
   lagclear.admin:
     description: Allows use of the /lagclear command.
     default: op
 
-  # --- STAFF SYSTEM PERMISSIONS ---
   staff.staff:
     description: Receives staff-wide broadcast messages.
     default: op
@@ -255,9 +241,7 @@ permissions:
   staff.admincheckinv:
     description: Allows admin inventory checks (item removal).
     default: op
-  # --- END STAFF SYSTEM PERMISSIONS ---
 
-  # --- LIFESTEAL PERMISSIONS (MODIFIED) ---
   lifesteal.withdraw:
     description: Allows player to withdraw hearts.
     default: op
@@ -276,18 +260,7 @@ permissions:
   lifesteal.admin.revive:
     description: Allows admin to use /ls revive.
     default: op
-  # --- END LIFESTEAL PERMISSIONS ---
 
-  # --- ISLAND PERMISSIONS ---
-  mineaurora.island.summon:
-    description: Allows use of the /csummon command.
-    default: op
-  mineaurora.island.kill:
-    description: Allows use of the /ckill command.
-    default: op
-  # --- END ISLAND PERMISSIONS ---
-
-  # --- DAILY REWARD PERMISSIONS ---
   mineaurora.dailyreward.rank:
     description: Allows player to open the ranked daily reward GUI.
     default: op
@@ -309,29 +282,18 @@ permissions:
   mineaurora.dailyreward.phantom:
     description: Permission for the Phantom daily reward.
     default: op
-  # --- END DAILY REWARD PERMISSIONS ---
 
-  # --- PLAYTIME REWARD PERMISSIONS ---
-  # (No permissions needed, command is default: true for all players)
-  # --- END PLAYTIME REWARD PERMISSIONS ---
-
-  # --- TOKEN SYSTEM PERMISSIONS ---
   token.admin:
     description: Allows use of /token <add|remove|set>
     default: op
-  # --- END TOKEN SYSTEM PERMISSIONS ---
 
-  # --- CREATOR CODE PERMISSIONS ---
   login.creatorcode.use:
     description: Allows players to use /creditcode.
     default: true
   login.creatorcode.admin:
     description: Allows admins to manage creator codes.
     default: op
-  # --- END CREATOR CODE PERMISSIONS ---
 
-  # --- RANK MODULE PERMISSIONS ---
   login.rank.admin:
     description: Allows admins to manage player ranks with /rank.
     default: op
-  # --- END RANK MODULE PERMISSIONS ---

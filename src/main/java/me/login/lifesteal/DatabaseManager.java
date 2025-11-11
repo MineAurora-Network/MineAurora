@@ -19,7 +19,6 @@ public class DatabaseManager {
 
     private final int DEFAULT_HEARTS = 10;
 
-    // --- MODIFICATION: Updated Constructor ---
     public DatabaseManager(Login plugin) {
         this.plugin = plugin;
 

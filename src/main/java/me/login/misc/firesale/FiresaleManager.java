@@ -16,11 +16,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import net.citizensnpcs.api.npc.NPC;
+
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +36,7 @@ public class FiresaleManager {
     private final FiresaleItemManager itemManager;
     private final MiniMessage miniMessage;
     private final Component serverPrefix;
+    private NPC npc;
 
     private final ConcurrentHashMap<Integer, Firesale> activeSales = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, BukkitTask> saleTasks = new ConcurrentHashMap<>();
@@ -59,6 +61,14 @@ public class FiresaleManager {
             activeSales.put(sale.getSaleId(), sale);
             scheduleSaleTasks(sale); // Schedule start/end tasks for this sale
         }
+    }
+
+    public void setNpc(NPC npc) {
+        this.npc = npc;
+    }
+
+    public NPC getNpc() {
+        return npc;
     }
 
     /**

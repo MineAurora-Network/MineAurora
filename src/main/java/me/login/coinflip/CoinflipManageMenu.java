@@ -140,16 +140,24 @@ public class CoinflipManageMenu implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
-        if (!player.hasMetadata(GUI_MANAGE_METADATA)) return;
 
-        // [Req 5] & [Req 6] Use Component comparison
+        // --- GUI BUG FIX: Logic Re-ordered ---
+        // 1. Check if this is the GUI we care about
         Component title = event.getView().title();
         String legacyTitle = LegacyComponentSerializer.legacySection().serialize(title);
         if (!legacyTitle.startsWith(LegacyComponentSerializer.legacySection().serialize(Component.text("Manage Coinflips", NamedTextColor.DARK_GRAY)))) {
-            return;
+            return; // Not our inventory, ignore
         }
 
+        // 2. ALWAYS CANCEL FIRST! This stops item stealing.
         event.setCancelled(true);
+
+        // 3. Now check metadata to see if we should process the click
+        if (!player.hasMetadata(GUI_MANAGE_METADATA)) {
+            return; // It's our GUI, but player has no metadata, so don't do any actions
+        }
+        // --- END FIX ---
+
         ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null || clickedItem.getType() == Material.AIR) return;
 
@@ -236,8 +244,10 @@ public class CoinflipManageMenu implements Listener {
                     }
 
                     if (success) {
-                        // [Req 4] Also remove from cache
-                        coinflipSystem.getPendingGames(false).join().removeIf(g -> g.getGameId() == gameId);
+                        // --- SERVER FREEZE FIX ---
+                        // [Req 4] Also remove from cache, using the new safe method
+                        coinflipSystem.removePendingGameFromCache(gameId);
+                        // --- END FIX ---
 
                         EconomyResponse refundResp = economy.depositPlayer(player, amount);
                         if (refundResp.transactionSuccess()) {

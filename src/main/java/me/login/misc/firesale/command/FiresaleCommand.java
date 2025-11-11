@@ -21,6 +21,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * /firesale admin command with tab completion.
+ */
 public class FiresaleCommand implements CommandExecutor, TabCompleter {
 
     private final Login plugin;
@@ -44,10 +47,24 @@ public class FiresaleCommand implements CommandExecutor, TabCompleter {
                         "<yellow>/firesale remove <sale_id>%nl%" +
                         "<yellow>/firesale giveitem <item_id> [amount]%nl%"
         ).replaceText(config -> config.match("%nl%").replacement(Component.newline()));
+
+        // Register this as the TabCompleter for the command(s) if present in plugin.yml
+        tryRegisterTabCompleter("firesale");
+        tryRegisterTabCompleter("fs"); // common alias
+    }
+
+    private void tryRegisterTabCompleter(String commandName) {
+        try {
+            if (plugin.getCommand(commandName) != null) {
+                plugin.getCommand(commandName).setTabCompleter(this);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
+                             @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player)) {
             sender.sendMessage(Component.text("This command can only be used by players."));
             return true;
@@ -65,8 +82,11 @@ public class FiresaleCommand implements CommandExecutor, TabCompleter {
 
         String subCommand = args[0].toLowerCase();
         // Log the command usage
-        // --- FIX: This will now work since FiresaleManager has getLogger() ---
-        manager.getLogger().logAdminCommand(player, command.getName() + " " + String.join(" ", args));
+        if (manager != null && manager.getLogger() != null) {
+            try {
+                manager.getLogger().logAdminCommand(player, command.getName() + " " + String.join(" ", args));
+            } catch (Throwable ignored) {}
+        }
 
         switch (subCommand) {
             case "create":
@@ -104,7 +124,7 @@ public class FiresaleCommand implements CommandExecutor, TabCompleter {
                 return;
             }
             // Check for custom player head
-            if (itemToSell.getType() == Material.PLAYER_HEAD && itemToSell.getItemMeta().hasCustomModelData()) {
+            if (itemToSell.getType() == Material.PLAYER_HEAD && itemToSell.getItemMeta() != null && itemToSell.getItemMeta().hasCustomModelData()) {
                 player.sendMessage(serverPrefix.append(miniMessage.deserialize("<red>Cannot create sale: Custom player heads from hand are not supported. Please use an item from items.yml.")));
                 return;
             }
@@ -184,44 +204,51 @@ public class FiresaleCommand implements CommandExecutor, TabCompleter {
         )));
     }
 
-
     @Nullable
     @Override
-    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (args.length == 1) {
-            return filter(Arrays.asList("create", "remove", "giveitem"), args[0]);
-        }
+    public List<String> onTabComplete(@NotNull CommandSender sender,
+                                      @NotNull Command command,
+                                      @NotNull String label,
+                                      @NotNull String[] args) {
 
-        String subCommand = args[0].toLowerCase();
-        if (subCommand.equals("create")) {
-            if (args.length == 2) {
-                // --- FIX: Converted Set to ArrayList ---
-                List<String> suggestions = new ArrayList<>(itemManager.getAllItemIds());
-                suggestions.add("hand");
-                return filter(suggestions, args[1]);
+        // Basic safeguard: return empty list instead of null
+        try {
+            if (args.length == 1) {
+                return filter(Arrays.asList("create", "remove", "giveitem"), args[0]);
             }
-            if (args.length == 3) return Arrays.asList("<price>");
-            if (args.length == 4) return filter(Arrays.asList("0s", "1m", "10m", "30m", "1h"), args[3]);
-            if (args.length == 5) return Arrays.asList("<quantity>");
-            if (args.length == 6) return filter(Arrays.asList("10m", "30m", "1h", "12h", "1d"), args[5]);
 
-        } else if (subCommand.equals("remove")) {
-            if (args.length == 2) return Arrays.asList("<sale_id>");
+            String subCommand = args[0].toLowerCase();
+            if (subCommand.equals("create")) {
+                if (args.length == 2) {
+                    List<String> suggestions = new ArrayList<>(itemManager.getAllItemIds());
+                    suggestions.add("hand");
+                    return filter(suggestions, args[1]);
+                }
+                if (args.length == 3) return Arrays.asList("<price>");
+                if (args.length == 4) return filter(Arrays.asList("0s", "1m", "10m", "30m", "1h"), args[3]);
+                if (args.length == 5) return Arrays.asList("<quantity>");
+                if (args.length == 6) return filter(Arrays.asList("10m", "30m", "1h", "12h", "1d"), args[5]);
 
-        } else if (subCommand.equals("giveitem")) {
-            if (args.length == 2) {
-                // --- FIX: Converted Set to ArrayList ---
-                return filter(new ArrayList<>(itemManager.getAllItemIds()), args[1]);
+            } else if (subCommand.equals("remove")) {
+                if (args.length == 2) return Arrays.asList("<sale_id>");
+
+            } else if (subCommand.equals("giveitem")) {
+                if (args.length == 2) {
+                    return filter(new ArrayList<>(itemManager.getAllItemIds()), args[1]);
+                }
+                if (args.length == 3) return Arrays.asList("1", "16", "32", "64");
             }
-            if (args.length == 3) return Arrays.asList("1", "16", "32", "64");
+        } catch (Throwable ignored) {
         }
 
         return new ArrayList<>();
     }
 
     private List<String> filter(List<String> list, String input) {
+        if (input == null) input = "";
+        final String lower = input.toLowerCase();
         return list.stream()
-                .filter(s -> s.toLowerCase().startsWith(input.toLowerCase()))
+                .filter(s -> s != null && s.toLowerCase().startsWith(lower))
                 .collect(Collectors.toList());
     }
-} 
+}

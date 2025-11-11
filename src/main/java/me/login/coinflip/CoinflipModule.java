@@ -103,8 +103,6 @@ public class CoinflipModule implements Listener {
         plugin.getLogger().info("Coinflip system enabled.");
     }
 
-    // --- Event Handlers (Moved from Login.java) ---
-
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         // Handle Coinflip logic on quit
@@ -142,12 +140,15 @@ public class CoinflipModule implements Listener {
                 return;
             }
 
-            // [Req 4] Also remove them from the cache
+            // --- SERVER FREEZE FIX ---
+            // Run this on the main thread, but DO NOT use .join()
             Bukkit.getScheduler().runTask(plugin, () -> {
                 for (Long gameId : gameIds) {
-                    coinflipSystem.getPendingGames(false).join().removeIf(g -> g.getGameId() == gameId);
+                    // Use the new safe cache removal method
+                    coinflipSystem.removePendingGameFromCache(gameId);
                 }
             });
+            // --- END FIX ---
 
             CompletableFuture<?>[] removalFutures = gameIds.stream()
                     .map(coinflipDatabase::removeCoinflip)

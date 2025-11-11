@@ -1,31 +1,15 @@
 bot-token: ""
 logger-bot-token: ""
-
+store-bot-token: ""
 
 normal-bot-channel: 1434006801011048621
 staff-bot-channel: 1434006967357145168
-
-# ---------------------------------
-# Store Bot Config
-# ---------------------------------
-# The token for your *separate* store bot. THIS CANNOT BE THE SAME as your main bot-token.
-store-bot-token: "YOUR_STORE_BOT_TOKEN_HERE"
-
-# The channel ID where the "Create Ticket" embed will be posted.
-store-ticket-channel-id: "0"
-
-# The Role ID for your store staff (e.g., Support Team).
-store-staff-role-id: "0"
-
-# The Role ID for the owner/admin who can use /rank on the store bot.
-store-owner-role-id: "0"
-
-# The channel ID where /purchase verification embeds will be sent.
-payment-verification-channel-id: "0"
-
-coinflip-log-channel-id: 1431926295847243858
-coinflip-admin-log-channel-id: 1435165917779591218
-lagclear-log-channel-id: 1434707657633169611
+store-ticket-channel-id: 1437028289431732255
+store-helper-role-id: 1437031142745313461
+store-owner-role-id: 1437030461359784059
+payment-verification-channel-id: "1437030165657161901"
+# coinflip-log-channel-id: 1431926295847243858 (Moved to end)
+# coinflip-admin-log-channel-id: 1435165917779591218 (Moved to end)
 lifesteal-normal-channel-id: 1434006801011048621
 lifesteal-admin-channel-id: 1434006967357145168
 combat-log-channel-id: 1435687676161429546
@@ -36,8 +20,8 @@ token-admin-channel-id: 1435894607027109918
 creator-code-channel-id: 1436624030814965832
 rank-log-channel-id: 1436623612571553896
 link-system-log-channel-id: 0
-
 verification-channel-id: 1430953529463279696
+
 verified-role-id: 1430766504575635508
 unverified-role-id: 1430779094077014066
 
@@ -50,18 +34,17 @@ code-expiry-seconds: 60
 
 server_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>: "
 server_prefix_2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
-server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
-cleaner_prefix: "<b><gradient:#F04747:#FF00F6>ᴄʟᴇᴀɴᴇʀ</gradient></b><white>:"
-cleaner_prefix_2: "&x&F&0&4&7&4&7&lᴄ&x&F&3&3&B&6&4&lʟ&x&F&5&2&F&8&1&lᴇ&x&F&8&2&4&9&F&lᴀ&x&F&A&1&8&B&C&lɴ&x&F&D&0&C&D&9&lᴇ&x&F&F&0&0&F&6&lʀ&f:"
+server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
 
-# --- NEW: Alert prefix for Order System (Req 3) ---
 alert_prefix: "<gray>[<red>ALERT</red>]<white> "
-
-# --- NEW: World for offline deliveries (Req 5) ---
 lifesteal-world: "lifesteal"
 
-
 discord-server-link: "your-discord.gg/invite"
+
+firesale:
+  fire-npc-id: 16
+  log-channel-id: "1437618511684833290"
+  join-message: "<green>A firesale is currently active!%nl%<aqua><item_name></aqua> (<white>x<quantity></white>)%nl%Price: <gold><price> Credits</gold>%nl%Time Left: <yellow><time></yellow>"
 
 login-book:
   enabled: true
@@ -75,46 +58,23 @@ login-book:
     - "<click:run_command:/server creative><hover:show_text:'Click to join Creative!'>[Creative]</click></hover>"
     -
 
-coinflip-npc-id: 4
+    # coinflip-npc-id: 4 (Moved to end)
 daily-reward-npc-id: 6
-playtime-reward-npc-id: -1 # <-- PLEASE SET THIS ID FOR THE PLAYTIME REWARD NPC
+playtime-reward-npc-id: -1
 token-shop-npc-id: 13
-# --- END ---
-coinflip:
-  broadcast-worlds: # <-- [ADDED FOR REQ 4] Worlds for /cf msgtoggle
-    - "lifesteal"
-    - "arena"
-    - "normal_world"
-    - "nether"
-    - "end"
 
-firesale:
-  # The Citizens NPC ID that players click to open the menu.
-  fire-npc-id: -1
-  # The Discord channel ID for logging all firesale activity.
-  log-channel-id: ""
-  # Message sent to players on join/world-change (in 'lifesteal' world)
-  # %nl% = new line.
-  join-message: "<green>A firesale is currently active!%nl%<aqua><item_name></aqua> (<white>x<quantity></white>)%nl%Price: <gold><price> Credits</gold>%nl%Time Left: <yellow><time></yellow>"
+# coinflip: (Moved to end)
+#   broadcast-worlds:
+#     - "lifesteal"
+# ...
 
 # ============================
 # Logging Configuration
 # ============================
 link-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
 login-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-# --- REMOVED: old order-system-log-webhook ---
 staff-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
 discord-staff-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-
-# --- NEW: Discord Bot Logging (Req 11) ---
-# These channel IDs must be set for the logger-bot-token to use.
-discord-logging:
-  order-channels:
-    creation: "0"
-    filling: "0"
-    management: "0"
-    admin: "0"
-    errors: "0"
 
 # ============================
 # Order System Configuration
@@ -128,20 +88,22 @@ immortal-order-limit: 11
 supreme-order-limit: 13
 phantom-order-limit: 15
 
-# --- REMOVED OLD FLAT ORDER CHANNEL KEYS ---
+discord-logging:
+  order-channels:
+    creation: "1437287692500205581"
+    filling: "1437287771621429269"
+    management: "1437287802143506483"
+    admin: "1437287869973528647"
+    errors: "1437287895332425818"
 
-
-# =======================================================
-# Scoreboard Configuration - Edit your scoreboards here!
-# =======================================================
+# ============================
+# Scoreboard Configuration
+# ============================
 scoreboard:
-  # Scoreboard for the "hub" world
   hub:
     title: "&6&l✦ &e&lALPHA &b&lMC &7||  &a%server_online% &6&l✦"
-    # --- NEW: List of worlds where this scoreboard applies ---
     worlds:
       - "hub"
-    # --- END NEW ---
     lines:
       - '  &7⌚ %localtime_time_dd/MM/yyyy HH:mm%'
       - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
@@ -149,22 +111,19 @@ scoreboard:
       - '&6&l╏ &fRank: &r%vault_prefix%'
       - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
       - '&6&l╏ &fPing: &a%player_ping%'
-      - '&6&l_lifesteal╏ &fPlaytime: &a%statistic_time_played%'
+      - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
       - '      &eplay.aplhamc.fun  '
       - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
 
-  # Scoreboard for lifesteal and other worlds
   lifesteal:
     title: "&6&l✦ &e&lALPHA &b&lMC &7||  &a%server_online% &6&l✦"
-    # --- NEW: List of worlds where this scoreboard applies ---
     worlds:
       - "lifesteal"
       - "arena"
-      - "world_nether" # Assuming default Nether world name
-      - "world_the_end" # Assuming default End world name
+      - "world_nether"
+      - "world_the_end"
       - "normal_world"
-    # --- END NEW ---
     lines:
       - '  &7⌚ %localtime_time_dd/MM/yyyy HH:mm%'
       - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
@@ -173,69 +132,84 @@ scoreboard:
       - '&6&l╏ &fMoney: &a%vault_eco_balance_formatted%'
       - "&6&l╏ &fLevel: &a{lifesteal_level_%player's uuid%}"
       - '&6&l╏ &fHeart: &a%player_health_rounded%'
-      - "&6&lVfCredits: &a{credits.%player's uuid%}"
+      - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
       - '&6&l╏ &fPing: &a%player_ping%'
       - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
       - '      &eplay.aplhamc.fun  '
-      - '&e&m┅┅┅*┅┅┅┅┅┅┅D'
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
 
+# ============================
+# Leaderboards Configuration
+# ============================
 leaderboards:
-  # The %nl% placeholder will be replaced with a newline.
-  # Placeholders: %rank%, %player%, %value%
-
-  # This value controls the footer text. 60s = 1 minute.
   refresh-seconds: 60
-
   kills:
-    # --- ADDED LINE BREAK AND DIVIDER ---
     title: "<gradient:gold:yellow>⚡ Top Kills Lifetime ⚡</gradient>%nl%<gray>---------------</gray>"
     line-format: "<yellow>#%rank%. <white>%player% <dark_gray>| <gold>%value%"
     empty-line-format: "<yellow>#%rank%. <white>N/A <dark_gray>| <gold>N/A"
-    # --- ADDED DIVIDER AND LINE BREAK ---
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
-
   deaths:
     title: "<gradient:red:dark_red>☠ Top Deaths Lifetime ☠</gradient>%nl%<gray>---------------</gray>"
     line-format: "<red>#%rank%. <white>%player% <dark_gray>| <gray>%value%"
     empty-line-format: "<red>#%rank%. <white>N/A <dark_gray>| <gray>N/A"
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
-
   playtime:
-    # --- CHANGE THIS ---
-    # title: "&#54DAF4B&#54C8EBi..." (This will NOT work anymore)
-    # --- TO THIS ---
     title: "<gradient:aqua:white>Most Time Played</gradient>%nl%<gray>---------------</gray>"
-
     line-format: "<gray>#%rank% <white>%player% | %value% Hours"
     empty-line-format: "<gray>#%rank% <white>N/A | N/A Hours"
     footer: "<gray>---------------</gray>%nl%<dark_gray>Refreshes every %refresh-seconds%s"
-    # ...
-
   balance:
     title: "<gradient:green:dark_green>Top Balance</gradient>%nl%<gray>---------------</gray>"
     line-format: "<green>#%rank%. <white>%player% <dark_gray>| <green>%value%"
     empty-line-format: "<green>#%rank%. <white>N/A <dark_gray>| <green>N/A"
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
-
   credits:
     title: "<gradient:blue:aqua>Top Credits</gradient>%nl%<gray>---------------</gray>"
     line-format: "<blue>#%rank%. <white>%player% <dark_gray>| <aqua>%value%"
     empty-line-format: "<blue>#%rank%. <white>N/A <dark_gray>| <aqua>N/A"
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
-
   lifesteal:
-    title: "<gradient:red:purple>Top Lifesteal Level</gradient>%nl%<gray>---------------</gray>"
-    line-format: "<red>#%rank%. <white>%player% <dark_gray>| <light_purple>%value% ❤"
-    empty-line-format: "<red>#%rank%. <white>N/A <dark_gray>| <light_purple>N/A ❤"
-    footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+    title: "<gradient:#F59C33:#F25C0C:#EB7E09>Top Lifesteal Level</gradient>%nl%<gray>-----------------</gray>"
+    line-format: "<#F59C33>#%rank%. <green>%player% <white>| <#F59C33>%value%'"
+    empty-line-format: "<#F59C33>#%rank%. <green>N/A <white>| <l<#F59C33>>N/A ❤"
+    footer: "<gray>-----------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
 
 # ============================
-# NEW: ClearLag Limit Configuration
+# ClearLag Configuration
 # ============================
+# Note: These values are read from the root of config.yml
+# Prefixes are read by LagClearConfig.java
+cleaner_prefix: "<b><gradient:#F04747:#FF00F6>ᴄʟᴇᴀɴᴇʀ</gradient></b><white>:"
+cleaner_prefix_2: "&x&F&0&4&7&4&7&lᴄ&x&F&3&3&B&6&4&lʟ&x&F&5&2&F&8&1&lᴇ&x&F&8&2&4&9&F&lᴀ&x&F&A&1&8&B&C&lɴ&x&F&D&0&C&D&9&lᴇ&x&F&F&0&0&F&6&lʀ&f:"
+
+# Log channel is read by LagClearLogger.java
+lagclear-log-channel-id: 1434707657633169611
+
+# Limits are read by PlacementLimitListener.java
 clearlag-limits:
   # Limits are per-chunk
   armor-stand: 3
   hopper: 10
   repeater: 20
   dispenser: 10
+
+# ============================
+# Coinflip Configuration
+# ============================
+# Note: These values are read from the root of config.yml
+# Log channels are read by CoinflipLogger.java
+coinflip-log-channel-id: 1431926295847243858
+coinflip-admin-log-channel-id: 1435165917779591218
+
+# NPC ID is read by CoinflipNpcListener.java
+coinflip-npc-id: 4
+
+# Broadcast worlds are read by MessageManager.java
+coinflip:
+  broadcast-worlds:
+    - "lifesteal"
+    - "arena"
+    - "normal_world"
+    - "nether"
+    - "end"

@@ -61,6 +61,14 @@ public class OrderCreate {
     // --- GUI Opening Methods ---
 
     public void openCreateGui(Player player, int page) {
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         List<ItemStack> orderableItems = orderSystem.getOrderableItems();
         int totalItems = orderableItems.size();
         int totalPages = (int) Math.ceil((double) totalItems / ITEMS_PER_PAGE);
@@ -88,6 +96,14 @@ public class OrderCreate {
     }
 
     public void openSearchResultsGui(Player player, int page, String searchTerm) {
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         List<ItemStack> allItems = orderSystem.getOrderableItems();
         List<ItemStack> filteredItems = allItems.stream()
                 .filter(item -> item.getType().name().toLowerCase().replace("_", " ").contains(searchTerm.toLowerCase()))

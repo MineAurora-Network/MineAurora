@@ -97,7 +97,14 @@ public class OrderAdminMenu {
 
     // --- GUI Opening ---
     public void openAdminGui(Player player, int page) {
-        // --- FIX: Use whenComplete, not whenCompleteAsync ---
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         getActiveOrders(false).whenComplete((activeOrders, error) -> {
             if (error != null) {
                 messageHandler.sendMessage(player, "<red>Error loading active orders for admin menu.</red>");
@@ -117,6 +124,14 @@ public class OrderAdminMenu {
     }
 
     private void buildAndOpenAdminGui(Player player, int page, List<Order> activeOrders) {
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         int totalOrders = activeOrders.size();
         int totalPages = (int) Math.ceil((double) totalOrders / ORDERS_PER_PAGE);
         int finalPage = Math.max(0, Math.min(page, totalPages > 0 ? totalPages - 1 : 0));
@@ -181,19 +196,24 @@ public class OrderAdminMenu {
     // --- Click Handler (Called by OrderGuiListener) ---
     public void handleAdminMenuClick(InventoryClickEvent event, Player player) {
         ItemStack clickedItem = event.getCurrentItem();
-        int currentPage = player.getMetadata(OrderModule.GUI_ADMIN_METADATA).get(0).asInt();
         int slot = event.getSlot();
         ClickType clickType = event.getClick();
+
+        // --- FIX: Moved currentPage retrieval to where it's needed ---
+        // int currentPage = player.getMetadata(OrderModule.GUI_ADMIN_METADATA).get(0).asInt();
 
         if (slot >= 45) { // Bottom row
             Material type = clickedItem.getType();
             if (type == Material.BARRIER && slot == 48) {
                 player.closeInventory();
             } else if (type == Material.ARROW) {
+                // Retrieve current page only when needed
+                int currentPage = player.getMetadata(OrderModule.GUI_ADMIN_METADATA).get(0).asInt();
                 if (slot == 45 && currentPage > 0) openAdminGui(player, currentPage - 1);
                 else if (slot == 53) openAdminGui(player, currentPage + 1);
             } else if (type == Material.CLOCK && slot == 50) {
                 // (Point 7) Force refresh
+                int currentPage = player.getMetadata(OrderModule.GUI_ADMIN_METADATA).get(0).asInt();
                 messageHandler.sendMessage(player, "<green>Forcing cache refresh...</green>");
                 getActiveOrders(true).thenRun(() ->
                         Bukkit.getScheduler().runTask(plugin, () -> openAdminGui(player, currentPage))
@@ -209,11 +229,36 @@ public class OrderAdminMenu {
             }
         } else { // Order item clicked
             if (clickType.isShiftClick()) {
-                // (Point 9) Get toggle states
+                // --- START OF FIX for the error line ---
+
+                // 1. Get the Order ID from the item's metadata
+                ItemMeta meta = clickedItem.getItemMeta();
+                if (meta == null || !meta.getPersistentDataContainer().has(orderIdKey, PersistentDataType.LONG)) {
+                    messageHandler.sendMessage(player, "<red>Error reading order ID from item.</red>");
+                    return;
+                }
+                long orderId = meta.getPersistentDataContainer().get(orderIdKey, PersistentDataType.LONG);
+
+                // 2. Get the "stale" Order object from your cache
+                Order staleOrder = activeOrdersCache.get(orderId);
+
+                if (staleOrder == null) {
+                    messageHandler.sendMessage(player, "<red>Error finding order in cache. Try refreshing.</red>");
+                    return;
+                }
+
+                // 3. Get the toggle states
                 boolean refund = getToggleState(event.getInventory().getItem(51), true);
                 boolean items = getToggleState(event.getInventory().getItem(52), false);
 
-                handleAdminCancel(player, clickedItem, currentPage, refund, items);
+                // 4. Get the current page
+                int currentPage = player.getMetadata(OrderModule.GUI_ADMIN_METADATA).get(0).asInt();
+
+                // 5. Call the new, corrected 5-argument method
+                // We pass the 'staleOrder' object, NOT the 'clickedItem'
+                handleAdminCancel(player, staleOrder, refund, items, currentPage);
+
+                // --- END OF FIX ---
             } else {
                 messageHandler.sendMessage(player, "<red>You must Shift-Click to cancel an order.</red>");
             }
@@ -221,100 +266,100 @@ public class OrderAdminMenu {
     }
 
     // --- Admin Cancel Logic (Points 5, 7, 9, 11) ---
-    private void handleAdminCancel(Player admin, ItemStack clickedItem, int currentPage, boolean doRefund, boolean doReturnItems) {
-        ItemMeta meta = clickedItem.getItemMeta();
-        if (meta == null || !meta.getPersistentDataContainer().has(orderIdKey, PersistentDataType.LONG)) {
-            messageHandler.sendMessage(admin, "<red>Error identifying order.</red>");
-            return;
-        }
+    private void handleAdminCancel(Player admin, Order staleOrder, boolean doRefund, boolean doReturnItems, int currentPage) {
+        // Get the ID from the stale object. This is all we'll use it for.
+        long orderId = staleOrder.getOrderId();
 
-        long orderId = meta.getPersistentDataContainer().get(orderIdKey, PersistentDataType.LONG);
-        Order order = activeOrdersCache.get(orderId);
-
-        if (order == null) {
-            messageHandler.sendMessage(admin, "<red>Order data not found in cache. Refreshing...</red>");
-            getActiveOrders(true).thenRun(() ->
-                    Bukkit.getScheduler().runTask(plugin, () -> openAdminGui(admin, currentPage))
-            );
-            return;
-        }
-
-        // 1. Calculate refund and items
-        double refundAmount = (order.getTotalAmount() - order.getAmountDelivered()) * order.getPricePerItem();
-        int itemsToReturn = order.getAmountDelivered();
-
-        // 2. Mark order as CANCELLED in DB
-        ordersDatabase.updateOrderStatus(order.getOrderId(), Order.OrderStatus.CANCELLED).whenCompleteAsync((success, error) -> {
-            if (error != null || !success) {
-                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to update order status in database. Aborting.</red>"));
-                logger.logError("AdminCancel failed to update DB status", error, order.getOrderId());
+        // --- DUPE FIX: Re-load the order from the database ---
+        ordersDatabase.loadOrderById(orderId).whenComplete((freshOrder, loadError) -> {
+            if (loadError != null) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to load order from database. Aborting.</red>"));
+                logger.logError("AdminCancel failed to re-load order " + orderId, loadError, orderId);
                 return;
             }
 
-            // (Point 7) Remove from local cache immediately
-            activeOrdersCache.remove(orderId);
-
-            // 3. Load stored items IF we need to return them
-            CompletableFuture<List<ItemStack>> itemFuture;
-            if (doReturnItems && itemsToReturn > 0) {
-                itemFuture = ordersDatabase.loadAndRemoveStoredItems(order.getOrderId());
-            } else {
-                // If not returning items, just delete the order (which cascades to storage)
-                ordersDatabase.deleteOrder(order.getOrderId());
-                itemFuture = CompletableFuture.completedFuture(new ArrayList<>());
+            // Check if the order is still eligible
+            if (freshOrder == null) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<yellow>Order " + orderId + " no longer exists.</yellow>"));
+                return;
             }
 
-            // 4. When items are loaded, process delivery
-            // --- FIX: Use whenComplete, not whenCompleteAsync ---
-            itemFuture.whenComplete((loadedItems, itemError) -> {
-                if (itemError != null) {
-                    Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to load stored items. Refund not processed.</red>"));
-                    logger.logError("AdminCancel failed to load items", itemError, order.getOrderId());
+            // THIS IS THE LINE THAT STOPS THE DUPE:
+            if (freshOrder.getStatus() != Order.OrderStatus.ACTIVE) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Cannot cancel: This order is no longer ACTIVE (it was " + freshOrder.getStatus().name() + ").</red>"));
+                return;
+            }
+            // --- END DUPE FIX ---
+
+
+            // Now we can proceed using the FRESH order data.
+            double refundAmount = (freshOrder.getTotalAmount() - freshOrder.getAmountDelivered()) * freshOrder.getPricePerItem();
+            int itemsToReturn = freshOrder.getAmountDelivered();
+
+            // Mark order as cancelled in DB
+            ordersDatabase.updateOrderStatus(freshOrder.getOrderId(), Order.OrderStatus.CANCELLED).whenComplete((success, error) -> {
+                if (error != null || !success) {
+                    Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to update order status in database. Aborting.</red>"));
+                    logger.logError("AdminCancel failed to update DB status", error, freshOrder.getOrderId());
                     return;
                 }
 
-                double finalRefund = doRefund ? refundAmount : 0.0;
-                // --- FIX: Type inference is now correct ---
-                List<ItemStack> finalItems = doReturnItems ? loadedItems : new ArrayList<>();
+                // (Point 7) Remove from local cache immediately
+                activeOrdersCache.remove(freshOrder.getOrderId());
 
-                // 5. Log action (Point 11)
-                logger.logAdminCancel(admin, order, finalRefund, finalItems.stream().mapToInt(ItemStack::getAmount).sum());
-
-                // 6. Check player online status (Point 5)
-                OfflinePlayer placer = Bukkit.getOfflinePlayer(order.getPlacerUUID());
-
-                // (Point 5)
-                if (placer.isOnline()) {
-                    Player onlinePlacer = placer.getPlayer();
-                    // Process online
-                    if (finalRefund > 0.01) {
-                        OrderModule.getEconomy().depositPlayer(onlinePlacer, finalRefund);
-                    }
-                    if (!finalItems.isEmpty()) {
-                        HashMap<Integer, ItemStack> failed = onlinePlacer.getInventory().addItem(finalItems.toArray(new ItemStack[0]));
-                        failed.values().forEach(item -> onlinePlacer.getWorld().dropItemNaturally(onlinePlacer.getLocation(), item));
-                    }
-
-                    // Notify placer
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        messageHandler.sendMessage(onlinePlacer, "<red>Your order (ID: " + order.getOrderId() + ") was forcibly cancelled by an administrator.</red>");
-                        if (doRefund) messageHandler.sendMessage(onlinePlacer, "<green>The remaining funds (" + OrderModule.getEconomy().format(finalRefund) + ") have been refunded.</green>");
-                        if (doReturnItems) messageHandler.sendMessage(onlinePlacer, "<green>The partially filled items have been returned to your inventory.</green>");
-                    });
+                CompletableFuture<List<ItemStack>> itemFuture;
+                if (doReturnItems && itemsToReturn > 0) {
+                    itemFuture = ordersDatabase.loadAndRemoveStoredItems(freshOrder.getOrderId());
                 } else {
-                    // Process offline
-                    offlineDeliveryManager.scheduleDelivery(order.getPlacerUUID(), finalRefund, finalItems);
+                    ordersDatabase.deleteOrder(freshOrder.getOrderId());
+                    itemFuture = CompletableFuture.completedFuture(new ArrayList<>());
                 }
 
-                // 7. Notify admin and refresh GUI (Point 7)
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    messageHandler.sendMessage(admin, "<green>Successfully cancelled and removed order " + orderId + ".</green>");
-                    // Re-open GUI, which will use the updated cache
-                    openAdminGui(admin, currentPage);
+                itemFuture.whenCompleteAsync((loadedItems, itemError) -> {
+                    if (itemError != null) {
+                        Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to load stored items. Refund not processed.</red>"));
+                        logger.logError("AdminCancel failed to load items", itemError, freshOrder.getOrderId());
+                        return;
+                    }
+
+                    double finalRefund = doRefund ? refundAmount : 0.0;
+                    List<ItemStack> finalItems = doReturnItems ? loadedItems : new ArrayList<>();
+
+                    logger.logAdminCancel(admin, freshOrder, finalRefund, finalItems.stream().mapToInt(ItemStack::getAmount).sum());
+
+                    OfflinePlayer placer = Bukkit.getOfflinePlayer(freshOrder.getPlacerUUID());
+                    if (placer.isOnline()) {
+                        Player onlinePlacer = placer.getPlayer();
+                        if (finalRefund > 0.01) {
+                            OrderModule.getEconomy().depositPlayer(onlinePlacer, finalRefund);
+                        }
+                        if (!finalItems.isEmpty()) {
+                            HashMap<Integer, ItemStack> failed = onlinePlacer.getInventory().addItem(finalItems.toArray(new ItemStack[0]));
+                            failed.values().forEach(item -> onlinePlacer.getWorld().dropItemNaturally(onlinePlacer.getLocation(), item));
+                        }
+
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            messageHandler.sendMessage(onlinePlacer, "<red>Your order (ID: " + freshOrder.getOrderId() + ") was forcibly cancelled by an administrator.</red>");
+                            if (doRefund) messageHandler.sendMessage(onlinePlacer, "<green>The remaining funds (" + OrderModule.getEconomy().format(finalRefund) + ") have been refunded.</green>");
+                            if (doReturnItems) messageHandler.sendMessage(onlinePlacer, "<green>The partially filled items have been returned to your inventory.</green>");
+                        });
+                    } else {
+                        offlineDeliveryManager.scheduleDelivery(freshOrder.getPlacerUUID(), finalRefund, finalItems);
+                    }
+
+                    // Notify admin AND REFRESH MENU
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        messageHandler.sendMessage(admin, "<green>Successfully cancelled order " + freshOrder.getOrderId() + ".</green>");
+
+                        // --- THIS IS THE CORRECTED REFRESH LINE ---
+                        // It uses the correct method name from your file
+                        getActiveOrders(true).thenRun(() ->
+                                Bukkit.getScheduler().runTask(plugin, () -> openAdminGui(admin, currentPage))
+                        );
+                        // --- END REFRESH ---
+                    });
                 });
-
             });
-
         });
     }
 

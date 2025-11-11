@@ -6,21 +6,23 @@ import me.login.discord.moderation.DiscordModConfig;
 import me.login.loginsystem.*;
 import me.login.misc.dailyreward.DailyRewardDatabase;
 import me.login.misc.dailyreward.DailyRewardModule;
-import me.login.misc.firesale.FiresaleModule; // --- FIRESALE: ADDED ---
+import me.login.misc.firesale.FiresaleModule;
 import me.login.misc.playtimerewards.PlaytimeRewardModule;
+import me.login.misc.tab.TabManager;
 import me.login.misc.tokens.TokenModule;
 import me.login.misc.creatorcode.CreatorCodeModule;
 import me.login.misc.rank.RankManager;
-import me.login.misc.rank.RankModule;// ... other imports ...
-import me.login.ordersystem.OrderModule; // --- ADDED NEW MODULE IMPORT
-import me.login.ordersystem.gui.OrderAlertMenu; // --- ADDED FOR GETTER
-import me.login.ordersystem.gui.OrderMenu; // --- ADD THIS LINE ---
+import me.login.misc.rank.RankModule;
+import me.login.moderation.commands.AdminCommandsModule; // --- ADMINCMDS: ADDED ---
+import me.login.ordersystem.OrderModule;
+import me.login.ordersystem.gui.OrderAlertMenu;
+import me.login.ordersystem.gui.OrderMenu;
 import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
 import me.login.clearlag.LagClearModule;
-import net.kyori.adventure.text.Component; // --- FIRESALE: ADDED ---
-import net.kyori.adventure.text.minimessage.MiniMessage; // --- FIRESALE: ADDED ---
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -60,8 +62,7 @@ public class Login extends JavaPlugin implements Listener {
     private LoginDatabase loginDatabase;
     private LoginSystemLogger loginSystemLogger;
 
-    // --- REMOVED OLD ORDER SYSTEM FIELDS ---
-    private OrderModule orderModule; // --- ADDED NEW MODULE FIELD ---
+    private OrderModule orderModule;
 
     private DamageIndicator damageIndicator;
     private int defaultOrderLimit;
@@ -85,26 +86,25 @@ public class Login extends JavaPlugin implements Listener {
     private CreatorCodeModule creatorCodeModule;
     private RankModule rankModule;
     private TicketModule ticketModule;
-    private FiresaleModule firesaleModule; // --- FIRESALE: ADDED ---
+    private FiresaleModule firesaleModule;
+    private TabManager tabManager;
+    private AdminCommandsModule adminCommandsModule; // --- ADMINCMDS: ADDED ---
 
-    private MiniMessage miniMessage; // --- FIRESALE: ADDED ---
-    private String serverPrefix; // --- FIRESALE: ADDED ---
+    private MiniMessage miniMessage;
+    private String serverPrefix;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         saveResource("items.yml", false);
 
-        // --- FIRESALE: ADDED ---
-        // Initialize MiniMessage and server prefix for the whole plugin
         this.miniMessage = MiniMessage.miniMessage();
         this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
-        // --- FIRESALE: END ADD ---
 
         getServer().getPluginManager().registerEvents(new me.login.misc.GuiCleanup.MetaDataRemover(this), this);
 
         this.discordModConfig = new DiscordModConfig(this);
-        this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3); // Kept for OrderCreate
+        this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3);
 
         if (!setupEconomy()) {
             disableWithError("Vault dependency not found or no Economy plugin detected! Coinflip and Order systems require Vault.");
@@ -129,8 +129,6 @@ public class Login extends JavaPlugin implements Listener {
             return;
         }
 
-        // --- REMOVED OLD ORDERSDATABASE CONNECT ---
-
         this.coinflipModule = new CoinflipModule(this);
         if (!coinflipModule.initDatabase()) {
             disableWithError("Coinflip DB failed.");
@@ -145,9 +143,6 @@ public class Login extends JavaPlugin implements Listener {
 
         this.damageIndicator = new DamageIndicator(this);
         getServer().getPluginManager().registerEvents(damageIndicator, this);
-
-        // --- REMOVED OLD ORDER SYSTEM INITIALIZATION ---
-        // --- REMOVED OLD OrderAdminMenu LISTENER REGISTRATION ---
 
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
 
@@ -237,11 +232,9 @@ public class Login extends JavaPlugin implements Listener {
                             getLogger().severe("Failed to initialize Lifesteal Module!");
                         }
 
-                        // --- ADDED NEW ORDER MODULE INITIALIZATION ---
                         getLogger().info("Initializing OrderModule...");
                         orderModule = new OrderModule(Login.this);
                         orderModule.enable();
-                        // --- END ADD ---
 
                         getLogger().info("Initializing Coinflip system...");
                         coinflipModule.initLogicAndListeners();
@@ -274,11 +267,19 @@ public class Login extends JavaPlugin implements Listener {
                         ticketModule = new TicketModule(Login.this, discordLinkingModule.getDiscordLinking(), rankManager);
                         ticketModule.init();
 
-                        // --- FIRESALE: ADDED ---
                         getLogger().info("Initializing FiresaleModule...");
                         firesaleModule = new FiresaleModule(Login.this);
                         firesaleModule.init();
-                        // --- FIRESALE: END ADD ---
+
+                        getLogger().info("Initializing TabManager...");
+                        tabManager = new TabManager(Login.this);
+                        tabManager.startUpdater();
+
+                        // --- ADMINCMDS: ADDED ---
+                        getLogger().info("Initializing AdminCommandsModule...");
+                        adminCommandsModule = new AdminCommandsModule(Login.this);
+                        adminCommandsModule.enable();
+                        // --- ADMINCMDS: END ADD ---
 
                         this.cancel();
                         return;
@@ -319,7 +320,6 @@ public class Login extends JavaPlugin implements Listener {
     }
 
     private void registerCommands() {
-        // --- MODIFIED IF CHECK (Removed orderSystem) ---
         if (loginSystem == null || moderationDatabase == null) {
             getLogger().severe("Cannot register Bukkit commands - one or more core systems (Login, Mod) failed initialization!");
             return;
@@ -327,8 +327,6 @@ public class Login extends JavaPlugin implements Listener {
 
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase, loginSystemLogger);
         LoginSystemAdminCmd adminLoginCmd = new LoginSystemAdminCmd(this, loginSystem, loginDatabase, discordLinkDatabase, loginSystemLogger);
-
-        // --- REMOVED OLD OrderCmd INITIALIZATION AND REGISTRATION ---
 
         setCommandExecutor("register", loginCmd);
         setCommandExecutor("login", loginCmd);
@@ -338,8 +336,6 @@ public class Login extends JavaPlugin implements Listener {
         setCommandExecutor("loginhistory", adminLoginCmd);
         setCommandExecutor("checkalt", adminLoginCmd);
         setCommandExecutor("adminchangepass", adminLoginCmd);
-
-        // --- REMOVED setCommandExecutor("order", orderCmd); ---
 
         MuteCommand muteExecutor = new MuteCommand(this, moderationDatabase);
         setCommandExecutor("mute", muteExecutor);
@@ -378,10 +374,12 @@ public class Login extends JavaPlugin implements Listener {
                     return true;
                 }
                 this.reloadConfig();
-                // --- FIRESALE: ADDED ---
-                // Reload server prefix when config reloads
                 this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
-                // --- FIRESALE: END ADD ---
+
+                if (tabManager != null) {
+                    tabManager.loadConfig();
+                }
+
                 if (scoreboardManager != null) {
                     scoreboardManager.loadConfig();
                     Bukkit.getOnlinePlayers().forEach(scoreboardManager::updateScoreboard);
@@ -442,24 +440,28 @@ public class Login extends JavaPlugin implements Listener {
                 ticketModule.shutdown();
             }
 
-            // --- FIRESALE: ADDED ---
             if (firesaleModule != null) {
                 firesaleModule.disable();
             }
-            // --- FIRESALE: END ADD ---
 
-            // --- ADDED NEW MODULE DISABLE ---
+            if (tabManager != null) {
+                tabManager.stopUpdater();
+            }
+
+            // --- ADMINCMDS: ADDED ---
+            if (adminCommandsModule != null) {
+                adminCommandsModule.disable();
+            }
+            // --- ADMINCMDS: END ADD ---
+
             if (orderModule != null) {
                 orderModule.disable();
             }
-            // --- END ADD ---
 
             if (discordLinkingModule != null) {
                 discordLinkingModule.shutdown();
             }
             if (loginDatabase != null) loginDatabase.disconnect();
-
-            // --- REMOVED OLD ordersDatabase.disconnect() ---
 
             if (coinflipModule != null && coinflipModule.getDatabase() != null) {
                 coinflipModule.getDatabase().disconnect();
@@ -485,17 +487,10 @@ public class Login extends JavaPlugin implements Listener {
         }
     }
 
-    // ADD THIS METHOD TO YOUR Login.java CLASS
-
-    /**
-     * Getter for the OrderModule's OrderMenu.
-     * This is needed by OrderFilling.java.
-     */
     public OrderMenu getOrderMenu() {
         if (this.orderModule == null) {
             return null;
         }
-        // This correctly calls the getOrderMenu() method from your OrderModule
         return this.orderModule.getOrderMenu();
     }
 
@@ -505,8 +500,6 @@ public class Login extends JavaPlugin implements Listener {
     public LoginDatabase getLoginDatabase() {
         return loginDatabase;
     }
-
-    // --- REMOVED OLD ORDER SYSTEM GETTERS ---
 
     public DiscordLinking getDiscordLinking() {
         return (discordLinkingModule != null) ? discordLinkingModule.getDiscordLinking() : null;
@@ -522,7 +515,6 @@ public class Login extends JavaPlugin implements Listener {
         return this;
     }
 
-    // Rename your method and fix the return line
     public OrderAlertMenu getOrderAlertMenu() {
         return (orderModule != null) ? orderModule.getOrderAlertMenu() : null;
     }
@@ -613,26 +605,15 @@ public class Login extends JavaPlugin implements Listener {
         }
     }
 
-    // --- ADDED FOR JDA ---
     public JDA getJda() {
         return (lagClearLogger != null) ? lagClearLogger.getJDA() : null;
     }
 
-    // --- FIRESALE: ADDED ---
-    /**
-     * Gets the Kyori MiniMessage instance for parsing components.
-     * @return The MiniMessage instance.
-     */
     public MiniMessage getComponentSerializer() {
         return miniMessage;
     }
 
-    /**
-     * Gets the configured server prefix for messages.
-     * @return The server prefix string (with MiniMessage tags).
-     */
     public String getServerPrefix() {
         return serverPrefix;
     }
-    // --- FIRESALE: END ADD ---
 }

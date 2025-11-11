@@ -65,6 +65,20 @@ public class OrderAlertMenu {
     }
 
     public void openAlertGui(Player staff, long orderId) {
+
+        // --- THIS IS THE FIX ---
+        // Add this block to remove all old "sticky notes"
+        // (Remember to use 'staff' instead of 'player' here)
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (staff.hasMetadata(key)) {
+                staff.removeMetadata(key, plugin);
+            }
+        }
+        if (staff.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            staff.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
+        // --- END OF FIX ---
+
         // --- FIX: Use whenComplete ---
         ordersDatabase.loadOrderById(orderId).whenComplete((order, error) -> {
             if (error != null) {
@@ -86,6 +100,7 @@ public class OrderAlertMenu {
                 Inventory gui = Bukkit.createInventory(null, 27, OrderGuiUtils.getAdminMenuTitle("Inspect Order: " + orderId));
 
                 // Store order data in player metadata
+                // This now happens *after* all old metadata is cleared.
                 staff.setMetadata(OrderModule.GUI_ALERT_METADATA, new FixedMetadataValue(plugin, true));
                 staff.setMetadata(ALERT_ORDER_KEY, new FixedMetadataValue(plugin, order));
 
@@ -148,79 +163,106 @@ public class OrderAlertMenu {
         }
     }
 
-    private void handleAdminCancel(Player admin, Order order, boolean doRefund, boolean doReturnItems) {
-        // 1. Calculate refund and items to return
-        double refundAmount = (order.getTotalAmount() - order.getAmountDelivered()) * order.getPricePerItem();
-        int itemsToReturn = order.getAmountDelivered();
+    private void handleAdminCancel(Player admin, Order staleOrder, boolean doRefund, boolean doReturnItems) {
+        // Get the ID from the stale object. This is all we'll use it for.
+        long orderId = staleOrder.getOrderId();
 
-        // 2. Mark order as cancelled in DB
-        // --- FIX: Use whenComplete ---
-        ordersDatabase.updateOrderStatus(order.getOrderId(), Order.OrderStatus.CANCELLED).whenComplete((success, error) -> {
-            // --- FIX: Type inference is now correct ---
-            if (error != null || !success) {
-                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to update order status in database. Aborting.</red>"));
-                logger.logError("AdminCancel failed to update DB status", error, order.getOrderId());
+        // --- THIS IS THE FIX ---
+        // 1. Re-load the order from the database to get the *current* status.
+        //    This prevents us from acting on old data.
+        ordersDatabase.loadOrderById(orderId).whenComplete((freshOrder, loadError) -> {
+            if (loadError != null) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to load order from database. Aborting.</red>"));
+                logger.logError("AdminCancel failed to re-load order " + orderId, loadError, orderId);
                 return;
             }
 
-            // 3. Load stored items IF we need to return them
-            CompletableFuture<List<ItemStack>> itemFuture; // --- FIX: Class now found ---
-            if (doReturnItems && itemsToReturn > 0) {
-                itemFuture = ordersDatabase.loadAndRemoveStoredItems(order.getOrderId());
-            } else {
-                // If not returning items, just delete the order (which cascades to storage)
-                ordersDatabase.deleteOrder(order.getOrderId());
-                itemFuture = CompletableFuture.completedFuture(new ArrayList<>()); // --- FIX: Class now found ---
+            // 2. Check if the order is still eligible for cancellation.
+            if (freshOrder == null) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<yellow>Order " + orderId + " no longer exists (it may have been removed).</yellow>"));
+                return;
             }
 
-            // 4. When items are loaded (or not), process payment/delivery
-            itemFuture.whenCompleteAsync((loadedItems, itemError) -> {
-                if (itemError != null) {
-                    Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to load stored items. Refund not processed.</red>"));
-                    logger.logError("AdminCancel failed to load items", itemError, order.getOrderId());
+            // THIS IS THE LINE THAT STOPS THE DUPE:
+            if (freshOrder.getStatus() != Order.OrderStatus.ACTIVE) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Cannot cancel: This order is no longer ACTIVE (it was " + freshOrder.getStatus().name() + ").</red>"));
+                // By returning here, we don't process any refunds or item returns.
+                return;
+            }
+
+            // --- END OF FIX ---
+
+
+            // 3. Now we can proceed using the FRESH order data.
+            //    All logic from here on uses 'freshOrder', NOT 'staleOrder'.
+
+            // Calculate refund and items to return (using freshOrder)
+            double refundAmount = (freshOrder.getTotalAmount() - freshOrder.getAmountDelivered()) * freshOrder.getPricePerItem();
+            int itemsToReturn = freshOrder.getAmountDelivered();
+
+            // Mark order as cancelled in DB
+            ordersDatabase.updateOrderStatus(freshOrder.getOrderId(), Order.OrderStatus.CANCELLED).whenComplete((success, error) -> {
+                if (error != null || !success) {
+                    Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to update order status in database. Aborting.</red>"));
+                    logger.logError("AdminCancel failed to update DB status", error, freshOrder.getOrderId());
                     return;
                 }
 
-                // Final values
-                double finalRefund = doRefund ? refundAmount : 0.0;
-                List<ItemStack> finalItems = doReturnItems ? loadedItems : new ArrayList<>();
-
-                // 5. Log the action
-                logger.logAdminCancel(admin, order, finalRefund, finalItems.stream().mapToInt(ItemStack::getAmount).sum());
-
-                // 6. Check if player is online
-                OfflinePlayer placer = Bukkit.getOfflinePlayer(order.getPlacerUUID());
-                if (placer.isOnline()) {
-                    Player onlinePlacer = placer.getPlayer();
-                    // Process online
-                    if (finalRefund > 0.01) {
-                        OrderModule.getEconomy().depositPlayer(onlinePlacer, finalRefund);
-                    }
-                    if (!finalItems.isEmpty()) {
-                        HashMap<Integer, ItemStack> failed = onlinePlacer.getInventory().addItem(finalItems.toArray(new ItemStack[0])); // --- FIX: Class now found ---
-                        failed.values().forEach(item -> onlinePlacer.getWorld().dropItemNaturally(onlinePlacer.getLocation(), item));
-                    }
-
-                    // Notify placer
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        messageHandler.sendMessage(onlinePlacer, "<red>Your order (ID: " + order.getOrderId() + ") was forcibly cancelled by an administrator.</red>");
-                        if (doRefund) messageHandler.sendMessage(onlinePlacer, "<green>The remaining funds (" + OrderModule.getEconomy().format(finalRefund) + ") have been refunded.</green>");
-                        if (doReturnItems) messageHandler.sendMessage(onlinePlacer, "<green>The partially filled items have been returned to your inventory.</green>");
-                    });
+                // Load stored items IF we need to return them
+                CompletableFuture<List<ItemStack>> itemFuture;
+                if (doReturnItems && itemsToReturn > 0) {
+                    itemFuture = ordersDatabase.loadAndRemoveStoredItems(freshOrder.getOrderId());
                 } else {
-                    // (Point 5) Process offline
-                    offlineDeliveryManager.scheduleDelivery(order.getPlacerUUID(), finalRefund, finalItems);
+                    // If not returning items, just delete the order (which cascades to storage)
+                    ordersDatabase.deleteOrder(freshOrder.getOrderId());
+                    itemFuture = CompletableFuture.completedFuture(new ArrayList<>());
                 }
 
-                // 7. Notify admin
-                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<green>Successfully cancelled order " + order.getOrderId() + ".</green>"));
+                // When items are loaded (or not), process payment/delivery
+                itemFuture.whenCompleteAsync((loadedItems, itemError) -> {
+                    if (itemError != null) {
+                        Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<red>Failed to load stored items. Refund not processed.</red>"));
+                        logger.logError("AdminCancel failed to load items", itemError, freshOrder.getOrderId());
+                        return;
+                    }
 
+                    // Final values
+                    double finalRefund = doRefund ? refundAmount : 0.0;
+                    List<ItemStack> finalItems = doReturnItems ? loadedItems : new ArrayList<>();
+
+                    // Log the action (using freshOrder)
+                    logger.logAdminCancel(admin, freshOrder, finalRefund, finalItems.stream().mapToInt(ItemStack::getAmount).sum());
+
+                    // Check if player is online
+                    OfflinePlayer placer = Bukkit.getOfflinePlayer(freshOrder.getPlacerUUID());
+                    if (placer.isOnline()) {
+                        Player onlinePlacer = placer.getPlayer();
+                        // Process online
+                        if (finalRefund > 0.01) {
+                            OrderModule.getEconomy().depositPlayer(onlinePlacer, finalRefund);
+                        }
+                        if (!finalItems.isEmpty()) {
+                            HashMap<Integer, ItemStack> failed = onlinePlacer.getInventory().addItem(finalItems.toArray(new ItemStack[0]));
+                            failed.values().forEach(item -> onlinePlacer.getWorld().dropItemNaturally(onlinePlacer.getLocation(), item));
+                        }
+
+                        // Notify placer
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            messageHandler.sendMessage(onlinePlacer, "<red>Your order (ID: " + freshOrder.getOrderId() + ") was forcibly cancelled by an administrator.</red>");
+                            if (doRefund) messageHandler.sendMessage(onlinePlacer, "<green>The remaining funds (" + OrderModule.getEconomy().format(finalRefund) + ") have been refunded.</green>");
+                            if (doReturnItems) messageHandler.sendMessage(onlinePlacer, "<green>The partially filled items have been returned to your inventory.</green>");
+                        });
+                    } else {
+                        // Process offline
+                        offlineDeliveryManager.scheduleDelivery(freshOrder.getPlacerUUID(), finalRefund, finalItems);
+                    }
+
+                    // Notify admin
+                    Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(admin, "<green>Successfully cancelled order " + freshOrder.getOrderId() + ".</green>"));
+                });
             });
-
-        });
+        }); // This is the end of the new whenComplete block
     }
-
-    // --- GUI Item Helpers ---
 
     private ItemStack createDisplayItem(Order order) {
         ItemStack item = order.getItem();

@@ -19,7 +19,7 @@ public class LoginDatabase {
         this.plugin = plugin;
         File dataFolder = plugin.getDataFolder();
         if (!dataFolder.exists()) dataFolder.mkdirs();
-        this.url = "jdbc:sqlite:" + dataFolder.getAbsolutePath() + File.separator + "login_data.db";
+        this.url = "jdbc:sqlite:" + dataFolder.getAbsolutePath() + File.separator + "database/login.db";
     }
 
     public void connect() {

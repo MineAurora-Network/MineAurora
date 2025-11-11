@@ -101,7 +101,14 @@ public class OrderMenu {
 
     // --- GUI Opening ---
     public void openMenuListGui(Player player, int page) {
-        // (Point 7) Refresh cache if it's stale
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         if (System.currentTimeMillis() - lastCacheUpdateTime > CACHE_DURATION_MS) {
             refreshActiveOrdersCache(true).thenAccept(orders ->
                     buildAndOpenGui(player, page, orders)
@@ -112,6 +119,14 @@ public class OrderMenu {
     }
 
     private void buildAndOpenGui(Player player, int page, List<Order> activeOrders) {
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         Bukkit.getScheduler().runTask(plugin, () -> {
             int totalOrders = activeOrders.size();
             int totalPages = (int) Math.ceil((double) totalOrders / ORDERS_PER_PAGE);
@@ -143,6 +158,14 @@ public class OrderMenu {
     }
 
     public void openMenuSearchResultsGui(Player player, int page, String searchTerm) {
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         List<Order> filteredOrders = getActiveOrdersFromCache().stream()
                 .filter(order -> order.getFormattedItemName().toLowerCase().contains(searchTerm.toLowerCase()))
                 .collect(Collectors.toList());

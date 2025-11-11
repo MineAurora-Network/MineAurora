@@ -71,12 +71,12 @@ public class FiresaleItemManager {
 
                 ItemMeta meta = item.getItemMeta();
                 String name = itemSection.getString("name", key);
-                meta.displayName(miniMessage.deserialize(name).decoration(TextDecoration.ITALIC, false));
+                meta.displayName(miniMessage.deserialize("<white>" + name).decoration(TextDecoration.ITALIC, false));
 
                 List<String> loreLines = itemSection.getStringList("lore");
                 if (!loreLines.isEmpty()) {
                     List<Component> lore = loreLines.stream()
-                            .map(line -> miniMessage.deserialize(line).decoration(TextDecoration.ITALIC, false))
+                            .map(line -> miniMessage.deserialize("<gray>" + line).decoration(TextDecoration.ITALIC, false))
                             .collect(Collectors.toList());
                     meta.lore(lore);
                 }

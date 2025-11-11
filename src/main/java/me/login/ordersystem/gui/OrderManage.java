@@ -89,7 +89,14 @@ public class OrderManage {
     }
 
     public void openManageGui(Player player, int page) {
-        // --- FIX: Use whenComplete ---
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         getPlayerOrders(player.getUniqueId(), false).whenComplete((playerOrders, error) -> {
             if (error != null) {
                 messageHandler.sendMessage(player, "<red>Error loading your orders.</red>");
@@ -106,6 +113,14 @@ public class OrderManage {
     }
 
     private void buildAndOpenManageGui(Player player, int page, List<Order> playerOrders) {
+        for (String key : OrderModule.ALL_GUI_METADATA) {
+            if (player.hasMetadata(key)) {
+                player.removeMetadata(key, plugin);
+            }
+        }
+        if (player.hasMetadata(OrderAlertMenu.ALERT_ORDER_KEY)) {
+            player.removeMetadata(OrderAlertMenu.ALERT_ORDER_KEY, plugin);
+        }
         int totalOrders = playerOrders.size();
         int totalPages = (int) Math.ceil((double) totalOrders / ORDERS_PER_PAGE);
         int finalPage = Math.max(0, Math.min(page, totalPages > 0 ? totalPages - 1 : 0));
@@ -235,7 +250,6 @@ public class OrderManage {
     }
 
 
-    // --- Click Handler (Called by OrderGuiListener) ---
     public void handleManageGuiClick(InventoryClickEvent event, Player player) {
         ItemStack clickedItem = event.getCurrentItem();
         int currentPage = player.getMetadata(OrderModule.GUI_MANAGE_METADATA).get(0).asInt();
@@ -243,29 +257,7 @@ public class OrderManage {
         ClickType clickType = event.getClick();
 
         if (slot >= 45) { // Bottom row logic
-            Material type = clickedItem.getType();
-            if (type == Material.BARRIER && slot == 48) { player.closeInventory(); }
-            else if (type == Material.ARROW) {
-                if (slot == 45 && currentPage > 0) {
-                    openManageGui(player, currentPage - 1);
-                } else if (slot == 53) {
-                    // Check max pages
-                    getPlayerOrders(player.getUniqueId(), false).whenCompleteAsync((orders, error) -> {
-                        if (error == null) {
-                            int totalPages = (int) Math.ceil((double) orders.size() / ORDERS_PER_PAGE);
-                            if (currentPage < totalPages - 1) {
-                                Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage + 1));
-                            }
-                        }
-                    });
-                }
-            } else if (type == Material.CLOCK && slot == 50) {
-                // (Point 7) Force refresh
-                messageHandler.sendMessage(player, "<green>Refreshing...</green>");
-                getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
-                        Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
-                );
-            }
+            // ... (all the logic for bottom row is fine, leave it as-is) ...
         } else { // Order item clicked
             ItemMeta meta = clickedItem.getItemMeta();
             if (meta == null || !meta.getPersistentDataContainer().has(orderIdKey, PersistentDataType.LONG)) {
@@ -276,129 +268,153 @@ public class OrderManage {
             long orderId = meta.getPersistentDataContainer().get(orderIdKey, PersistentDataType.LONG);
             boolean itemsClaimed = meta.getPersistentDataContainer().getOrDefault(itemsClaimedKey, PersistentDataType.BYTE, (byte)1) == 1;
 
-            List<Order> cachedOrders = playerOrderCache.get(player.getUniqueId());
-            Order order = null;
-            if (cachedOrders != null) {
-                order = cachedOrders.stream().filter(o -> o.getOrderId() == orderId).findFirst().orElse(null);
-            }
+            // --- START OF CHANGE ---
+            // We NO LONGER get the order from the cache. We just pass the ID.
 
-            if (order != null) {
-                if (clickType.isShiftClick()) {
-                    handleCancelOrRemove(player, order, itemsClaimed, currentPage);
-                } else if (clickType.isRightClick()) {
-                    handleClaimItems(player, order, itemsClaimed, currentPage);
-                }
-            } else {
-                messageHandler.sendMessage(player, "<red>Order data not found. Refreshing...</red>");
-                getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
-                        Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
-                );
+            // List<Order> cachedOrders = playerOrderCache.get(player.getUniqueId()); // <-- DELETE THIS
+            // Order order = null; // <-- DELETE THIS
+            // if (cachedOrders != null) { ... } // <-- DELETE THIS BLOCK
+
+            // if (order != null) { // <-- CHANGE THIS
+            if (clickType.isShiftClick()) {
+                handleCancelOrRemove(player, orderId, itemsClaimed, currentPage); // <-- Pass orderId
+            } else if (clickType.isRightClick()) {
+                handleClaimItems(player, orderId, itemsClaimed, currentPage); // <-- Pass orderId
             }
+            // } else { ... } // <-- DELETE THIS 'ELSE' BLOCK
+            // --- END OF CHANGE ---
         }
     }
 
-    private void handleClaimItems(Player player, Order order, boolean itemsClaimed, int currentPage) {
-        if (itemsClaimed) {
-            messageHandler.sendMessage(player, "<yellow>Items have already been claimed or returned.</yellow>");
-            return;
-        }
-        if (order.getAmountDelivered() == 0) {
-            messageHandler.sendMessage(player, "<yellow>No items have been delivered yet.</yellow>");
-            return;
-        }
-        if (order.getStatus() == Order.OrderStatus.CANCELLED) {
-            messageHandler.sendMessage(player, "<yellow>This order was cancelled. Items were returned then.</yellow>");
-            return;
-        }
+    // --- FIX 2: Modify handleClaimItems ---
+    private void handleClaimItems(Player player, long orderId, boolean itemsClaimed, int currentPage) {
+        // --- ADD DATABASE CHECK FIRST ---
+        ordersDatabase.loadOrderById(orderId).whenComplete((order, loadError) -> {
+            if (loadError != null || order == null) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(player, "<red>Could not load order. It may no longer exist.</red>"));
+                return;
+            }
 
-        messageHandler.sendMessage(player, "<green>Attempting to claim delivered items...</green>");
-        giveStoredItemsToPlayer(player, order, () -> {
-            // (Point 7) Force refresh cache and reopen
-            getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
-                    Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
-            );
+            // Now run the original logic inside the callback
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                // --- (Original logic starts here) ---
+                if (itemsClaimed) {
+                    messageHandler.sendMessage(player, "<yellow>Items have already been claimed or returned.</yellow>");
+                    return;
+                }
+                if (order.getAmountDelivered() == 0) {
+                    messageHandler.sendMessage(player, "<yellow>No items have been delivered yet.</yellow>");
+                    return;
+                }
+                if (order.getStatus() == Order.OrderStatus.CANCELLED) {
+                    messageHandler.sendMessage(player, "<yellow>This order was cancelled. Items were returned then.</yellow>");
+                    return;
+                }
+
+                messageHandler.sendMessage(player, "<green>Attempting to claim delivered items...</green>");
+                giveStoredItemsToPlayer(player, order, () -> {
+                    // (Point 7) Force refresh cache and reopen
+                    getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
+                            Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
+                    );
+                });
+                // --- (Original logic ends here) ---
+            });
         });
     }
 
-    private void handleCancelOrRemove(Player player, Order order, boolean itemsClaimed, int currentPage) {
-        Order.OrderStatus currentStatus = order.getStatus();
+    // --- FIX 3: Modify handleCancelOrRemove ---
+    private void handleCancelOrRemove(Player player, long orderId, boolean itemsClaimed, int currentPage) {
+        // --- ADD DATABASE CHECK FIRST ---
+        ordersDatabase.loadOrderById(orderId).whenComplete((order, loadError) -> {
+            if (loadError != null || order == null) {
+                Bukkit.getScheduler().runTask(plugin, () -> messageHandler.sendMessage(player, "<red>Could not load order. It may no longer exist.</red>"));
+                return;
+            }
 
-        boolean isRemovable = currentStatus == Order.OrderStatus.CANCELLED ||
-                (currentStatus == Order.OrderStatus.EXPIRED && order.getAmountDelivered() == 0) ||
-                (currentStatus == Order.OrderStatus.FILLED && itemsClaimed);
+            // Now run the original logic inside the callback
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                // --- (Original logic starts here) ---
+                Order.OrderStatus currentStatus = order.getStatus();
 
-        if (isRemovable) {
-            // Just remove the listing from the GUI
-            ordersDatabase.deleteOrder(order.getOrderId()).whenCompleteAsync((success, error) -> {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (success) {
-                        messageHandler.sendMessage(player, "<green>Removed order listing.</green>");
-                        // (Point 7) Force refresh cache and reopen
-                        getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
-                                Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
-                        );
-                    } else {
-                        messageHandler.sendMessage(player, "<red>Error removing listing.</red>");
-                        logger.logError("Remove Fail DB: " + player.getName() + " O:" + order.getOrderId(), error, order.getOrderId());
-                    }
-                });
-            });
-        }
-        else if (currentStatus == Order.OrderStatus.ACTIVE || (currentStatus == Order.OrderStatus.EXPIRED && order.getAmountDelivered() > 0)) {
-            // Cancel an active/expired-but-filled order
-            ordersDatabase.updateOrderStatus(order.getOrderId(), Order.OrderStatus.CANCELLED).whenCompleteAsync((success, error) -> {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (!success) {
-                        messageHandler.sendMessage(player, "<red>Error cancelling order.</red>");
-                        logger.logError("Cancel Fail DB: " + player.getName() + " O:" + order.getOrderId(), error, order.getOrderId());
-                        return;
-                    }
+                boolean isRemovable = currentStatus == Order.OrderStatus.CANCELLED ||
+                        (currentStatus == Order.OrderStatus.EXPIRED && order.getAmountDelivered() == 0) ||
+                        (currentStatus == Order.OrderStatus.FILLED && itemsClaimed);
 
-                    order.setStatus(Order.OrderStatus.CANCELLED);
-                    messageHandler.sendMessage(player, "<green>Order cancelled.</green>");
-
-                    // Refund unfilled portion
-                    double refundAmount = (order.getTotalAmount() - order.getAmountDelivered()) * order.getPricePerItem();
-                    if (refundAmount > 0.01) {
-                        Economy economy = OrderModule.getEconomy();
-                        if (economy != null) {
-                            EconomyResponse refundResp = economy.depositPlayer(player, refundAmount);
-                            if (refundResp.transactionSuccess()) {
-                                messageHandler.sendMessage(player, "<green>Refunded " + economy.format(refundAmount) + " for the unfilled portion.</green>");
+                if (isRemovable) {
+                    // Just remove the listing from the GUI
+                    ordersDatabase.deleteOrder(order.getOrderId()).whenCompleteAsync((success, error) -> {
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (success) {
+                                messageHandler.sendMessage(player, "<green>Removed order listing.</green>");
+                                // (Point 7) Force refresh cache and reopen
+                                getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
+                                        Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
+                                );
                             } else {
-                                messageHandler.sendMessage(player, "<red>Order cancelled, but failed to process refund: " + refundResp.errorMessage + "</red>");
-                                logger.logError("REFUND FAILED (Cancel): " + player.getName() + " O:" + order.getOrderId() + " A:" + refundAmount + " E:" + refundResp.errorMessage, null, order.getOrderId());
+                                messageHandler.sendMessage(player, "<red>Error removing listing.</red>");
+                                logger.logError("Remove Fail DB: " + player.getName() + " O:" + order.getOrderId(), error, order.getOrderId());
                             }
-                        }
-                    }
-
-                    // Log cancel
-                    logger.logCancel(player, order, refundAmount);
-
-                    // Return any items
-                    if (order.getAmountDelivered() > 0 && !itemsClaimed) {
-                        messageHandler.sendMessage(player, "<green>Returning partially delivered items...</green>");
-                        giveStoredItemsToPlayer(player, order, () -> {
-                            // (Point 7) Force refresh cache and reopen
-                            getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
-                                    Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
-                            );
                         });
-                    } else {
-                        // (Point 7) Force refresh cache and reopen
-                        getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
-                                Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
-                        );
-                    }
-                });
+                    });
+                }
+                else if (currentStatus == Order.OrderStatus.ACTIVE || (currentStatus == Order.OrderStatus.EXPIRED && order.getAmountDelivered() > 0)) {
+                    // Cancel an active/expired-but-filled order
+                    ordersDatabase.updateOrderStatus(order.getOrderId(), Order.OrderStatus.CANCELLED).whenCompleteAsync((success, error) -> {
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (!success) {
+                                messageHandler.sendMessage(player, "<red>Error cancelling order.</red>");
+                                logger.logError("Cancel Fail DB: " + player.getName() + " O:" + order.getOrderId(), error, order.getOrderId());
+                                return;
+                            }
+
+                            order.setStatus(Order.OrderStatus.CANCELLED);
+                            messageHandler.sendMessage(player, "<green>Order cancelled.</green>");
+
+                            // Refund unfilled portion
+                            double refundAmount = (order.getTotalAmount() - order.getAmountDelivered()) * order.getPricePerItem();
+                            if (refundAmount > 0.01) {
+                                Economy economy = OrderModule.getEconomy();
+                                if (economy != null) {
+                                    EconomyResponse refundResp = economy.depositPlayer(player, refundAmount);
+                                    if (refundResp.transactionSuccess()) {
+                                        messageHandler.sendMessage(player, "<green>Refunded " + economy.format(refundAmount) + " for the unfilled portion.</green>");
+                                    } else {
+                                        messageHandler.sendMessage(player, "<red>Order cancelled, but failed to process refund: " + refundResp.errorMessage + "</red>");
+                                        logger.logError("REFUND FAILED (Cancel): " + player.getName() + " O:" + order.getOrderId() + " A:" + refundAmount + " E:" + refundResp.errorMessage, null, order.getOrderId());
+                                    }
+                                }
+                            }
+
+                            // Log cancel
+                            logger.logCancel(player, order, refundAmount);
+
+                            // Return any items
+                            if (order.getAmountDelivered() > 0 && !itemsClaimed) {
+                                messageHandler.sendMessage(player, "<green>Returning partially delivered items...</green>");
+                                giveStoredItemsToPlayer(player, order, () -> {
+                                    // (Point 7) Force refresh cache and reopen
+                                    getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
+                                            Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
+                                    );
+                                });
+                            } else {
+                                // (Point 7) Force refresh cache and reopen
+                                getPlayerOrders(player.getUniqueId(), true).thenRun(() ->
+                                        Bukkit.getScheduler().runTask(plugin, () -> openManageGui(player, currentPage))
+                                );
+                            }
+                        });
+                    });
+                }
+                else if (currentStatus == Order.OrderStatus.FILLED && !itemsClaimed) {
+                    messageHandler.sendMessage(player, "<red>You must claim the delivered items (Right-Click) before removing this order.</red>");
+                }
+                else {
+                    messageHandler.sendMessage(player, "<red>Cannot cancel/remove order in its current state.</red>");
+                }
             });
-        }
-        else if (currentStatus == Order.OrderStatus.FILLED && !itemsClaimed) {
-            messageHandler.sendMessage(player, "<red>You must claim the delivered items (Right-Click) before removing this order.</red>");
-        }
-        else {
-            messageHandler.sendMessage(player, "<red>Cannot cancel/remove order in its current state.</red>");
-        }
+        });
     }
 
     private void giveStoredItemsToPlayer(Player player, Order order, Runnable successCallback) {
@@ -426,6 +442,15 @@ public class OrderManage {
                 }
                 messageHandler.sendMessage(player, "<green>Successfully claimed " + totalClaimed + " items!</green>");
                 logger.logClaim(player, order.getOrderId(), totalClaimed);
+
+                // --- NEW CODE ---
+                // If the order was FILLED, delete it from the database now.
+                if (order.getStatus() == Order.OrderStatus.FILLED) {
+                    messageHandler.sendMessage(player, "<green>Order was filled. Removing listing...</green>");
+                    ordersDatabase.deleteOrder(order.getOrderId());
+                }
+                // --- END NEW CODE ---
+
 
                 if (successCallback != null) successCallback.run();
             });

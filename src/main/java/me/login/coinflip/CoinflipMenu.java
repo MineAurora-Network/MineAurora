@@ -185,18 +185,26 @@ public class CoinflipMenu implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         Player player = (Player) event.getWhoClicked();
-        if (!player.hasMetadata(GUI_MAIN_METADATA)) return;
 
-        // [Req 5] & [Req 6] Use Component comparison
+        // --- GUI BUG FIX: Logic Re-ordered ---
+        // 1. Check if this is the GUI we care about
         Component title = event.getView().title();
         String legacyTitle = LegacyComponentSerializer.legacySection().serialize(title);
         if (!legacyTitle.startsWith(LegacyComponentSerializer.legacySection().serialize(Component.text("Coinflip Menu", NamedTextColor.DARK_GRAY)))) {
-            return;
+            return; // Not our inventory, ignore
         }
 
         if (this.coinflipSystem == null) return;
 
+        // 2. ALWAYS CANCEL FIRST! This stops item stealing.
         event.setCancelled(true);
+
+        // 3. Now check metadata to see if we should process the click
+        if (!player.hasMetadata(GUI_MAIN_METADATA)) {
+            return; // It's our GUI, but player has no metadata, so don't do any actions
+        }
+        // --- END FIX ---
+
         ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null || clickedItem.getType() == Material.AIR) return;
 

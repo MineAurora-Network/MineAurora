@@ -497,4 +497,12 @@ public class CoinflipSystem {
         }
         return item;
     }
+    /**
+     * Safely removes a pending game from the cache without blocking the main thread.
+     * This should be called from a main-thread task.
+     * @param gameId The ID of the game to remove.
+     */
+    public void removePendingGameFromCache(long gameId) {
+        pendingGamesCache.removeIf(g -> g.getGameId() == gameId);
+    }
 }

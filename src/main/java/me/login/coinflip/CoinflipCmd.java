@@ -15,8 +15,10 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections; // <-- IMPORT ADDED
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture; // <-- IMPORT ADDED
 import java.util.logging.Level;
 
 public class CoinflipCmd implements CommandExecutor, TabCompleter {
@@ -50,6 +52,14 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
             sender.sendMessage("This command can only be run by a player.");
             return true;
         }
+
+        // --- NPE FIX ---
+        // Check if the module is fully loaded.
+        if (coinflipMenu == null || coinflipSystem == null || manageMenu == null || adminMenu == null || msg == null || logger == null || database == null) {
+            sender.sendMessage("§cError: The Coinflip system is still loading or failed to load. Please try again in a moment.");
+            return true;
+        }
+        // --- END NPE FIX ---
 
         if (args.length == 0) {
             coinflipMenu.openMainMenu(player, 0);
@@ -265,6 +275,13 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        // --- NPE FIX ---
+        // If system is null, the plugin isn't loaded. Don't tab-complete.
+        if (coinflipSystem == null) {
+            return Collections.emptyList();
+        }
+        // --- END NPE FIX ---
+
         if (args.length == 1) {
             List<String> completions = new ArrayList<>(Arrays.asList("help", "manage", "msgtoggle", "menu", "create", "join")); // [Req 4] Added 'join'
             if (sender.hasPermission("login.coinflip.admin")) {
@@ -282,14 +299,30 @@ public class CoinflipCmd implements CommandExecutor, TabCompleter {
         if (args.length == 3 && args[0].equalsIgnoreCase("create")) {
             return Arrays.asList("1k", "10k", "100k", "1m");
         }
+
+        // --- SERVER FREEZE FIX ---
         // [Req 4] Tab complete for /cf join
         if (args.length == 2 && args[0].equalsIgnoreCase("join")) {
-            // Suggest IDs of pending games
-            return coinflipSystem.getPendingGames(false).join().stream()
-                    .map(g -> String.valueOf(g.getGameId()))
-                    .filter(s -> s.startsWith(args[1]))
-                    .toList();
+            // We already checked that coinflipSystem is not null, so this is safe.
+            CompletableFuture<List<CoinflipGame>> gamesFuture = coinflipSystem.getPendingGames(false);
+
+            // Only provide completions if the future is already done
+            if (gamesFuture.isDone()) {
+                try {
+                    // .getNow() is safe and won't block
+                    return gamesFuture.getNow(Collections.emptyList()).stream()
+                            .map(g -> String.valueOf(g.getGameId()))
+                            .filter(s -> s.startsWith(args[1]))
+                            .toList();
+                } catch (Exception e) {
+                    // In case getNow() fails for some reason
+                    return Collections.emptyList();
+                }
+            }
+            // Return empty list if cache is refreshing. This is MUCH better than freezing the server.
+            return Collections.emptyList();
         }
+        // --- END FIX ---
         return new ArrayList<>();
     }
 }
