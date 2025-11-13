@@ -178,6 +178,12 @@ commands:
     usage: /rank <set|remove|info>
     permission: login.rank.admin
 
+  pets:
+    description: "Opens the Pet menu and handles all pet commands."
+    usage: "/pets <summon|despawn|check|add|remove|give|revive>"
+    permission: "mineaurora.pets.use"
+    aliases: [pet]
+
 permissions:
   logincore.admin:
     description: Allows use of /unregister
@@ -296,4 +302,26 @@ permissions:
 
   login.rank.admin:
     description: Allows admins to manage player ranks with /rank.
+    default: op
+
+  mineaurora.pets.use:
+    description: "Allows players to use the /pets command and capture pets."
+    default: true
+  mineaurora.pets.rename:
+    description: "Allows players to rename their pets."
+    default: op
+  mineaurora.pets.admin.check:
+    description: "Allows admins to use /pets check."
+    default: op
+  mineaurora.pets.admin.add:
+    description: "Allows admins to use /pets add."
+    default: op
+  mineaurora.pets.admin.remove:
+    description: "Allows admins to use /pets remove."
+    default: op
+  mineaurora.pets.admin.give:
+    description: "Allows admins to use /pets give."
+    default: op
+  mineaurora.pets.admin.revive:
+    description: "Allows admins to use /pets revive."
     default: op

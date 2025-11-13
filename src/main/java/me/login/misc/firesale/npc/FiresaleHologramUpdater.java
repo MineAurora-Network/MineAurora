@@ -11,16 +11,14 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-/**
- * Handles automatic Citizens NPC name updates for the FireSale system.
- * No external HologramTrait dependency required.
- */
 public class FiresaleHologramUpdater extends BukkitRunnable {
 
     private final FiresaleManager firesaleManager;
+    @SuppressWarnings("unused")
     private final Login plugin;
     private final NPC npc;
     private String lastText = "";
+    private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MMM dd HH:mm").withZone(ZoneId.systemDefault());
 
     public FiresaleHologramUpdater(Login plugin, FiresaleManager firesaleManager, NPC npc) {
         this.plugin = plugin;
@@ -32,33 +30,52 @@ public class FiresaleHologramUpdater extends BukkitRunnable {
     public void run() {
         if (npc == null || !npc.isSpawned()) return;
 
-        // Get first active or pending firesale
         List<Firesale> sales = firesaleManager.getActiveSales();
         Firesale active = sales.isEmpty() ? null : sales.get(0);
 
         StringBuilder newName = new StringBuilder();
 
         if (active == null) {
-            newName.append("§7I'm exploring the void...\n§7looking for hot deals!");
+            // Idle State
+            newName.append("§7§lFiresale Merchant\n")
+                    .append("§r§7No active sales\n")
+                    .append("§r§7Check back later!");
         }
-        else if (active.getStatus() == SaleStatus.PENDING) { // PENDING instead of UPCOMING
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm")
-                    .withZone(ZoneId.systemDefault());
-            newName.append("§6Upcoming Firesale\n§eStarts: ")
-                    .append(fmt.format(active.getStartTime()));
+        else if (active.getStatus() == SaleStatus.PENDING) {
+            // Pending State
+            newName.append("§6§lUPCOMING FIRESALE\n")
+                    .append("§r§eStarts: §f").append(fmt.format(active.getStartTime())).append("\n")
+                    .append("§r§7Get ready!");
         }
         else if (active.getStatus() == SaleStatus.ACTIVE) {
-            newName.append("§cNerd, come grab deals before they vanish into the void!");
+            // Active State
+            String itemName = "Unknown Item";
+            if (active.getItem() != null) {
+                if (active.getItem().getItemMeta() != null && active.getItem().getItemMeta().hasDisplayName()) {
+                    // Get name, stripping italics if legacy codes are used in name, otherwise forcing reset
+                    itemName = active.getItem().getItemMeta().getDisplayName();
+                } else {
+                    itemName = active.getItem().getType().toString().replace("_", " ");
+                }
+            }
+
+            newName.append("§c§lFIRESALE ACTIVE!\n")
+                    .append("§r§fItem: §b").append(itemName).append("\n")
+                    .append("§r§fPrice: §6").append((int)active.getPrice()).append(" Credits\n")
+                    .append("§r§e§nClick to View!");
         }
         else {
-            newName.append("§7Deals are cooling down...");
+            // Cooldown / Ended
+            newName.append("§7§lFiresale Ended\n")
+                    .append("§r§7Restocking items...");
         }
 
         String newText = newName.toString();
 
-        // Update NPC name only if changed
+        // Update NPC name if changed
+        // REMOVED: .replace("\n", " ") so lines are preserved
         if (!newText.equals(lastText)) {
-            npc.setName(newText.replace("\n", " "));
+            npc.setName(newText);
             lastText = newText;
         }
     }

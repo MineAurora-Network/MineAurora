@@ -81,3 +81,63 @@ token-shop:
       - "<white>/craft</white> <gray>for 3 days!</gray>"
       - ""
       - "<yellow>This is a custom item!</yellow>"
+
+# ----------------------------------------------------------------
+# Pet Capture Items
+# ----------------------------------------------------------------
+# These items are used to capture pets.
+# The internal names (tier1_lead, tier2_lead, etc.) MUST match
+# the names used in config.yml pet_capture.chances
+#
+# The 'plugin_key' NBT value (e.g., 'mineaurora:pet_lead_1') MUST be
+# unique for each item.
+# ----------------------------------------------------------------
+pet_capture:
+  tier1_lead:
+    material: "LEAD"
+    name: "<white>Basic Capture Lead</white>"
+    lore:
+      - "<gray>A simple lead with a</gray>"
+      - "<gray>low chance to capture mobs.</gray>"
+    nbt:
+      plugin_key: "mineaurora:pet_lead_1"
+  tier2_lead:
+    material: "LEAD"
+    name: "<green>Sturdy Capture Lead</green>"
+    lore:
+      - "<gray>A reinforced lead with a</gray>"
+      - "<gray>decent chance to capture mobs.</gray>"
+    nbt:
+      plugin_key: "mineaurora:pet_lead_2"
+  tier3_lead:
+    material: "LEAD"
+    name: "<blue>Strong Capture Lead</blue>"
+    lore:
+      - "<gray>A strong lead with a</gray>"
+      - "<gray>good chance to capture mobs.</gray>"
+    nbt:
+      plugin_key: "mineaurora:pet_lead_3"
+  tier4_lead:
+    material: "LEAD"
+    name: "<purple>Epic Capture Lead</purple>"
+    lore:
+      - "<gray>An enchanted lead with a</gray>"
+      - "<gray>high chance to capture mobs.</gray>"
+    nbt:
+      plugin_key: "mineaurora:pet_lead_4"
+  tier5_lead:
+    material: "LEAD"
+    name: "<gold>Mystic Capture Lead</gold>"
+    lore:
+      - "<gray>A mystical lead with a</gray>"
+      - "<gray>very high chance to capture mobs.</gray>"
+    nbt:
+      plugin_key: "mineaurora:pet_lead_5"
+  tier6_lead:
+    material: "LEAD"
+    name: "<red>Legendary Capture Lead</red>"
+    lore:
+      - "<gray>A legendary lead.</gray>"
+      - "<gray>Almost guaranteed to capture.</gray>"
+    nbt:
+      plugin_key: "mineaurora:pet_lead_6"

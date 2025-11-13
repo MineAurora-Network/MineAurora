@@ -15,7 +15,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
@@ -32,6 +31,8 @@ public class FiresaleItemManager {
         this.plugin = plugin;
         this.miniMessage = plugin.getComponentSerializer();
         loadItemsConfig();
+        // Auto-load on instantiation
+        loadItems();
     }
 
     private void loadItemsConfig() {
@@ -44,6 +45,9 @@ public class FiresaleItemManager {
 
     public void loadItems() {
         items.clear();
+        // FIX: Reload config from disk to ensure fresh edits are read
+        loadItemsConfig();
+
         ConfigurationSection firesaleSection = itemsConfig.getConfigurationSection("firesale");
         if (firesaleSection == null) {
             plugin.getLogger().warning("No 'firesale' section found in items.yml!");
@@ -66,23 +70,26 @@ public class FiresaleItemManager {
                 String texture = itemSection.getString("texture");
 
                 if (material == Material.PLAYER_HEAD && texture != null && !texture.isEmpty()) {
+                    // Ensure TextureToHead util handles valid URLs
                     item = TextureToHead.applyTexture(item, texture);
                 }
 
                 ItemMeta meta = item.getItemMeta();
-                String name = itemSection.getString("name", key);
-                meta.displayName(miniMessage.deserialize("<white>" + name).decoration(TextDecoration.ITALIC, false));
+                if (meta != null) {
+                    String name = itemSection.getString("name", key);
+                    meta.displayName(miniMessage.deserialize(name).decoration(TextDecoration.ITALIC, false));
 
-                List<String> loreLines = itemSection.getStringList("lore");
-                if (!loreLines.isEmpty()) {
-                    List<Component> lore = loreLines.stream()
-                            .map(line -> miniMessage.deserialize("<gray>" + line).decoration(TextDecoration.ITALIC, false))
-                            .collect(Collectors.toList());
-                    meta.lore(lore);
+                    List<String> loreLines = itemSection.getStringList("lore");
+                    if (!loreLines.isEmpty()) {
+                        List<Component> lore = loreLines.stream()
+                                .map(line -> miniMessage.deserialize(line).decoration(TextDecoration.ITALIC, false))
+                                .collect(Collectors.toList());
+                        meta.lore(lore);
+                    }
+
+                    meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+                    item.setItemMeta(meta);
                 }
-
-                meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
-                item.setItemMeta(meta);
 
                 items.put(key.toLowerCase(), new FiresaleItem(key, item));
 
@@ -94,6 +101,7 @@ public class FiresaleItemManager {
     }
 
     public FiresaleItem getItem(String id) {
+        if (id == null) return null;
         return items.get(id.toLowerCase());
     }
 
@@ -102,7 +110,7 @@ public class FiresaleItemManager {
     }
 
     public String getItemName(ItemStack item) {
-        if (item.getItemMeta().hasDisplayName()) {
+        if (item != null && item.getItemMeta() != null && item.getItemMeta().hasDisplayName()) {
             return miniMessage.serialize(item.getItemMeta().displayName());
         }
         return item.getType().toString().toLowerCase().replace("_", " ");

@@ -17,6 +17,8 @@ import me.login.moderation.commands.AdminCommandsModule; // --- ADMINCMDS: ADDED
 import me.login.ordersystem.OrderModule;
 import me.login.ordersystem.gui.OrderAlertMenu;
 import me.login.ordersystem.gui.OrderMenu;
+import me.login.pets.PetsLogger;
+import me.login.pets.PetsModule;
 import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
@@ -26,6 +28,8 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -38,6 +42,9 @@ import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import me.login.leaderboards.LeaderboardModule;
 import org.bukkit.event.player.PlayerQuitEvent;
+
+import java.io.File;
+import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -89,14 +96,27 @@ public class Login extends JavaPlugin implements Listener {
     private FiresaleModule firesaleModule;
     private TabManager tabManager;
     private AdminCommandsModule adminCommandsModule; // --- ADMINCMDS: ADDED ---
+    private PetsModule petsModule; // --- PETS: ADDED ---
+    private PetsLogger petsLogger; // --- PETS: ADDED ---
 
     private MiniMessage miniMessage;
     private String serverPrefix;
 
+    // --- ADDED for items.yml ---
+    private File itemsFile;
+    private FileConfiguration itemsConfig;
+    // --- END ADD ---
+
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        saveResource("items.yml", false);
+        // --- MODIFIED: Load items.yml ---
+        itemsFile = new File(getDataFolder(), "items.yml");
+        if (!itemsFile.exists()) {
+            saveResource("items.yml", false);
+        }
+        itemsConfig = YamlConfiguration.loadConfiguration(itemsFile);
+        // --- END MODIFIED ---
 
         this.miniMessage = MiniMessage.miniMessage();
         this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
@@ -263,6 +283,17 @@ public class Login extends JavaPlugin implements Listener {
                             getLogger().severe("Failed to initialize Creator Code Module!");
                         }
 
+                        // --- PETS: ADDED ---
+                        getLogger().info("Initializing PetsLogger...");
+                        petsLogger = new PetsLogger(Login.this);
+
+                        getLogger().info("Initializing PetsModule...");
+                        petsModule = new PetsModule(Login.this);
+                        if (!petsModule.init(petsLogger)) {
+                            getLogger().severe("Failed to initialize Pets Module!");
+                        }
+                        // --- PETS: END ADD ---
+
                         getLogger().info("Initializing TicketModule...");
                         ticketModule = new TicketModule(Login.this, discordLinkingModule.getDiscordLinking(), rankManager);
                         ticketModule.init();
@@ -298,6 +329,26 @@ public class Login extends JavaPlugin implements Listener {
 
         getLogger().info(getName() + " v" + getDescription().getVersion() + " Enabled Successfully!");
     }
+
+    // --- ADDED: Methods for items.yml ---
+    public void reloadItems() {
+        if (itemsFile == null) {
+            itemsFile = new File(getDataFolder(), "items.yml");
+        }
+        itemsConfig = YamlConfiguration.loadConfiguration(itemsFile);
+
+        if (petsModule != null && petsModule.getPetsConfig() != null) {
+            petsModule.getPetsConfig().reloadItemsConfig();
+        }
+    }
+
+    public FileConfiguration getItems() {
+        if (itemsConfig == null) {
+            reloadItems();
+        }
+        return itemsConfig;
+    }
+    // --- END ADD ---
 
     private boolean setupEconomy() {
         if (getServer().getPluginManager().getPlugin("Vault") == null) {
@@ -374,6 +425,10 @@ public class Login extends JavaPlugin implements Listener {
                     return true;
                 }
                 this.reloadConfig();
+                // --- ADDED: Reload items.yml on /sb reload ---
+                this.reloadItems();
+                // --- END ADD ---
+
                 this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
 
                 if (tabManager != null) {
@@ -384,7 +439,7 @@ public class Login extends JavaPlugin implements Listener {
                     scoreboardManager.loadConfig();
                     Bukkit.getOnlinePlayers().forEach(scoreboardManager::updateScoreboard);
                 }
-                sender.sendMessage("§aScoreboard configuration has been reloaded!");
+                sender.sendMessage("§aScoreboard and Items configuration has been reloaded!");
                 return true;
             }
             sender.sendMessage("§cUsage: /scoreboard reload");
@@ -439,6 +494,12 @@ public class Login extends JavaPlugin implements Listener {
             if (ticketModule != null) {
                 ticketModule.shutdown();
             }
+
+            // --- PETS: ADDED ---
+            if (petsModule != null) {
+                petsModule.shutdown();
+            }
+            // --- PETS: END ADD ---
 
             if (firesaleModule != null) {
                 firesaleModule.disable();
@@ -585,6 +646,12 @@ public class Login extends JavaPlugin implements Listener {
     public RankManager getRankManager() {
         return (rankModule != null) ? rankModule.getManager() : null;
     }
+
+    // --- PETS: ADDED ---
+    public PetsModule getPetsModule() {
+        return petsModule;
+    }
+    // --- PETS: END ADD ---
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {

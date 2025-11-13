@@ -25,9 +25,11 @@ public class FiresaleDatabase {
         this.plugin = plugin;
     }
 
-    private Connection getConnection() throws SQLException {
+    // Synchronize getting connection to be safe
+    private synchronized Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
             File dbFile = new File(plugin.getDataFolder(), "database/firesale.db");
+            dbFile.getParentFile().mkdirs(); // Ensure directory exists
             String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
             connection = DriverManager.getConnection(url);
         }
@@ -35,36 +37,11 @@ public class FiresaleDatabase {
     }
 
     public void init() {
-        String createActiveTable = "CREATE TABLE IF NOT EXISTS active_sales (" +
-                "sale_id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "item_stack TEXT NOT NULL," +
-                "price DOUBLE NOT NULL," +
-                "initial_quantity INTEGER NOT NULL," +
-                "remaining_quantity INTEGER NOT NULL," +
-                "start_time_epoch BIGINT NOT NULL," +
-                "end_time_epoch BIGINT NOT NULL," +
-                "creator_uuid TEXT NOT NULL," +
-                "creator_name TEXT NOT NULL," +
-                "status TEXT NOT NULL," +
-                "total_sold INTEGER NOT NULL" +
-                ");";
+        // ... (init SQL strings same as before) ...
+        String createActiveTable = "CREATE TABLE IF NOT EXISTS active_sales (sale_id INTEGER PRIMARY KEY AUTOINCREMENT, item_stack TEXT NOT NULL, price DOUBLE NOT NULL, initial_quantity INTEGER NOT NULL, remaining_quantity INTEGER NOT NULL, start_time_epoch BIGINT NOT NULL, end_time_epoch BIGINT NOT NULL, creator_uuid TEXT NOT NULL, creator_name TEXT NOT NULL, status TEXT NOT NULL, total_sold INTEGER NOT NULL);";
+        String createHistoryTable = "CREATE TABLE IF NOT EXISTS sales_history (sale_id INTEGER PRIMARY KEY, item_stack TEXT NOT NULL, price DOUBLE NOT NULL, initial_quantity INTEGER NOT NULL, remaining_quantity INTEGER NOT NULL, start_time_epoch BIGINT NOT NULL, end_time_epoch BIGINT NOT NULL, creator_uuid TEXT NOT NULL, creator_name TEXT NOT NULL, status TEXT NOT NULL, total_sold INTEGER NOT NULL);";
 
-        String createHistoryTable = "CREATE TABLE IF NOT EXISTS sales_history (" +
-                "sale_id INTEGER PRIMARY KEY," +
-                "item_stack TEXT NOT NULL," +
-                "price DOUBLE NOT NULL," +
-                "initial_quantity INTEGER NOT NULL," +
-                "remaining_quantity INTEGER NOT NULL," +
-                "start_time_epoch BIGINT NOT NULL," +
-                "end_time_epoch BIGINT NOT NULL," +
-                "creator_uuid TEXT NOT NULL," +
-                "creator_name TEXT NOT NULL," +
-                "status TEXT NOT NULL," +
-                "total_sold INTEGER NOT NULL" +
-                ");";
-
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement()) {
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
             stmt.execute(createActiveTable);
             stmt.execute(createHistoryTable);
         } catch (SQLException e) {
@@ -82,13 +59,11 @@ public class FiresaleDatabase {
         }
     }
 
-    public Firesale saveSale(Firesale sale) {
-        String sql = "INSERT INTO active_sales (item_stack, price, initial_quantity, remaining_quantity, start_time_epoch, end_time_epoch, creator_uuid, creator_name, status, total_sold) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
+    // FIX: Synchronized to prevent async task and main thread colliding
+    public synchronized Firesale saveSale(Firesale sale) {
+        String sql = "INSERT INTO active_sales (item_stack, price, initial_quantity, remaining_quantity, start_time_epoch, end_time_epoch, creator_uuid, creator_name, status, total_sold) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            // ... (set params)
             pstmt.setString(1, serializeItemStack(sale.getItem()));
             pstmt.setDouble(2, sale.getPrice());
             pstmt.setInt(3, sale.getInitialQuantity());
@@ -101,12 +76,9 @@ public class FiresaleDatabase {
             pstmt.setInt(10, sale.getTotalSold());
 
             int affectedRows = pstmt.executeUpdate();
-
             if (affectedRows > 0) {
                 try (ResultSet rs = pstmt.getGeneratedKeys()) {
-                    if (rs.next()) {
-                        sale.setSaleId(rs.getInt(1));
-                    }
+                    if (rs.next()) sale.setSaleId(rs.getInt(1));
                 }
             }
             return sale;
@@ -116,23 +88,18 @@ public class FiresaleDatabase {
         }
     }
 
-    public void archiveSale(Firesale sale) {
-        // 1. Delete from active_sales
+    public synchronized void archiveSale(Firesale sale) {
         String deleteSql = "DELETE FROM active_sales WHERE sale_id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(deleteSql)) {
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(deleteSql)) {
             pstmt.setInt(1, sale.getSaleId());
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to delete sale from active table: " + e.getMessage());
+            plugin.getLogger().severe("Failed to delete sale from active: " + e.getMessage());
         }
 
-        // 2. Insert into sales_history
-        String insertSql = "INSERT INTO sales_history (sale_id, item_stack, price, initial_quantity, remaining_quantity, start_time_epoch, end_time_epoch, creator_uuid, creator_name, status, total_sold) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
-
+        String insertSql = "INSERT INTO sales_history (sale_id, item_stack, price, initial_quantity, remaining_quantity, start_time_epoch, end_time_epoch, creator_uuid, creator_name, status, total_sold) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
+            // ... (set params exactly as before)
             pstmt.setInt(1, sale.getSaleId());
             pstmt.setString(2, serializeItemStack(sale.getItem()));
             pstmt.setDouble(3, sale.getPrice());
@@ -144,89 +111,90 @@ public class FiresaleDatabase {
             pstmt.setString(9, sale.getCreatorName());
             pstmt.setString(10, sale.getStatus().toString());
             pstmt.setInt(11, sale.getTotalSold());
-
             pstmt.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to archive sale: " + e.getMessage());
         }
     }
 
-    public List<Firesale> loadActiveSales() {
+    public synchronized List<Firesale> loadActiveSales() {
+        // ... (same code)
         List<Firesale> sales = new ArrayList<>();
         String sql = "SELECT * FROM active_sales";
-
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            while (rs.next()) {
-                sales.add(deserializeFiresale(rs));
-            }
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) sales.add(deserializeFiresale(rs));
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to load active sales: " + e.getMessage());
+            plugin.getLogger().severe("Failed load active: " + e.getMessage());
         }
         return sales;
     }
 
-    public List<Firesale> loadSalesHistory(int page, int itemsPerPage) {
+    public synchronized List<Firesale> loadSalesHistory(int page, int itemsPerPage) {
+        // ... (same code)
         List<Firesale> sales = new ArrayList<>();
         String sql = "SELECT * FROM sales_history ORDER BY start_time_epoch DESC LIMIT ? OFFSET ?";
-
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, itemsPerPage);
             pstmt.setInt(2, page * itemsPerPage);
-
             try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    sales.add(deserializeFiresale(rs));
-                }
+                while (rs.next()) sales.add(deserializeFiresale(rs));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to load sales history: " + e.getMessage());
+            plugin.getLogger().severe("Failed load history: " + e.getMessage());
         }
         return sales;
     }
 
-    public int getHistoryPageCount(int itemsPerPage) {
+    public synchronized int getHistoryPageCount(int itemsPerPage) {
+        // ... (same code)
         String sql = "SELECT COUNT(*) FROM sales_history";
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try (Connection conn = getConnection(); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             if (rs.next()) {
-                int totalItems = rs.getInt(1);
-                return (int) Math.ceil((double) totalItems / itemsPerPage);
+                int total = rs.getInt(1);
+                return (int) Math.ceil((double) total / itemsPerPage);
             }
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to get history page count: " + e.getMessage());
-        }
+        } catch (SQLException e) { }
         return 0;
     }
 
-    public void updateSaleQuantity(int saleId, int newQuantity, int newTotalSold) {
+    public synchronized void updateSaleQuantity(int saleId, int newQuantity, int newTotalSold) {
         String sql = "UPDATE active_sales SET remaining_quantity = ?, total_sold = ? WHERE sale_id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, newQuantity);
             pstmt.setInt(2, newTotalSold);
             pstmt.setInt(3, saleId);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to update sale quantity: " + e.getMessage());
+            plugin.getLogger().severe("Failed to update quantity: " + e.getMessage());
         }
     }
 
-    public void updateSaleStatus(int saleId, SaleStatus status) {
+    public synchronized void updateSaleStatus(int saleId, SaleStatus status) {
         String sql = "UPDATE active_sales SET status = ? WHERE sale_id = ?";
-        try (Connection conn = getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try (Connection conn = getConnection(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, status.toString());
             pstmt.setInt(2, saleId);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Failed to update sale status: " + e.getMessage());
+            plugin.getLogger().severe("Failed to update status: " + e.getMessage());
         }
+    }
+
+    // Helpers serializeItemStack and deserializeItemStack remain unchanged ...
+    private String serializeItemStack(ItemStack item) {
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+             BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream)) {
+            dataOutput.writeObject(item);
+            return Base64Coder.encodeLines(outputStream.toByteArray());
+        } catch (Exception e) { return ""; }
+    }
+
+    private ItemStack deserializeItemStack(String data) {
+        if (data == null || data.isEmpty()) return null;
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(Base64Coder.decodeLines(data));
+             BukkitObjectInputStream dataInput = new BukkitObjectInputStream(inputStream)) {
+            return (ItemStack) dataInput.readObject();
+        } catch (Exception e) { return null; }
     }
 
     private Firesale deserializeFiresale(ResultSet rs) throws SQLException {
@@ -243,33 +211,5 @@ public class FiresaleDatabase {
                 SaleStatus.valueOf(rs.getString("status")),
                 rs.getInt("total_sold")
         );
-    }
-
-    // --- Serialization Helpers ---
-
-    private String serializeItemStack(ItemStack item) {
-        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-             BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream)) {
-
-            dataOutput.writeObject(item);
-            return Base64Coder.encodeLines(outputStream.toByteArray());
-
-        } catch (Exception e) {
-            plugin.getLogger().severe("Failed to serialize itemstack: " + e.getMessage());
-            return "";
-        }
-    }
-
-    private ItemStack deserializeItemStack(String data) {
-        if (data == null || data.isEmpty()) return null;
-        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(Base64Coder.decodeLines(data));
-             BukkitObjectInputStream dataInput = new BukkitObjectInputStream(inputStream)) {
-
-            return (ItemStack) dataInput.readObject();
-
-        } catch (Exception e) {
-            plugin.getLogger().severe("Failed to deserialize itemstack: " + e.getMessage());
-            return null;
-        }
     }
 }

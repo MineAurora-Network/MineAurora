@@ -133,7 +133,7 @@ scoreboard:
       - "&6&l╏ &fLevel: &a{lifesteal_level_%player's uuid%}"
       - '&6&l╏ &fHeart: &a%player_health_rounded%'
       - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
-      - '&6&l╏ &fPing: &a%player_ping%'
+      - '&6&lGlow &fPing: &a%player_ping%'
       - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
       - '      &eplay.aplhamc.fun  '
@@ -213,3 +213,120 @@ coinflip:
     - "normal_world"
     - "nether"
     - "end"
+
+# ============================
+# Pet Capture System
+# ============================
+pet_capture:
+  # Cooldown in seconds for a pet after it dies
+  pet-cooldown-seconds: 300 # 5 minutes
+
+  # Permission required to use /pets rename or the rename button
+  rename-permission: "mineaurora.pets.rename"
+  # Max length for a pet's name
+  max-name-length: 20
+
+  # Define tiers of mobs. The order here matters for sorting by rarity.
+  tiers:
+    tier-order:
+      - "easier"
+      - "bit_harder"
+      - "medium"
+      - "hard"
+      - "elite"
+      - "godly"
+    easier:
+      - "CHICKEN"
+      - "PIG"
+      - "COW"
+      - "SHEEP"
+      - "ALLAY"
+      - "FOX"
+    bit_harder:
+      - "HUSK"
+      - "ZOMBIE"
+      - "SKELETON"
+      - "BEE"
+      - "WOLF"
+    medium:
+      - "SLIME"
+      - "SPIDER"
+      - "CREEPER"
+      - "ENDERMAN"
+      - "DROWNED"
+    hard:
+      - "WITHER_SKELETON"
+      - "BLAZE"
+      - "PILLAGER"
+      - "VEX"
+    elite:
+      - "PIGLIN_BRUTE"
+      - "GHAST"
+      - "VINDICATOR"
+      - "RAVAGER"
+    godly:
+      - "WARDEN"
+      - "ENDER_DRAGON"
+      - "WITHER"
+      - "IRON_GOLEM"
+
+  # Define capture chances (0.0 to 1.0) for each tier based on the item used.
+  # The item name (e.g., 'tier1_lead') MUST match the key in items.yml
+  chances:
+    easier:
+      tier1_lead: 0.50
+      tier2_lead: 0.60
+      tier3_lead: 0.70
+      tier4_lead: 0.80
+      tier5_lead: 0.90
+      tier6_lead: 1.00
+    bit_harder:
+      tier1_lead: 0.25
+      tier2_lead: 0.35
+      tier3_lead: 0.45
+      tier4_lead: 0.55
+      tier5_lead: 0.65
+      tier6_lead: 0.85
+    medium:
+      tier1_lead: 0.10
+      tier2_lead: 0.20
+      tier3_lead: 0.30
+      tier4_lead: 0.40
+      tier5_lead: 0.50
+      tier6_lead: 0.70
+    hard:
+      tier1_lead: 0.05
+      tier2_lead: 0.10
+      tier3_lead: 0.15
+      tier4_lead: 0.20
+      tier5_lead: 0.30
+      tier6_lead: 0.50
+    elite:
+      tier1_lead: 0.01
+      tier2_lead: 0.05
+      tier3_lead: 0.10
+      tier4_lead: 0.15
+      tier5_lead: 0.20
+      tier6_lead: 0.30
+    godly:
+      tier1_lead: 0.00
+      tier2_lead: 0.01
+      tier3_lead: 0.02
+      tier4_lead: 0.05
+      tier5_lead: 0.10
+      tier6_lead: 0.15
+
+  # Damage dealt by pets from each tier
+  damage:
+    easier: 1.5
+    bit_harder: 2.5
+    medium: 4.0
+    hard: 6.0
+    elite: 8.0
+    godly: 12.0
+
+# Add this to your discord section
+discord:
+  # ... other channel IDs
+  pets_log_channel_id: "YOUR_PET_LOG_CHANNEL_ID_HERE"
+  pets_admin_log_channel_id: "YOUR_PET_ADMIN_LOG_CHANNEL_ID_HERE"
