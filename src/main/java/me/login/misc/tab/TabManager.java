@@ -18,22 +18,24 @@ public class TabManager {
 
     public TabManager(Login plugin) {
         this.plugin = plugin;
-        loadConfig();
+        loadConfig(); // Load config first
+        // Register listener AFTER loading config
         plugin.getServer().getPluginManager().registerEvents(new TabListener(this), plugin);
     }
 
     /**
-     * Loads the header and footer from the config.yml.
+     * Loads the header and footer from the plugin's own config.yml.
      */
     public void loadConfig() {
         plugin.reloadConfig(); // Make sure we have the latest config
         FileConfiguration config = plugin.getConfig();
 
         // Default values in case the config is missing
-        List<String> defaultHeader = List.of("&bWelcome to the &lHub&r!");
-        List<String> defaultFooter = List.of("&ePlayers Online: &f" + Bukkit.getOnlinePlayers().size()); // Note: This size is static, for a dynamic count you'd need PAPI or to update it in the task.
+        List<String> defaultHeader = List.of("&bWelcome to the &lHub&r!", "&eplay.yourserver.com");
+        List<String> defaultFooter = List.of("", "&ePlayers in Hub: &f%hub_online%");
 
         // Load hub header
+        // This loads from *your* plugin's config.yml, NOT the TAB plugin's config.
         this.hubHeader = ChatColor.translateAlternateColorCodes('&',
                 String.join("\n", config.getStringList("tablist.hub.header"))
         );
@@ -43,7 +45,11 @@ public class TabManager {
                 String.join("\n", config.getStringList("tablist.hub.footer"))
         );
 
-        // Add this to your config.yml to customize it:
+        // --- FOR DEBUGGING: Log what was loaded ---
+        plugin.getLogger().info("[TabManager] Loaded Hub Header: " + this.hubHeader.replace("\n", " | "));
+        plugin.getLogger().info("[TabManager] Loaded Hub Footer: " + this.hubFooter.replace("\n", " | "));
+
+        // Add this to your config.yml (src/main/resources/config.yml) to customize it:
         // tablist:
         //   hub:
         //     header:
@@ -62,7 +68,6 @@ public class TabManager {
             this.tabUpdaterTask.cancel();
         }
         // Run the updater every 20 ticks (1 second)
-        // This is important for keeping player visibility (hide/show) in sync
         this.tabUpdaterTask = new TabUpdater(this).runTaskTimer(plugin, 0L, 20L);
     }
 
@@ -78,94 +83,93 @@ public class TabManager {
 
     /**
      * This is the main logic method, called by the listener and the updater.
-     * It applies the correct tablist rules based on the player's world.
+     * It updates the Header/Footer *and* player visibility for all players.
      */
-    public void updatePlayer(Player player) {
-        if (player == null || !player.isOnline()) {
-            return;
-        }
-
-        String worldName = player.getWorld().getName();
-
-        try {
-            if (worldName.equalsIgnoreCase("login")) {
-                applyLoginTab(player);
-            } else if (worldName.equalsIgnoreCase("hub")) {
-                applyHubTab(player);
-            } else {
-                applyDefaultTab(player);
+    public void updateAllPlayers() {
+        int hubOnline = 0;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (p.getWorld().getName().equalsIgnoreCase("hub")) {
+                hubOnline++;
             }
-        } catch (Exception e) {
-            plugin.getLogger().warning("Failed to update tab for " + player.getName() + " in world " + worldName);
-            e.printStackTrace();
         }
-    }
+        String finalHubFooter = hubFooter.replace("%hub_online%", String.valueOf(hubOnline));
 
-    /**
-     * This method is called by the periodic updater for all players.
-     */
-    protected void updateAllPlayers() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            updatePlayer(player);
-        }
-    }
+            if (!player.isOnline()) continue;
 
-    /**
-     * World: "login"
-     * - Only show the player themselves.
-     * - No header/footer.
-     * - Hide all other players.
-     */
-    private void applyLoginTab(Player player) {
-        // Set an empty header/footer
-        player.setPlayerListHeaderFooter("", ""); // <-- CORRECTED (was null, null)
+            // 1. Set Header/Footer based on the player's world
+            updatePlayerHeaderFooter(player, finalHubFooter);
 
-        // Hide all other players from this player
-        for (Player other : Bukkit.getOnlinePlayers()) {
-            if (!other.equals(player)) {
-                player.hidePlayer(plugin, other);
-            } else {
-                player.showPlayer(plugin, other); // Make sure they can see themselves
+            // 2. Update player visibility (who 'player' can see)
+            for (Player other : Bukkit.getOnlinePlayers()) {
+                if (!other.isOnline()) continue;
+
+                if (player.equals(other)) {
+                    player.showPlayer(plugin, other); // Always show self
+                    continue;
+                }
+
+                // Decide if 'player' should be able to see 'other'
+                if (shouldPlayerSeeOther(player, other)) {
+                    player.showPlayer(plugin, other);
+                } else {
+                    player.hidePlayer(plugin, other);
+                }
             }
         }
     }
 
     /**
-     * World: "hub"
-     * - Show only other players in the "hub".
-     * - Show custom header/footer from config.
+     * Helper method to set the header/footer for a single player.
+     * @param player The player to update.
+     * @param dynamicHubFooter The footer with placeholders parsed.
      */
-    private void applyHubTab(Player player) {
-        // Set the custom hub header/footer
-        player.setPlayerListHeaderFooter(hubHeader, hubFooter);
+    private void updatePlayerHeaderFooter(Player player, String dynamicHubFooter) {
+        String playerWorld = player.getWorld().getName();
 
-        // Manage player visibility
-        for (Player other : Bukkit.getOnlinePlayers()) {
-            if (other.equals(player) || other.getWorld().getName().equalsIgnoreCase("hub")) {
-                // Show players who are also in the hub (and self)
-                player.showPlayer(plugin, other);
-            } else {
-                // Hide players who are not in the hub
-                player.hidePlayer(plugin, other);
-            }
+        if (playerWorld.equalsIgnoreCase("login")) {
+            // VANILLA: Set blank header/footer
+            player.setPlayerListHeaderFooter("", "");
+        } else if (playerWorld.equalsIgnoreCase("hub")) {
+            // HUB: Set custom header/footer
+            player.setPlayerListHeaderFooter(hubHeader, dynamicHubFooter);
+        } else {
+            // OTHER WORLDS (lifesteal, etc.):
+            // DO NOTHING. Let the TAB plugin control the header/footer.
+            // Setting it to "" here would break the TAB plugin.
         }
     }
 
     /**
-     * World: "other" (any world not 'login' or 'hub')
-     * - Show all players.
-     * - Clear header/footer to let the "TAB" plugin take control.
+     * The core visibility logic.
+     * @param player The viewing player.
+     * @param other The player being viewed.
+     * @return true if 'player' should see 'other', false otherwise.
      */
-    private void applyDefaultTab(Player player) {
-        // Clear our custom header/footer.
-        // The "TAB" plugin should take over from here.
-        player.setPlayerListHeaderFooter("", ""); // <-- CORRECTED (was null, null)
+    private boolean shouldPlayerSeeOther(Player player, Player other) {
+        String playerWorld = player.getWorld().getName();
+        String otherWorld = other.getWorld().getName();
 
-        // Make sure this player can see all other players
-        // The "TAB" plugin will then handle sorting/display.
-        for (Player other : Bukkit.getOnlinePlayers()) {
-            player.showPlayer(plugin, other);
+        // Rule 1: 'login' players see NO ONE (except themselves, handled in updateAllPlayers)
+        if (playerWorld.equalsIgnoreCase("login")) {
+            return false;
         }
+
+        // Rule 2: NO ONE sees 'login' players
+        if (otherWorld.equalsIgnoreCase("login")) {
+            return false;
+        }
+
+        // Rule 3: 'hub' players only see other 'hub' players
+        if (playerWorld.equalsIgnoreCase("hub")) {
+            return otherWorld.equalsIgnoreCase("hub");
+        }
+
+        // Rule 4: 'default' (lifesteal, etc.) players
+        // Let the TAB plugin handle visibility.
+        // We return true, so TAB can decide to show or hide them based on its own config.
+        // (We already handled the 'login' case in Rule 2).
+        return true;
     }
 
     // Getter for the plugin instance

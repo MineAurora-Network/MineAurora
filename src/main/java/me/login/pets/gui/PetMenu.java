@@ -50,7 +50,6 @@ public class PetMenu implements InventoryHolder {
         this.player = player;
         this.petManager = petManager;
         this.plugin = petManager.getPlugin();
-        // --- FIXED: Get config from plugin instance ---
         this.petsConfig = plugin.getPetsModule().getPetsConfig();
         this.pets = new ArrayList<>(petManager.getPlayerData(player.getUniqueId())); // Make a mutable copy
         this.sortMode = sortMode;
@@ -139,11 +138,8 @@ public class PetMenu implements InventoryHolder {
         ItemMeta meta = item.getItemMeta();
 
         if (meta != null) {
-            // Set spawn egg type if applicable
-            if (material.name().endsWith("_SPAWN_EGG") && meta instanceof SpawnEggMeta) {
-                // --- FIXED: Use setSpawnedType, as user's environment requires it ---
-                ((SpawnEggMeta) meta).setSpawnedType(pet.getPetType());
-            }
+            // --- FIXED: Removed setSpawnedType call to prevent UnsupportedOperationException ---
+            // The material itself (e.g. SKELETON_SPAWN_EGG) is sufficient for the texture.
 
             // Set name (MiniMessage)
             meta.displayName(
@@ -151,10 +147,14 @@ public class PetMenu implements InventoryHolder {
                             .decoration(TextDecoration.ITALIC, false)
             );
 
-            // Set lore (MiniMessage)
             List<Component> loreLines = new ArrayList<>();
             loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Type: <white>" + pet.getDefaultName() + "</white></gray>"));
             loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Rarity: <white>" + petsConfig.getPetTier(pet.getPetType()) + "</white></gray>"));
+
+            // --- NEW: Level Info ---
+            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Level: <gold>" + pet.getLevel() + "</gold></gray>"));
+            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>XP: <yellow>" + (int)pet.getXp() + " / " + (int)petsConfig.getXpRequired(pet.getLevel()) + "</yellow></gray>"));
+
             loreLines.add(Component.empty());
 
             if (pet.isOnCooldown()) {
@@ -165,7 +165,6 @@ public class PetMenu implements InventoryHolder {
             loreLines.add(MiniMessage.miniMessage().deserialize("<yellow>Click to select this pet.</yellow>"));
 
             meta.lore(loreLines.stream().map(c -> c.decoration(TextDecoration.ITALIC, false)).collect(Collectors.toList()));
-
             // Add persistent data
             PersistentDataContainer data = meta.getPersistentDataContainer();
             data.set(GuiUtils.getGuiItemKey(plugin), PersistentDataType.BYTE, (byte) 1);

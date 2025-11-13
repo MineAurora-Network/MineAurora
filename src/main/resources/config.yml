@@ -325,8 +325,18 @@ pet_capture:
     elite: 8.0
     godly: 12.0
 
+pet_leveling:
+  base-xp-req: 100.0
+  xp-multiplier: 1.2  # XP req increases by 20% per level
+  damage-multiplier: 0.5 # +0.5 damage per level
+  health-multiplier: 2.0 # +2 HP per level
+  max-level: 50
 # Add this to your discord section
 discord:
   # ... other channel IDs
   pets_log_channel_id: "YOUR_PET_LOG_CHANNEL_ID_HERE"
   pets_admin_log_channel_id: "YOUR_PET_ADMIN_LOG_CHANNEL_ID_HERE"
+
+generator:
+  log-channel-id: 1437287692500205581 # Replace with your channel ID
+  admin-log-channel-id: 1437287692500205581

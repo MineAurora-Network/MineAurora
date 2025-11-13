@@ -13,17 +13,12 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections; // --- FIXED: Added import ---
+import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Handles all /pet commands for players and admins.
@@ -47,7 +42,6 @@ public class PetCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (!(sender instanceof Player)) {
-            // --- FIXED: Added missing method to PetMessageHandler ---
             messageHandler.sendConsoleMessage("<red>Only players can use this command.</red>");
             return true;
         }
@@ -75,6 +69,9 @@ public class PetCommand implements CommandExecutor, TabCompleter {
                 return handleAdminGive(player, args);
             case "revive":
                 return handleAdminRevive(player, args);
+            case "menu":
+                new PetMenu(player, petManager, PetMenu.PetMenuSort.RARITY).open();
+                return true;
             default:
                 messageHandler.sendPlayerMessage(player, "<red>Unknown command. Use /pet</red>");
                 return true;
@@ -128,7 +125,7 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
             return true;
         }
-        // ... (implementation)
+        messageHandler.sendPlayerMessage(player, "<yellow>Feature under development.</yellow>");
         return true;
     }
 
@@ -204,34 +201,69 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
             return true;
         }
+
+        // Usage:
+        // 1. /pet give <item/fruit> [amount]  (Self)
+        // 2. /pet give <player> <item/fruit> [amount] (Target)
+
         if (args.length < 2) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give <item_name> [amount]</red>");
+            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give [player] <item/fruit> [amount]</red>");
             return true;
         }
 
-        String itemName = args[1];
-        // --- FIXED: Added missing method to PetsConfig ---
-        ItemStack item = config.getCaptureItem(itemName);
-
-        if (item == null) {
-            messageHandler.sendPlayerMessage(player, "<red>No item found for '" + itemName + "'. Check items.yml.</red>");
-            return true;
-        }
-
+        Player target = player;
+        String itemName;
         int amount = 1;
-        if (args.length == 3) {
+        int argOffset = 0;
+
+        // Check if first arg is a player
+        Player potentialTarget = Bukkit.getPlayer(args[1]);
+        if (potentialTarget != null) {
+            target = potentialTarget;
+            if (args.length < 3) {
+                messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give " + target.getName() + " <item/fruit> [amount]</red>");
+                return true;
+            }
+            itemName = args[2];
+            argOffset = 1;
+        } else {
+            itemName = args[1];
+        }
+
+        // Check for amount
+        if (args.length > 2 + argOffset) {
             try {
-                amount = Integer.parseInt(args[2]);
+                amount = Integer.parseInt(args[2 + argOffset]);
             } catch (NumberFormatException e) {
-                messageHandler.sendPlayerMessage(player, "<red>'" + args[2] + "' is not a valid amount.</red>");
+                messageHandler.sendPlayerMessage(player, "<red>'" + args[2 + argOffset] + "' is not a valid amount.</red>");
                 return true;
             }
         }
 
+        // Try getting as Capture Item
+        ItemStack item = config.getCaptureItem(itemName);
+        // If not found, try getting as Fruit
+        if (item == null) {
+            item = config.getFruit(itemName);
+        }
+
+        if (item == null) {
+            messageHandler.sendPlayerMessage(player, "<red>No item or fruit found for '" + itemName + "'.</red>");
+            return true;
+        }
+
         item.setAmount(amount);
-        player.getInventory().addItem(item);
-        messageHandler.sendPlayerMessage(player, "<green>Gave you " + amount + "x " + itemName + ".</green>");
-        logger.logAdmin(player.getName(), "Gave self " + amount + "x " + itemName);
+        target.getInventory().addItem(item);
+
+        String msg = "<green>Gave " + amount + "x " + itemName;
+        if (target.equals(player)) {
+            messageHandler.sendPlayerMessage(player, msg + " to yourself.</green>");
+        } else {
+            messageHandler.sendPlayerMessage(player, msg + " to " + target.getName() + ".</green>");
+            messageHandler.sendPlayerMessage(target, "<green>Received " + amount + "x " + itemName + ".</green>");
+        }
+
+        logger.logAdmin(player.getName(), "Gave " + target.getName() + " " + amount + "x " + itemName);
         return true;
     }
 
@@ -275,7 +307,7 @@ public class PetCommand implements CommandExecutor, TabCompleter {
         List<String> options = new ArrayList<>();
 
         if (args.length == 1) {
-            options.addAll(Arrays.asList("summon", "despawn"));
+            options.addAll(Arrays.asList("summon", "despawn", "menu"));
             if (player.hasPermission("mineaurora.pets.admin.check")) options.add("check");
             if (player.hasPermission("mineaurora.pets.admin.add")) options.add("add");
             if (player.hasPermission("mineaurora.pets.admin.remove")) options.add("remove");
@@ -290,9 +322,11 @@ public class PetCommand implements CommandExecutor, TabCompleter {
                             .toList());
                     break;
                 case "give":
-                    // Suggest all configured capture items
-                    // --- FIXED: Added missing method to PetsConfig ---
+                    // Suggest capture items AND fruits
                     options.addAll(config.getCaptureItemNames());
+                    options.addAll(config.getFruitNames());
+                    // Also suggest players for the target argument
+                    options.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList());
                     break;
                 case "check":
                 case "add":
@@ -304,18 +338,22 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 3) {
             switch (args[0].toLowerCase()) {
+                case "give":
+                    // If arg 2 was a player, suggest items now
+                    if (Bukkit.getPlayer(args[1]) != null) {
+                        options.addAll(config.getCaptureItemNames());
+                        options.addAll(config.getFruitNames());
+                    }
+                    break;
                 case "add":
                     // Suggest all capturable pets
-                    // --- FIXED: Changed lambda syntax ---
                     options.addAll(config.getAllCapturablePetTypes().stream()
                             .map(type -> type.name())
                             .toList());
                     break;
                 case "remove":
                 case "revive":
-                    // Suggest pets the target player owns (this is complex, skip for now or do basic)
-                    // For simplicity, just suggest all capturable pets
-                    // --- FIXED: Changed lambda syntax ---
+                    // Suggest pets the target player owns (for simplicity suggest types)
                     options.addAll(config.getAllCapturablePetTypes().stream()
                             .map(type -> type.name())
                             .toList());

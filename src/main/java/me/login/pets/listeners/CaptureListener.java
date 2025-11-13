@@ -51,7 +51,6 @@ public class CaptureListener implements Listener {
         Player player = event.getPlayer();
         ItemStack itemInHand = player.getInventory().getItemInMainHand();
 
-        // --- UPDATED: Check for LEADS (or other configured materials) ---
         if (itemInHand.getType() == Material.AIR || !itemInHand.hasItemMeta()) {
             return; // Not a custom item
         }
@@ -61,13 +60,10 @@ public class CaptureListener implements Listener {
 
         String captureItemName = null;
 
-        // --- UPDATED: NBT Key Check ---
         // Iterate over *all* NBT keys on the item
         for (org.bukkit.NamespacedKey key : data.getKeys()) {
-            // Check if the key's value (e.g., "tier1_lead_key") is one of our configured keys
             String nbtValue = data.get(key, PersistentDataType.STRING);
             if (nbtValue != null) {
-                // config.getCaptureItemName() checks if this nbtValue matches a configured item's key
                 String internalName = config.getCaptureItemName(nbtValue);
                 if (internalName != null) {
                     captureItemName = internalName;
@@ -86,9 +82,12 @@ public class CaptureListener implements Listener {
 
         // Handle the capture attempt
         LivingEntity entity = (LivingEntity) event.getRightClicked();
-        petManager.attemptCapture(player, entity, captureItemName);
 
-        // Consume the item
-        itemInHand.setAmount(itemInHand.getAmount() - 1);
+        // --- FIXED: Only consume item if the attempt actually proceeded ---
+        boolean itemUsed = petManager.attemptCapture(player, entity, captureItemName);
+
+        if (itemUsed) {
+            itemInHand.setAmount(itemInHand.getAmount() - 1);
+        }
     }
 }

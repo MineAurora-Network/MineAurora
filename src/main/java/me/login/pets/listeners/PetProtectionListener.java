@@ -2,237 +2,112 @@ package me.login.pets.listeners;
 
 import me.login.pets.PetManager;
 import me.login.pets.PetsConfig;
-import org.bukkit.Bukkit;
-import org.bukkit.Particle;
-import org.bukkit.Sound;
 import org.bukkit.entity.*;
-import org.bukkit.entity.Projectile; // --- FIXED: Added import ---
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
-import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
-import org.bukkit.util.Vector;
+import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 
-import java.util.UUID;
-
-/**
- * Listener for handling pet combat behavior.
- * 1. Makes a pet attack its owner's attacker.
- * 2. Prevents a hostile pet from targeting its owner.
- * 3. Handles pet death and cooldowns.
- * 4. Applies custom damage and special abilities.
- */
 public class PetProtectionListener implements Listener {
 
     private final PetManager petManager;
-    private final PetsConfig petsConfig;
+    private final PetsConfig config;
 
-    public PetProtectionListener(PetManager petManager, PetsConfig petsConfig) {
+    public PetProtectionListener(PetManager petManager, PetsConfig config) {
         this.petManager = petManager;
-        this.petsConfig = petsConfig;
+        this.config = config;
     }
 
-    /**
-     * Triggers the pet to attack its owner's attacker.
-     */
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onOwnerDamaged(EntityDamageByEntityEvent event) {
-        if (!(event.getEntity() instanceof Player)) {
-            return; // Owner is not a player
-        }
-
-        Player owner = (Player) event.getEntity();
-        LivingEntity attacker = null;
-
-        if (event.getDamager() instanceof LivingEntity) {
-            attacker = (LivingEntity) event.getDamager();
-        } else if (event.getDamager() instanceof Projectile) {
-            Projectile projectile = (Projectile) event.getDamager();
-            if (projectile.getShooter() instanceof LivingEntity) {
-                attacker = (LivingEntity) projectile.getShooter();
-            }
-        }
-
-        if (attacker == null || attacker.equals(owner)) {
-            return; // Attacker is not something a pet can target
-        }
-
-        // Get the owner's active pet
-        LivingEntity pet = petManager.getActivePet(owner.getUniqueId());
-
-        if (pet == null || !(pet instanceof Mob) || pet.equals(attacker)) {
-            return; // No active pet, or pet is not a Mob, or pet is attacking owner
-        }
-
-        // Make the pet target the attacker
-        ((Mob) pet).setTarget(attacker);
-    }
-
-    /**
-     * Prevents a hostile pet from targeting its owner or other pets.
-     */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPetTarget(EntityTargetLivingEntityEvent event) {
-        if (!(event.getEntity() instanceof Mob) || !(event.getTarget() instanceof LivingEntity)) {
-            return;
-        }
-
-        Mob petMob = (Mob) event.getEntity();
-        LivingEntity target = event.getTarget();
-
-        // Check if the entity is a pet
-        UUID ownerUuid = petManager.getPetOwner(petMob);
-        if (ownerUuid == null) {
-            return;
-        }
-
-        // If the pet's target is its owner, cancel
-        if (target.getUniqueId().equals(ownerUuid)) {
-            event.setCancelled(true);
-            return;
-        }
-
-        // If the pet's target is ANOTHER player's pet, cancel
-        if (petManager.isPet(target)) {
-            event.setCancelled(true);
-        }
-    }
-
-    /**
-     * Handles pet death, applying cooldowns.
-     */
     @EventHandler
-    public void onPetDeath(EntityDeathEvent event) {
-        LivingEntity pet = event.getEntity();
-        UUID ownerUuid = petManager.getPetOwner(pet);
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        // 1. Friendly Fire & Warden Sonic Boom Fix
+        if (event.getDamager() instanceof LivingEntity && event.getEntity() instanceof LivingEntity) {
+            LivingEntity damager = (LivingEntity) event.getDamager();
+            LivingEntity victim = (LivingEntity) event.getEntity();
 
-        if (ownerUuid == null) {
-            return; // Not a pet
-        }
-
-        // Prevent drops
-        event.getDrops().clear();
-        event.setDroppedExp(0);
-
-        // Check if death was by command (e.g., /killall)
-        EntityDamageEvent lastDamage = pet.getLastDamageCause();
-        if (lastDamage == null || lastDamage.getCause() == EntityDamageEvent.DamageCause.VOID || lastDamage.getCause() == EntityDamageEvent.DamageCause.CUSTOM) {
-            // Died by /kill or void, don't apply cooldown
-            petManager.despawnPet(ownerUuid, false); // Just clean up maps
-            Player owner = Bukkit.getPlayer(ownerUuid);
-            if (owner != null) {
-                petManager.getPlugin().getLogger().info("Pet " + pet.getType() + " for " + owner.getName() + " was removed without cooldown (command/void).");
+            // Case A: Owner hitting own Pet -> Cancel
+            if (petManager.isPet(victim)) {
+                if (damager instanceof Player) {
+                    if (petManager.getPetOwner(victim).equals(damager.getUniqueId())) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
             }
-            return;
-        }
 
-        // It was a "real" death, apply cooldown
-        petManager.onPetDeath(ownerUuid, pet.getType());
-    }
+            // Case B: Pet hitting Owner (e.g. Warden Sonic Boom) -> Cancel
+            if (petManager.isPet(damager)) {
+                if (victim instanceof Player) {
+                    if (petManager.getPetOwner(damager).equals(victim.getUniqueId())) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
 
-    /**
-     * Handles custom pet damage and special abilities.
-     */
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
-    public void onPetAttack(EntityDamageByEntityEvent event) {
-        if (!(event.getDamager() instanceof Mob) && !(event.getDamager() instanceof Projectile)) {
-            return; // Attacker is not a pet or pet's projectile
-        }
-
-        UUID ownerUuid = null;
-        EntityType petType = null;
-        LivingEntity pet = null;
-
-        if (event.getDamager() instanceof Mob) {
-            pet = (Mob) event.getDamager();
-            ownerUuid = petManager.getPetOwner(pet);
-            petType = pet.getType();
-        } else { // It's a projectile
-            Projectile projectile = (Projectile) event.getDamager();
-            if (projectile.getShooter() instanceof LivingEntity) {
-                pet = (LivingEntity) projectile.getShooter();
-                ownerUuid = petManager.getPetOwner(pet);
-                petType = pet.getType();
+                // Custom Damage Calculation for Pet Attacks
+                if (petManager.isPet(damager)) {
+                    var ownerId = petManager.getPetOwner(damager);
+                    var petData = petManager.getPet(ownerId, damager.getType());
+                    if (petData != null) {
+                        event.setDamage(config.getDamage(damager.getType(), petData.getLevel()));
+                        // Give XP on kill?
+                        if (victim.getHealth() - event.getFinalDamage() <= 0) {
+                            // Simple XP grant for kill
+                            Player owner = petManager.getPlugin().getServer().getPlayer(ownerId);
+                            if (owner != null) {
+                                petManager.addXp(owner, petData, 20.0); // Fixed XP per kill
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        if (ownerUuid == null) {
-            return; // Attacker is not a pet
+        // 2. Aggression System
+        // If Player damages mob -> Pet targets mob
+        if (event.getDamager() instanceof Player && event.getEntity() instanceof LivingEntity) {
+            Player player = (Player) event.getDamager();
+            if (petManager.hasActivePet(player.getUniqueId())) {
+                petManager.handlePetAggression(player, event.getEntity());
+            }
         }
-
-        // It's a pet! Apply custom damage from config
-        double damage = petsConfig.getPetDamage(petType);
-        event.setDamage(damage);
-
-        // Apply special abilities
-        if (event.getDamager() instanceof Mob) { // Only for melee attacks
-            handleMeleeAbilities(petType, (LivingEntity) event.getEntity(), pet);
-        } else { // Handle projectile abilities
-            handleProjectileAbilities(petType, (Projectile) event.getDamager(), pet);
-        }
-    }
-
-    private void handleMeleeAbilities(EntityType petType, LivingEntity target, LivingEntity pet) {
-        switch (petType) {
-            case WARDEN:
-                // Apply sonic boom particle/sound
-                target.getWorld().playSound(target.getLocation(), Sound.ENTITY_WARDEN_SONIC_BOOM, 2.0F, 1.0F);
-                target.getWorld().spawnParticle(Particle.SONIC_BOOM, target.getLocation().add(0, 1, 0), 1);
-                target.setVelocity(target.getVelocity().add(new Vector(0, 0.5, 0))); // Knockup
-                break;
-            case WITHER:
-                // Apply wither effect
-                target.addPotionEffect(new PotionEffect(PotionEffectType.WITHER, 100, 1)); // 5 seconds, level 1
-                // --- FIXED: Particle name ---
-                target.getWorld().spawnParticle(Particle.LARGE_SMOKE, target.getLocation().add(0, 1, 0), 10, 0.5, 0.5, 0.5, 0.01);
-                break;
-            case ENDER_DRAGON:
-                // Knockback and particle effect
-                Vector knockback = target.getLocation().toVector().subtract(pet.getLocation().toVector()).normalize().multiply(1.5).setY(0.5);
-                target.setVelocity(knockback);
-                // --- FIXED: Particle name ---
-                target.getWorld().spawnParticle(Particle.EXPLOSION, target.getLocation(), 1);
-                target.getWorld().playSound(target.getLocation(), Sound.ENTITY_ENDER_DRAGON_FLAP, 1.0F, 1.0F);
-                break;
-            case RAVAGER:
-                // Stronger knockback and sound
-                Vector ravagerKnockback = target.getLocation().toVector().subtract(pet.getLocation().toVector()).normalize().multiply(2.0).setY(0.3);
-                target.setVelocity(ravagerKnockback);
-                target.getWorld().playSound(target.getLocation(), Sound.ENTITY_RAVAGER_ATTACK, 1.0F, 1.0F);
-                break;
+        // If Mob damages Player -> Pet targets mob
+        if (event.getEntity() instanceof Player && event.getDamager() instanceof LivingEntity) {
+            Player player = (Player) event.getEntity();
+            if (petManager.hasActivePet(player.getUniqueId())) {
+                petManager.handlePetAggression(player, event.getDamager());
+            }
         }
     }
 
-    private void handleProjectileAbilities(EntityType petType, Projectile projectile, LivingEntity pet) {
-        switch (petType) {
-            case BLAZE:
-                projectile.setFireTicks(100); // 5 seconds of fire
-                projectile.getWorld().spawnParticle(Particle.FLAME, projectile.getLocation(), 10, 0.1, 0.1, 0.1, 0.01);
-                break;
-            case GHAST:
-                // --- FIXED: Cast to Fireball ---
-                if (projectile instanceof Fireball) {
-                    ((Fireball) projectile).setIsIncendiary(true); // Makes it explosive
+    // 3. Creeper Fix
+    @EventHandler
+    public void onCreeperExplode(EntityExplodeEvent event) {
+        if (petManager.isPet(event.getEntity())) {
+            event.setCancelled(true); // Stop block damage
+
+            // Manually damage nearby entities
+            event.getLocation().getWorld().createExplosion(event.getLocation(), 4F, false, false, event.getEntity());
+            // The createExplosion might kill the creeper, so we might need to heal it or cancel 'death' in another event.
+            // Actually, standard behavior for createExplosion with source DOES damage source.
+            // Better approach: Simulate damage
+            event.getLocation().getNearbyEntities(4, 4, 4).forEach(e -> {
+                if (e instanceof LivingEntity && !e.equals(event.getEntity()) && !e.getUniqueId().equals(petManager.getPetOwner(event.getEntity()))) {
+                    ((LivingEntity) e).damage(10.0, event.getEntity());
                 }
-                projectile.getWorld().spawnParticle(Particle.FLAME, projectile.getLocation(), 10, 0.1, 0.1, 0.1, 0.01);
-                projectile.getWorld().playSound(projectile.getLocation(), Sound.ENTITY_GHAST_SHOOT, 1.0F, 1.0F);
-                break;
-            case WITHER:
-                // --- FIXED: Cast to WitherSkull ---
-                if (projectile instanceof WitherSkull) {
-                    ((WitherSkull) projectile).setCharged(true); // Make it a blue, more explosive skull
-                }
-                // --- FIXED: Particle name ---
-                projectile.getWorld().spawnParticle(Particle.SMOKE, projectile.getLocation(), 20, 0.1, 0.1, 0.1, 0.05);
-                projectile.getWorld().playSound(projectile.getLocation(), Sound.ENTITY_WITHER_SHOOT, 1.0F, 1.0F);
-                break;
+            });
         }
     }
 
+    // 4. Feeding
+    @EventHandler
+    public void onFeed(PlayerInteractEntityEvent event) {
+        if (petManager.isPet(event.getRightClicked())) {
+            Player player = event.getPlayer();
+            if (petManager.getPetOwner(event.getRightClicked()).equals(player.getUniqueId())) {
+                petManager.feedPet(player, player.getInventory().getItemInMainHand());
+            }
+        }
+    }
 }

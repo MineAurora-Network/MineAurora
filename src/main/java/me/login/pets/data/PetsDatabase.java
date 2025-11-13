@@ -11,9 +11,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
 
-/**
- * Handles all SQLite database interactions for the pet system.
- */
 public class PetsDatabase {
 
     private final Login plugin;
@@ -23,7 +20,11 @@ public class PetsDatabase {
         this.plugin = plugin;
     }
 
-    // --- FIXED: Added connect() method ---
+    // --- FIXED: Added missing getter used by Listeners ---
+    public Login getPlugin() {
+        return plugin;
+    }
+
     public boolean connect() {
         File dataFolder = new File(plugin.getDataFolder(), "pets.db");
         if (!dataFolder.exists()) {
@@ -46,7 +47,6 @@ public class PetsDatabase {
         }
     }
 
-    // --- FIXED: Added disconnect() method ---
     public void disconnect() {
         try {
             if (connection != null && !connection.isClosed()) {
@@ -64,20 +64,21 @@ public class PetsDatabase {
                 + "pet_type VARCHAR(50) NOT NULL,"
                 + "display_name TEXT,"
                 + "cooldown_end_time BIGINT DEFAULT 0,"
+                + "level INTEGER DEFAULT 1,"
+                + "xp DOUBLE DEFAULT 0,"
                 + "UNIQUE(player_uuid, pet_type)"
                 + ");";
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(sql);
+
+            try { stmt.execute("ALTER TABLE player_pets ADD COLUMN level INTEGER DEFAULT 1;"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE player_pets ADD COLUMN xp DOUBLE DEFAULT 0;"); } catch (SQLException ignored) {}
+
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Could not create pets table!", e);
         }
     }
 
-    /**
-     * Retrieves all pets owned by a specific player.
-     * @param playerUuid The player's UUID.
-     * @return A list of Pet objects.
-     */
     public List<Pet> getPlayerPets(UUID playerUuid) {
         List<Pet> pets = new ArrayList<>();
         String sql = "SELECT * FROM player_pets WHERE player_uuid = ?";
@@ -88,9 +89,10 @@ public class PetsDatabase {
                 EntityType petType = EntityType.valueOf(rs.getString("pet_type"));
                 String displayName = rs.getString("display_name");
                 long cooldownEndTime = rs.getLong("cooldown_end_time");
+                int level = rs.getInt("level");
+                double xp = rs.getDouble("xp");
 
-                Pet pet = new Pet(petType, displayName);
-                pet.setCooldownEndTime(cooldownEndTime);
+                Pet pet = new Pet(playerUuid, petType, displayName, cooldownEndTime, level, xp);
                 pets.add(pet);
             }
         } catch (SQLException | IllegalArgumentException e) {
@@ -99,54 +101,32 @@ public class PetsDatabase {
         return pets;
     }
 
-    /**
-     * Adds a new pet to a player.
-     * @param playerUuid The player's UUID.
-     * @param petType The EntityType of the pet.
-     * @return true if the pet was added, false if they already own it.
-     */
-    public boolean addPlayerPet(UUID playerUuid, EntityType petType) {
-        String sql = "INSERT INTO player_pets(player_uuid, pet_type) VALUES(?,?)";
+    public boolean addPet(UUID playerUuid, EntityType petType) {
+        String sql = "INSERT INTO player_pets(player_uuid, pet_type, level, xp) VALUES(?,?, 1, 0)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, playerUuid.toString());
             pstmt.setString(2, petType.name());
             pstmt.executeUpdate();
             return true;
         } catch (SQLException e) {
-            // Check for unique constraint violation
-            if (e.getErrorCode() == 19) { // SQLITE_CONSTRAINT
-                return false;
-            }
+            if (e.getErrorCode() == 19) return false;
             plugin.getLogger().log(Level.SEVERE, "Error adding player pet " + petType + " for " + playerUuid, e);
             return false;
         }
     }
 
-    /**
-     * Removes a pet from a player.
-     * @param playerUuid The player's UUID.
-     * @param petType The EntityType of the pet.
-     * @return true if the pet was removed, false if they didn't own it.
-     */
-    public boolean removePlayerPet(UUID playerUuid, EntityType petType) {
+    public boolean removePet(UUID playerUuid, EntityType petType) {
         String sql = "DELETE FROM player_pets WHERE player_uuid = ? AND pet_type = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, playerUuid.toString());
             pstmt.setString(2, petType.name());
-            int rowsAffected = pstmt.executeUpdate();
-            return rowsAffected > 0;
+            return pstmt.executeUpdate() > 0;
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Error removing player pet " + petType + " for " + playerUuid, e);
             return false;
         }
     }
 
-    /**
-     * Updates the display name of a specific pet.
-     * @param playerUuid The player's UUID.
-     * @param petType The EntityType of the pet.
-     * @param newName The new display name.
-     */
     public void updatePetName(UUID playerUuid, EntityType petType, String newName) {
         String sql = "UPDATE player_pets SET display_name = ? WHERE player_uuid = ? AND pet_type = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -159,12 +139,6 @@ public class PetsDatabase {
         }
     }
 
-    /**
-     * Sets the cooldown end time for a specific pet.
-     * @param playerUuid The player's UUID.
-     * @param petType The EntityType of the pet.
-     * @param cooldownEndTime The timestamp when the cooldown ends (0 for no cooldown).
-     */
     public void setPetCooldown(UUID playerUuid, EntityType petType, long cooldownEndTime) {
         String sql = "UPDATE player_pets SET cooldown_end_time = ? WHERE player_uuid = ? AND pet_type = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -177,7 +151,16 @@ public class PetsDatabase {
         }
     }
 
-    public Login getPlugin() {
-        return plugin;
+    public void updatePetStats(UUID playerUuid, EntityType petType, int level, double xp) {
+        String sql = "UPDATE player_pets SET level = ?, xp = ? WHERE player_uuid = ? AND pet_type = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setInt(1, level);
+            pstmt.setDouble(2, xp);
+            pstmt.setString(3, playerUuid.toString());
+            pstmt.setString(4, petType.name());
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Error updating pet stats for " + playerUuid, e);
+        }
     }
 }

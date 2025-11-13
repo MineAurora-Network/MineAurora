@@ -184,6 +184,15 @@ commands:
     permission: "mineaurora.pets.use"
     aliases: [pet]
 
+  generator:
+    description: Manage generators.
+    usage: /generator <check|remove|give|setlimit>
+    aliases: [gen]
+  sellgendrop:
+    description: Sell all generator drops in inventory.
+    usage: /sellgendrop
+    aliases: [sellgen]
+
 permissions:
   logincore.admin:
     description: Allows use of /unregister

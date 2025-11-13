@@ -251,6 +251,7 @@ public class FiresaleManager {
         sale.setRemainingQuantity(sale.getRemainingQuantity() - 1);
         sale.setTotalSold(sale.getTotalSold() + 1);
 
+        // Sync update to database to prevent race conditions
         database.updateSaleQuantity(sale.getSaleId(), sale.getRemainingQuantity(), sale.getTotalSold());
 
         player.getInventory().addItem(sale.getItem().clone());
@@ -263,8 +264,8 @@ public class FiresaleManager {
         )));
 
         if (sale.getRemainingQuantity() <= 0) {
-            // FIX: Notify player that sale ended before closing inventory
-            player.sendMessage(serverPrefix.append(miniMessage.deserialize("<red>The firesale has just ended!")));
+            // FIXED: Added message informing player that sale ended
+            player.sendMessage(serverPrefix.append(miniMessage.deserialize("<red>The firesale has just ended (Sold Out)!")));
             endSale(sale, SaleStatus.COMPLETED, "Sold out");
             player.closeInventory();
         } else {
@@ -280,7 +281,7 @@ public class FiresaleManager {
         if (!player.getWorld().getName().equalsIgnoreCase("lifesteal")) return;
         Firesale sale = getActiveSales().stream().findFirst().orElse(null);
         if (sale != null) {
-            // Join alert logic...
+            // Join message logic...
         }
     }
 

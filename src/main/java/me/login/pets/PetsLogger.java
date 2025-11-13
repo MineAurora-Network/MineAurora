@@ -1,10 +1,10 @@
 package me.login.pets;
 
 import me.login.Login;
-import me.login.clearlag.LagClearLogger; // Assuming this is the correct path
+import me.login.clearlag.LagClearLogger;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 
 import java.awt.Color;
 import java.time.Instant;
@@ -16,12 +16,16 @@ import java.time.Instant;
 public class PetsLogger {
 
     private final Login plugin;
-    private final String discordChannelId;
-    private final String discordAdminChannelId; // Added admin log channel
+    private String discordChannelId;
+    private String discordAdminChannelId;
 
     public PetsLogger(Login plugin) {
         this.plugin = plugin;
-        // Load the channel IDs from the main config
+        loadConfig();
+    }
+
+    // --- FIXED: Added missing loadConfig method ---
+    public void loadConfig() {
         this.discordChannelId = plugin.getConfig().getString("discord.pets_log_channel_id", "");
         this.discordAdminChannelId = plugin.getConfig().getString("discord.pets_admin_log_channel_id", "");
     }
@@ -73,7 +77,6 @@ public class PetsLogger {
         );
     }
 
-    // --- ADDED: Log pet rename ---
     /**
      * Logs a pet rename to console and Discord (admin channel).
      * @param playerName The player who renamed the pet.
@@ -112,27 +115,18 @@ public class PetsLogger {
         );
     }
 
-    /**
-     * Helper method to send an embed to the Discord log channel.
-     * @param channelId The ID of the channel to send to.
-     * @param title The title of the embed.
-     * @param description The main description.
-     * @param color The color of the embed.
-     * @param fieldsContent Optional: Content for a "Details" field.
-     */
     private void sendEmbedToDiscord(String channelId, String title, String description, Color color, String fieldsContent) {
         if (channelId == null || channelId.isEmpty() || channelId.equals("YOUR_PET_LOG_CHANNEL_ID_HERE")) {
             return; // Discord logging disabled or not configured
         }
 
         try {
-            // --- FIXED: Get LagClearLogger instance from plugin, then get JDA ---
             LagClearLogger lagClearLogger = plugin.getLagClearLogger();
             if (lagClearLogger == null) {
                 log("LagClearLogger instance is null, cannot log to Discord.");
                 return;
             }
-            JDA jda = lagClearLogger.getJDA(); // Get the JDA instance from the object
+            JDA jda = lagClearLogger.getJDA();
             if (jda == null) {
                 log("JDA instance is null, cannot log to Discord.");
                 return;

@@ -37,8 +37,9 @@ public class FiresaleModule {
             // 2. Items
             firesaleItemManager = new FiresaleItemManager(plugin);
 
-            // 3. Logger - FIX: Changed getJDA() to getJda()
-            firesaleLogger = new FiresaleLogger(plugin.getJda(), plugin.getConfig().getString("firesale.discord-log-channel", ""));
+            // 3. Logger - FIX: Updated config path to match user's config (firesale.log-channel-id)
+            // Also ensured getJda() casing is correct per your main class
+            firesaleLogger = new FiresaleLogger(plugin.getJda(), plugin.getConfig().getString("firesale.log-channel-id", ""));
 
             // 4. Manager
             firesaleManager = new FiresaleManager(plugin, firesaleDatabase, firesaleLogger, firesaleItemManager);
@@ -48,8 +49,8 @@ public class FiresaleModule {
             // 5. GUI
             firesaleGUI = new FiresaleGUI(plugin, firesaleManager, firesaleDatabase);
 
-            // 6. Listener & NPC
-            int npcId = plugin.getConfig().getInt("firesale-npc-id", -1);
+            // 6. Listener & NPC - FIX: Updated config path to match user's config (firesale.fire-npc-id)
+            int npcId = plugin.getConfig().getInt("firesale.fire-npc-id", -1);
 
             firesaleListener = new FiresaleListener(plugin, firesaleManager, firesaleGUI, npcId);
             Bukkit.getPluginManager().registerEvents(firesaleListener, plugin);
@@ -76,6 +77,8 @@ public class FiresaleModule {
                 } catch (Throwable t) {
                     plugin.getLogger().warning("Error hooking into Citizens: " + t.getMessage());
                 }
+            } else {
+                plugin.getLogger().warning("Firesale NPC ID is not set in config (firesale.fire-npc-id).");
             }
 
             // 8. Command

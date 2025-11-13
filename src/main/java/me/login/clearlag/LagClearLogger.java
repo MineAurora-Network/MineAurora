@@ -10,6 +10,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 import java.util.EnumSet;
+import java.util.concurrent.TimeUnit; // --- FIXED: Added Import ---
 
 public class LagClearLogger {
 
@@ -39,11 +40,14 @@ public class LagClearLogger {
     private void startLoggerBot(String token) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
+                // --- FIXED: Build first, then assign, then await ---
+                // This ensures 'this.jda' is not null if we need to shutdown immediately
                 this.jda = JDABuilder.createLight(token)
                         .enableIntents(GatewayIntent.GUILD_MESSAGES)
                         .disableCache(EnumSet.allOf(CacheFlag.class))
-                        .build()
-                        .awaitReady();
+                        .build();
+
+                this.jda.awaitReady();
 
                 // ✅ Set the bot’s status and activity
                 jda.getPresence().setPresence(OnlineStatus.ONLINE, Activity.watching("server logs 📜"));
@@ -74,8 +78,22 @@ public class LagClearLogger {
 
     public void shutdown() {
         if (jda != null) {
-            jda.shutdownNow();
-            plugin.getLogger().info("LagClear Logger Bot has been shut down.");
+            try {
+                // --- FIXED: Properly wait for JDA to shut down ---
+                jda.shutdown(); // Initiates graceful shutdown
+
+                // Wait up to 10 seconds for it to finish
+                if (!jda.awaitShutdown(10, TimeUnit.SECONDS)) {
+                    plugin.getLogger().warning("LagClear Logger Bot took too long to shutdown. Forcing...");
+                    jda.shutdownNow(); // Force shutdown if graceful fails
+                    jda.awaitShutdown(5, TimeUnit.SECONDS);
+                }
+
+                plugin.getLogger().info("LagClear Logger Bot has been shut down.");
+            } catch (InterruptedException e) {
+                plugin.getLogger().warning("Interrupted while shutting down LagClear Logger Bot.");
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

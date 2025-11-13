@@ -4,6 +4,7 @@ import me.login.discord.store.TicketModule;
 import me.login.discord.linking.*;
 import me.login.discord.moderation.DiscordModConfig;
 import me.login.loginsystem.*;
+import me.login.misc.generator.GenModule;
 import me.login.misc.dailyreward.DailyRewardDatabase;
 import me.login.misc.dailyreward.DailyRewardModule;
 import me.login.misc.firesale.FiresaleModule;
@@ -68,7 +69,7 @@ public class Login extends JavaPlugin implements Listener {
     private LoginSystem loginSystem;
     private LoginDatabase loginDatabase;
     private LoginSystemLogger loginSystemLogger;
-
+    private GenModule genModule;
     private OrderModule orderModule;
 
     private DamageIndicator damageIndicator;
@@ -277,6 +278,10 @@ public class Login extends JavaPlugin implements Listener {
                             getLogger().severe("Failed to initialize Token Module!");
                         }
 
+                        getLogger().info("Initializing GenModule...");
+                        genModule = new GenModule(Login.this, lagClearLogger);
+                        genModule.init();
+
                         getLogger().info("Initializing CreatorCodeModule...");
                         creatorCodeModule = new CreatorCodeModule(Login.this);
                         if (!creatorCodeModule.init(lagClearLogger)) {
@@ -482,6 +487,9 @@ public class Login extends JavaPlugin implements Listener {
             if (playtimeRewardModule != null) {
                 playtimeRewardModule.shutdown();
             }
+            if (genModule != null) {
+                genModule.shutdown();
+            }
             if (tokenModule != null) {
                 tokenModule.shutdown();
             }
@@ -495,11 +503,9 @@ public class Login extends JavaPlugin implements Listener {
                 ticketModule.shutdown();
             }
 
-            // --- PETS: ADDED ---
             if (petsModule != null) {
                 petsModule.shutdown();
             }
-            // --- PETS: END ADD ---
 
             if (firesaleModule != null) {
                 firesaleModule.disable();
