@@ -4,7 +4,6 @@ import me.login.Login;
 import me.login.pets.data.Pet;
 import me.login.pets.gui.PetMenu;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -20,9 +19,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Handles all /pet commands for players and admins.
- */
 public class PetCommand implements CommandExecutor, TabCompleter {
 
     private final Login plugin;
@@ -41,6 +37,7 @@ public class PetCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        // ... (snip) ... same as before
         if (!(sender instanceof Player)) {
             messageHandler.sendConsoleMessage("<red>Only players can use this command.</red>");
             return true;
@@ -48,7 +45,6 @@ public class PetCommand implements CommandExecutor, TabCompleter {
 
         Player player = (Player) sender;
         if (args.length == 0) {
-            // Open the main pet menu
             new PetMenu(player, petManager, PetMenu.PetMenuSort.RARITY).open();
             return true;
         }
@@ -79,6 +75,7 @@ public class PetCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleSummon(Player player, String[] args) {
+        // ... (snip) ... same as before
         if (args.length < 2) {
             messageHandler.sendPlayerMessage(player, "<red>Usage: /pet summon <pet_name></red>");
             return true;
@@ -110,6 +107,7 @@ public class PetCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleDespawn(Player player) {
+        // ... (snip) ... same as before
         if (!petManager.hasActivePet(player.getUniqueId())) {
             messageHandler.sendPlayerMessage(player, "<red>You do not have a pet summoned.</red>");
             return true;
@@ -118,18 +116,38 @@ public class PetCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // ... Admin commands ...
-
     private boolean handleAdminCheck(Player player, String[] args) {
+        // ... (snip) ... same as before
         if (!player.hasPermission("mineaurora.pets.admin.check")) {
             messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
             return true;
         }
-        messageHandler.sendPlayerMessage(player, "<yellow>Feature under development.</yellow>");
+        if (args.length < 2) {
+            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet check <player></red>");
+            return true;
+        }
+
+        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
+
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<Pet> pets = petManager.getPlayerData(target.getUniqueId());
+            if (pets == null || pets.isEmpty()) {
+                messageHandler.sendPlayerMessage(player, "<red>" + target.getName() + " has no pets.</red>");
+                return;
+            }
+
+            messageHandler.sendPlayerMessage(player, "<gold>Pets owned by " + target.getName() + ":</gold>");
+            for (Pet pet : pets) {
+                String color = pet.isOnCooldown() ? "<red>" : "<green>";
+                messageHandler.sendPlayerMessage(player, " <gray>-</gray> " + color + pet.getDisplayName() + "</" + (pet.isOnCooldown() ? "red" : "green") + ">" +
+                        " <gray>(" + pet.getPetType().name() + ")</gray> <yellow>Lvl " + pet.getLevel() + "</yellow>");
+            }
+        });
         return true;
     }
 
     private boolean handleAdminAdd(Player player, String[] args) {
+        // ... (snip) ... same as before
         if (!player.hasPermission("mineaurora.pets.admin.add")) {
             messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
             return true;
@@ -154,7 +172,6 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Run async
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             if (petManager.addPet(target.getUniqueId(), petType)) {
                 messageHandler.sendPlayerMessage(player, "<green>Gave " + petType.name() + " pet to " + target.getName() + ".</green>");
@@ -167,6 +184,7 @@ public class PetCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleAdminRemove(Player player, String[] args) {
+        // ... (snip) ... same as before
         if (!player.hasPermission("mineaurora.pets.admin.remove")) {
             messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
             return true;
@@ -202,12 +220,8 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Usage:
-        // 1. /pet give <item/fruit> [amount]  (Self)
-        // 2. /pet give <player> <item/fruit> [amount] (Target)
-
         if (args.length < 2) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give [player] <item/fruit> [amount]</red>");
+            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give [player] <item> [amount]</red>");
             return true;
         }
 
@@ -216,12 +230,11 @@ public class PetCommand implements CommandExecutor, TabCompleter {
         int amount = 1;
         int argOffset = 0;
 
-        // Check if first arg is a player
         Player potentialTarget = Bukkit.getPlayer(args[1]);
         if (potentialTarget != null) {
             target = potentialTarget;
             if (args.length < 3) {
-                messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give " + target.getName() + " <item/fruit> [amount]</red>");
+                messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give " + target.getName() + " <item> [amount]</red>");
                 return true;
             }
             itemName = args[2];
@@ -230,7 +243,6 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             itemName = args[1];
         }
 
-        // Check for amount
         if (args.length > 2 + argOffset) {
             try {
                 amount = Integer.parseInt(args[2 + argOffset]);
@@ -240,15 +252,17 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             }
         }
 
-        // Try getting as Capture Item
+        // --- UPDATED: Check all item types ---
         ItemStack item = config.getCaptureItem(itemName);
-        // If not found, try getting as Fruit
         if (item == null) {
             item = config.getFruit(itemName);
         }
+        if (item == null) {
+            item = config.getUtilityItem(itemName); // Check utility
+        }
 
         if (item == null) {
-            messageHandler.sendPlayerMessage(player, "<red>No item or fruit found for '" + itemName + "'.</red>");
+            messageHandler.sendPlayerMessage(player, "<red>No item found for '" + itemName + "'.</red>");
             return true;
         }
 
@@ -268,6 +282,7 @@ public class PetCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean handleAdminRevive(Player player, String[] args) {
+        // ... (snip) ... same as before
         if (!player.hasPermission("mineaurora.pets.admin.revive")) {
             messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
             return true;
@@ -316,44 +331,41 @@ public class PetCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 2) {
             switch (args[0].toLowerCase()) {
                 case "summon":
-                    // Suggest player's own pets
                     options.addAll(petManager.getPlayerData(player.getUniqueId()).stream()
                             .map(pet -> pet.getPetType().name())
                             .toList());
                     break;
                 case "give":
-                    // Suggest capture items AND fruits
+                    // --- UPDATED: Suggest all item types ---
                     options.addAll(config.getCaptureItemNames());
                     options.addAll(config.getFruitNames());
-                    // Also suggest players for the target argument
+                    options.addAll(config.getUtilityItemNames());
                     options.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList());
                     break;
                 case "check":
                 case "add":
                 case "remove":
                 case "revive":
-                    // Suggest online players
                     options.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList());
                     break;
             }
         } else if (args.length == 3) {
             switch (args[0].toLowerCase()) {
                 case "give":
-                    // If arg 2 was a player, suggest items now
                     if (Bukkit.getPlayer(args[1]) != null) {
+                        // --- UPDATED: Suggest all item types ---
                         options.addAll(config.getCaptureItemNames());
                         options.addAll(config.getFruitNames());
+                        options.addAll(config.getUtilityItemNames());
                     }
                     break;
                 case "add":
-                    // Suggest all capturable pets
                     options.addAll(config.getAllCapturablePetTypes().stream()
                             .map(type -> type.name())
                             .toList());
                     break;
                 case "remove":
                 case "revive":
-                    // Suggest pets the target player owns (for simplicity suggest types)
                     options.addAll(config.getAllCapturablePetTypes().stream()
                             .map(type -> type.name())
                             .toList());

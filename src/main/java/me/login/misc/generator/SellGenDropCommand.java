@@ -1,7 +1,7 @@
 package me.login.misc.generator;
 
 import me.login.Login;
-import me.login.scoreboard.SkriptUtils;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -40,14 +40,23 @@ public class SellGenDropCommand implements CommandExecutor {
         }
 
         if (count == 0) {
-            player.sendMessage(plugin.getComponentSerializer().deserialize(plugin.getServerPrefix() + "<red>No generator drops found to sell."));
+            player.sendMessage(plugin.getComponentSerializer().deserialize(plugin.getConfig().getString("server_prefix") + "<red>No generator drops found to sell."));
             return true;
         }
 
         // Give Money (Vault)
         plugin.getVaultEconomy().depositPlayer(player, totalValue);
 
-        player.sendMessage(plugin.getComponentSerializer().deserialize(plugin.getServerPrefix() + "<green>Sold " + count + " drops for <gold>$" + totalValue));
+        String message = "<green>Sold <white>" + count + " <green>drops for <gold>$" + totalValue;
+        player.sendMessage(plugin.getComponentSerializer().deserialize(plugin.getConfig().getString("server_prefix") + message));
+
+        // Title (Requested Feature)
+        net.kyori.adventure.title.Title title = net.kyori.adventure.title.Title.title(
+                LegacyComponentSerializer.legacyAmpersand().deserialize(plugin.getConfig().getString("server_prefix_2")),
+                plugin.getComponentSerializer().deserialize(message)
+        );
+        player.showTitle(title);
+
         return true;
     }
 }

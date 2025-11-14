@@ -16,9 +16,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
-/**
- * Listener for handling the pet capture attempt (right-clicking a mob with a capture lead).
- */
 public class CaptureListener implements Listener {
 
     private final PetManager petManager;
@@ -35,32 +32,20 @@ public class CaptureListener implements Listener {
 
     @EventHandler
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) {
-            return; // Only fire for main hand
-        }
-
-        if (!(event.getRightClicked() instanceof LivingEntity)) {
-            return; // Not a capturable entity
-        }
-
-        // Prevent capturing other players' pets
-        if (petManager.isPet(event.getRightClicked())) {
-            return;
-        }
-
-        Player player = event.getPlayer();
-        ItemStack itemInHand = player.getInventory().getItemInMainHand();
+        // FIXED: Check item in the hand that triggered the event
+        ItemStack itemInHand = event.getHand() == EquipmentSlot.HAND ?
+                event.getPlayer().getInventory().getItemInMainHand() :
+                event.getPlayer().getInventory().getItemInOffHand();
 
         if (itemInHand.getType() == Material.AIR || !itemInHand.hasItemMeta()) {
-            return; // Not a custom item
+            return;
         }
 
         ItemMeta meta = itemInHand.getItemMeta();
         PersistentDataContainer data = meta.getPersistentDataContainer();
-
         String captureItemName = null;
 
-        // Iterate over *all* NBT keys on the item
+        // Check if it's a capture item
         for (org.bukkit.NamespacedKey key : data.getKeys()) {
             String nbtValue = data.get(key, PersistentDataType.STRING);
             if (nbtValue != null) {
@@ -73,17 +58,28 @@ public class CaptureListener implements Listener {
         }
 
         if (captureItemName == null) {
-            // This item doesn't have the NBT key for a capture item
             return;
         }
 
-        // We have a valid capture item, cancel the default lead behavior
+        // FIXED: It IS a capture item. Cancel event immediately to prevent Lead attachment.
         event.setCancelled(true);
 
-        // Handle the capture attempt
+        // Only proceed if it was the main hand (to prevent double firing)
+        if (event.getHand() != EquipmentSlot.HAND) {
+            return;
+        }
+
+        if (!(event.getRightClicked() instanceof LivingEntity)) {
+            return;
+        }
+
+        if (petManager.isPet(event.getRightClicked())) {
+            return;
+        }
+
+        Player player = event.getPlayer();
         LivingEntity entity = (LivingEntity) event.getRightClicked();
 
-        // --- FIXED: Only consume item if the attempt actually proceeded ---
         boolean itemUsed = petManager.attemptCapture(player, entity, captureItemName);
 
         if (itemUsed) {

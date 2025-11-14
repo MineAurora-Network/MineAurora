@@ -4,6 +4,7 @@ import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -33,12 +34,10 @@ public class PetMessageHandler {
         Bukkit.getConsoleSender().sendMessage(mm.deserialize(prefix + message));
     }
 
-    // --- FIXED: Renamed to sendPlayerTitle and used default times ---
     public void sendPlayerTitle(Player player, String titleMessage, String subtitleMessage) {
         sendPlayerTitle(player, titleMessage, subtitleMessage, 500, 3000, 1000);
     }
 
-    // --- FIXED: Added overload for sendPlayerTitle with custom times (in milliseconds) ---
     public void sendPlayerTitle(Player player, String titleMessage, String subtitleMessage, int fadeInMs, int stayMs, int fadeOutMs) {
         Component title = mm.deserialize(titleMessage, Placeholder.unparsed("prefix", prefix2));
         Component subtitle = mm.deserialize(subtitleMessage, Placeholder.unparsed("prefix", prefix2));
@@ -53,8 +52,22 @@ public class PetMessageHandler {
         player.showTitle(titleObj);
     }
 
-    // --- FIXED: Renamed to sendPlayerActionBar ---
     public void sendPlayerActionBar(Player player, String message) {
         player.sendActionBar(mm.deserialize(message, Placeholder.unparsed("prefix", prefix2)));
+    }
+
+    // --- FIXED: Safe method for Pet Action Bar to avoid ParsingException ---
+    public void sendPetActionBar(Player player, Component name, int level, double currentHp, double maxHp) {
+        // We use TagResolver to insert the Component 'name' safely.
+        TagResolver resolver = TagResolver.resolver(
+                Placeholder.component("name", name),
+                Placeholder.unparsed("level", String.valueOf(level)),
+                Placeholder.unparsed("hp", String.valueOf((int)currentHp)),
+                Placeholder.unparsed("max_hp", String.valueOf((int)maxHp))
+        );
+
+        // The template string uses <name> tag which is replaced by the component
+        String template = "<name> <white>Lvl <level> | <red><hp>/<max_hp> HP</red></white>";
+        player.sendActionBar(mm.deserialize(template, resolver));
     }
 }

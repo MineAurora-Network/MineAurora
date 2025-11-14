@@ -331,6 +331,15 @@ token-shop:
 # The 'plugin_key' NBT value (e.g., 'mineaurora:pet_lead_1') MUST be
 # unique for each item.
 # ----------------------------------------------------------------
+utility_items:
+  amethyst_shard:
+    material: "AMETHYST_SHARD"
+    name: "<purple>Targeting Shard</purple>"
+    lore:
+      - "<gray>Right-click an entity to command</gray>"
+      - "<gray>your pet to attack it.</gray>"
+      - "<dark_gray>(Consumable)</dark_gray>"
+      -
 pet_fruits:
   common_apple:
     material: APPLE

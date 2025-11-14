@@ -47,7 +47,7 @@ public class GenDatabase {
         connection = getSQLConnection();
         try {
             Statement s = connection.createStatement();
-            // Store location as world,x,y,z string or separate columns. Separate is better for queries.
+            // Generators table
             s.executeUpdate("CREATE TABLE IF NOT EXISTS generators (" +
                     "`id` INTEGER PRIMARY KEY AUTOINCREMENT," +
                     "`owner_uuid` VARCHAR(36) NOT NULL," +
@@ -57,12 +57,20 @@ public class GenDatabase {
                     "`z` INTEGER NOT NULL," +
                     "`tier_id` VARCHAR(32) NOT NULL" +
                     ");");
+
+            // Limits table
+            s.executeUpdate("CREATE TABLE IF NOT EXISTS gen_limits (" +
+                    "`player_uuid` VARCHAR(36) PRIMARY KEY," +
+                    "`limit_amount` INTEGER NOT NULL" +
+                    ");");
+
             s.close();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Error creating generator table", e);
+            plugin.getLogger().log(Level.SEVERE, "Error creating generator tables", e);
         }
     }
 
+    // --- Generator Methods ---
     public void addGenerator(String ownerUUID, String world, int x, int y, int z, String tierId) {
         String sql = "INSERT INTO generators(owner_uuid, world, x, y, z, tier_id) VALUES(?,?,?,?,?,?)";
         try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
@@ -91,16 +99,6 @@ public class GenDatabase {
         }
     }
 
-    public void removeAllByPlayer(String ownerUUID) {
-        String sql = "DELETE FROM generators WHERE owner_uuid = ?";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, ownerUUID);
-            ps.executeUpdate();
-        } catch (SQLException ex) {
-            plugin.getLogger().severe("Error removing player generators: " + ex.getMessage());
-        }
-    }
-
     public void updateGeneratorTier(String world, int x, int y, int z, String newTierId) {
         String sql = "UPDATE generators SET tier_id = ? WHERE world = ? AND x = ? AND y = ? AND z = ?";
         try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
@@ -124,14 +122,31 @@ public class GenDatabase {
         }
     }
 
-    public ResultSet getPlayerGenerators(String uuid) {
-        try {
-            PreparedStatement ps = getSQLConnection().prepareStatement("SELECT * FROM generators WHERE owner_uuid = ?");
+    // --- Limit Methods ---
+    public void setPlayerLimit(String uuid, int limit) {
+        String sql = "INSERT INTO gen_limits(player_uuid, limit_amount) VALUES(?,?) ON CONFLICT(player_uuid) DO UPDATE SET limit_amount = ?";
+        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
             ps.setString(1, uuid);
-            return ps.executeQuery();
+            ps.setInt(2, limit);
+            ps.setInt(3, limit);
+            ps.executeUpdate();
         } catch (SQLException ex) {
-            return null;
+            plugin.getLogger().severe("Error setting player limit: " + ex.getMessage());
         }
+    }
+
+    public Integer getPlayerLimit(String uuid) {
+        String sql = "SELECT limit_amount FROM gen_limits WHERE player_uuid = ?";
+        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
+            ps.setString(1, uuid);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getInt("limit_amount");
+            }
+        } catch (SQLException ex) {
+            plugin.getLogger().severe("Error fetching player limit: " + ex.getMessage());
+        }
+        return null; // Return null if no custom limit set
     }
 
     public void close() {

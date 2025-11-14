@@ -39,10 +39,17 @@ public class PetsConfig {
     private Map<String, Double> petDamages = new HashMap<>();
     private Map<String, ItemStack> captureItems = new HashMap<>();
     private Map<String, ItemStack> fruitItems = new HashMap<>();
+    private Map<String, ItemStack> utilityItems = new HashMap<>(); // --- NEW ---
     private Set<EntityType> allCapturablePets;
+
+    // --- NEW KEYS ---
+    private NamespacedKey fruitKey;
+    private NamespacedKey utilityKey;
 
     public PetsConfig(Login plugin) {
         this.plugin = plugin;
+        this.fruitKey = new NamespacedKey(plugin, "pet_fruit_id");
+        this.utilityKey = new NamespacedKey(plugin, "pet_utility_id");
     }
 
     public void loadConfig() {
@@ -66,6 +73,7 @@ public class PetsConfig {
         loadPetDamages();
         loadCaptureItems();
         loadFruitItems();
+        loadUtilityItems(); // --- NEW ---
     }
 
     public void reloadItemsConfig() {
@@ -82,7 +90,7 @@ public class PetsConfig {
 
         for (String fruitName : fruitSection.getKeys(false)) {
             String path = "pet_fruits." + fruitName;
-            ItemStack item = loadItemFromConfig(path, fruitName);
+            ItemStack item = loadItemFromConfig(path, fruitName, fruitKey); // Use key
             if (item != null) {
                 fruitItems.put(fruitName, item);
                 fruitXpMap.put(fruitName, itemsConfig.getDouble(path + ".xp_give", 50.0));
@@ -90,7 +98,25 @@ public class PetsConfig {
         }
     }
 
-    private ItemStack loadItemFromConfig(String path, String internalName) {
+    // --- NEW ---
+    private void loadUtilityItems() {
+        utilityItems.clear();
+        if (itemsConfig == null) return;
+
+        ConfigurationSection utilitySection = itemsConfig.getConfigurationSection("utility_items");
+        if (utilitySection == null) return;
+
+        for (String itemName : utilitySection.getKeys(false)) {
+            String path = "utility_items." + itemName;
+            ItemStack item = loadItemFromConfig(path, itemName, utilityKey); // Use key
+            if (item != null) {
+                utilityItems.put(itemName, item);
+            }
+        }
+    }
+
+    // --- UPDATED to accept a key ---
+    private ItemStack loadItemFromConfig(String path, String internalName, NamespacedKey nbtKey) {
         try {
             String mat = itemsConfig.getString(path + ".material");
             String name = itemsConfig.getString(path + ".name");
@@ -101,15 +127,14 @@ public class PetsConfig {
             ItemStack item = new ItemStack(Material.valueOf(mat.toUpperCase()));
             ItemMeta meta = item.getItemMeta();
 
-            NamespacedKey key = new NamespacedKey("mineaurora", "pet_fruit_id");
-            meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, internalName);
+            meta.getPersistentDataContainer().set(nbtKey, PersistentDataType.STRING, internalName);
 
             meta.displayName(MiniMessage.miniMessage().deserialize(name).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
             meta.lore(lore.stream().map(l -> MiniMessage.miniMessage().deserialize(l).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)).collect(Collectors.toList()));
             item.setItemMeta(meta);
             return item;
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to load fruit: " + internalName);
+            plugin.getLogger().warning("Failed to load item: " + internalName);
             return null;
         }
     }
@@ -122,19 +147,18 @@ public class PetsConfig {
 
         for (String key : section.getKeys(false)) {
             String path = "pet_capture." + key;
-            String nbtKey = itemsConfig.getString(path + ".nbt.plugin_key");
-            // Reuse the item loader, but we need to fix the NBT for capture items specifically
+            String nbtKeyString = itemsConfig.getString(path + ".nbt.plugin_key");
             try {
                 String mat = itemsConfig.getString(path + ".material");
                 String name = itemsConfig.getString(path + ".name");
                 List<String> lore = itemsConfig.getStringList(path + ".lore");
 
-                if (mat == null || name == null || nbtKey == null) continue;
+                if (mat == null || name == null || nbtKeyString == null) continue;
 
                 ItemStack item = new ItemStack(Material.valueOf(mat.toUpperCase()));
                 ItemMeta meta = item.getItemMeta();
 
-                String[] parts = nbtKey.split(":");
+                String[] parts = nbtKeyString.split(":");
                 if(parts.length == 2) {
                     meta.getPersistentDataContainer().set(new NamespacedKey(parts[0], parts[1]), PersistentDataType.STRING, key);
                 }
@@ -205,7 +229,6 @@ public class PetsConfig {
         return null;
     }
 
-    // Leveling Logic
     public double getXpRequired(int level) {
         return baseXpReq * Math.pow(xpMultiplier, level - 1);
     }
@@ -213,6 +236,8 @@ public class PetsConfig {
     public double getDamage(EntityType type, int level) {
         String tier = petTiers.get(type);
         double base = petDamages.getOrDefault(tier, 1.0);
+        // --- ADDED: Ensure passive mobs have a damage value in config! ---
+        if (base <= 0) base = 1.0; // Default to 1 if not set
         return base + ((level - 1) * damageMultiplierPerLevel);
     }
 
@@ -225,26 +250,32 @@ public class PetsConfig {
     public ItemStack getFruit(String fruitName) {
         return fruitItems.get(fruitName) == null ? null : fruitItems.get(fruitName).clone();
     }
-
     public Set<String> getFruitNames() { return fruitItems.keySet(); }
-
     public double getFruitXp(String fruitName) {
         return fruitXpMap.getOrDefault(fruitName, 0.0);
     }
-
-    // --- FIXED: Re-added these missing methods for PetCommand ---
     public ItemStack getCaptureItem(String itemName) {
         return captureItems.get(itemName) != null ? captureItems.get(itemName).clone() : null;
     }
-
     public Set<String> getCaptureItemNames() {
         return captureItems.keySet();
+    }
+
+    // --- NEW Utility Item Methods ---
+    public ItemStack getUtilityItem(String itemName) {
+        return utilityItems.get(itemName) != null ? utilityItems.get(itemName).clone() : null;
+    }
+    public Set<String> getUtilityItemNames() {
+        return utilityItems.keySet();
+    }
+    public String getUtilityId(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return null;
+        return item.getItemMeta().getPersistentDataContainer().get(utilityKey, PersistentDataType.STRING);
     }
 
     public Set<EntityType> getAllCapturablePetTypes() {
         return allCapturablePets;
     }
-
     public int getPetCooldownSeconds() { return petCooldownSeconds; }
     public String getRenamePermission() { return renamePermission; }
     public int getMaxNameLength() { return maxNameLength; }

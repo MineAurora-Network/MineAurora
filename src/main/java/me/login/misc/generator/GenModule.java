@@ -26,7 +26,11 @@ public class GenModule {
         manager.loadGenerators();
 
         plugin.getServer().getPluginManager().registerEvents(new GenListener(plugin, manager, itemManager), plugin);
-        plugin.getCommand("generator").setExecutor(new GenCommand(plugin, manager, itemManager));
+
+        GenCommand genCmd = new GenCommand(plugin, manager, itemManager);
+        plugin.getCommand("generator").setExecutor(genCmd);
+        plugin.getCommand("generator").setTabCompleter(genCmd); // Register Tab Completer
+
         plugin.getCommand("sellgendrop").setExecutor(new SellGenDropCommand(plugin, itemManager));
     }
 

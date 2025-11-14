@@ -12,10 +12,10 @@ import org.bukkit.entity.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.Vector;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -31,6 +31,12 @@ public class PetManager {
     private final Cache<UUID, List<Pet>> playerDataCache;
     private final Map<UUID, UUID> activePets;
     private final Map<UUID, BukkitRunnable> followTasks;
+
+    // Tracks entities currently being captured to prevent damage
+    private final Set<UUID> capturingEntities = ConcurrentHashMap.newKeySet();
+    // Tracks targets for passive mobs
+    private final Map<UUID, UUID> passivePetTargets = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> passivePetAttackCooldowns = new ConcurrentHashMap<>();
 
     private final Map<UUID, Long> captureCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> fruitCooldowns = new ConcurrentHashMap<>();
@@ -52,11 +58,16 @@ public class PetManager {
     // --- Data Methods ---
     public void loadPlayerData(UUID playerUuid) { playerDataCache.put(playerUuid, database.getPlayerPets(playerUuid)); }
     public void clearPlayerData(UUID playerUuid) { playerDataCache.invalidate(playerUuid); }
+
     public List<Pet> getPlayerData(UUID playerUuid) {
         List<Pet> pets = playerDataCache.getIfPresent(playerUuid);
-        if (pets == null) { loadPlayerData(playerUuid); pets = playerDataCache.getIfPresent(playerUuid); }
+        if (pets == null) {
+            pets = database.getPlayerPets(playerUuid);
+            playerDataCache.put(playerUuid, pets);
+        }
         return pets;
     }
+
     public Pet getPet(UUID playerUuid, EntityType petType) {
         List<Pet> pets = getPlayerData(playerUuid);
         return (pets == null) ? null : pets.stream().filter(p -> p.getPetType() == petType).findFirst().orElse(null);
@@ -66,7 +77,6 @@ public class PetManager {
     public boolean attemptCapture(Player player, LivingEntity entity, String captureItemName) {
         EntityType petType = entity.getType();
 
-        // Cooldown Check (10s)
         if (captureCooldowns.containsKey(player.getUniqueId())) {
             long timeLeft = (captureCooldowns.get(player.getUniqueId()) - System.currentTimeMillis()) / 1000;
             if (timeLeft > 0) {
@@ -84,38 +94,40 @@ public class PetManager {
             return false;
         }
 
-        // Start Animation Task
         startCaptureAnimation(player, entity, captureItemName);
-        return true; // Consume Item
+        return true;
     }
 
     private void startCaptureAnimation(Player player, LivingEntity entity, String captureItemName) {
-        entity.setAI(false); // Freeze mob
+        entity.setAI(false);
         entity.setGravity(false);
+        capturingEntities.add(entity.getUniqueId()); // Protect from damage
 
         new BukkitRunnable() {
             int ticks = 0;
             @Override
             public void run() {
                 if (!entity.isValid() || !player.isOnline()) {
-                    entity.setAI(true);
-                    entity.setGravity(true);
+                    if (entity.isValid()) {
+                        entity.setAI(true);
+                        entity.setGravity(true);
+                        capturingEntities.remove(entity.getUniqueId());
+                    }
                     this.cancel();
                     return;
                 }
 
-                // Move up slightly and rotate
                 Location loc = entity.getLocation();
-                if (ticks < 20) { // First second move up
+                if (ticks < 20) {
                     loc.add(0, 0.05, 0);
                 }
-                loc.setYaw(loc.getYaw() + 15); // Spin
+                loc.setYaw(loc.getYaw() + 15);
                 entity.teleport(loc);
 
                 entity.getWorld().spawnParticle(Particle.WITCH, entity.getLocation().add(0, 0.5, 0), 1);
 
                 ticks++;
-                if (ticks >= 100) { // 5 seconds
+                if (ticks >= 100) {
                     this.cancel();
                     finalizeCapture(player, entity, captureItemName);
                 }
@@ -126,25 +138,30 @@ public class PetManager {
     private void finalizeCapture(Player player, LivingEntity entity, String captureItemName) {
         entity.setAI(true);
         entity.setGravity(true);
+        capturingEntities.remove(entity.getUniqueId()); // Stop protecting
+
         EntityType petType = entity.getType();
 
         double chance = config.getCaptureChance(petType, captureItemName);
         if (Math.random() > chance) {
             // FAILED
             messageHandler.sendPlayerTitle(player, "<red>Capture Failed!</red>", "<white>The creature broke free!</white>");
-            // Trigger 10s cooldown
+            messageHandler.sendPlayerMessage(player, "<red>Capture failed! The creature broke free.</red>");
             captureCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + 10000L);
         } else {
             // SUCCESS
             if (addPet(player.getUniqueId(), petType)) {
                 entity.remove();
                 messageHandler.sendPlayerTitle(player, "<green>Captured!</green>", "<white>You caught the " + petType.name() + "!</white>");
+                messageHandler.sendPlayerMessage(player, "<green>You successfully captured the " + petType.name() + "!</green>");
                 logger.logCapture(player.getName(), petType.name(), captureItemName);
+            } else {
+                messageHandler.sendPlayerMessage(player, "<red>An error occurred saving your pet to the database.</red>");
             }
         }
     }
 
-    // --- Summoning with Stats ---
+    // --- Summoning & Follow ---
     public void summonPet(Player player, EntityType petType) {
         Pet petData = getPet(player.getUniqueId(), petType);
         if (petData == null) return;
@@ -164,7 +181,15 @@ public class PetManager {
         pet.setRemoveWhenFarAway(false);
         if (pet instanceof Slime) ((Slime) pet).setSize(2);
 
-        double health = 20.0 + config.getHealthBonus(petData.getLevel());
+        // --- FIXED: Use default mob health as base, not 20 ---
+        double baseHealth = 20.0;
+        if (pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
+            // Get the mob's default health (e.g., Warden = 500, Zombie = 20)
+            baseHealth = pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getDefaultValue();
+        }
+        double health = baseHealth + config.getHealthBonus(petData.getLevel());
+        // ---
+
         if (pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
             pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(health);
             pet.setHealth(health);
@@ -178,20 +203,117 @@ public class PetManager {
         startFollowTask(player, pet);
     }
 
-    // --- Leveling System ---
+    private void startFollowTask(Player player, LivingEntity pet) {
+        BukkitRunnable task = new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (pet == null || !pet.isValid() || player == null || !player.isOnline()) {
+                    despawnPet(player.getUniqueId(), false);
+                    passivePetTargets.remove(pet.getUniqueId()); // Clear target map on despawn
+                    this.cancel(); return;
+                }
+
+                double hp = pet.getHealth();
+                double max = 20.0;
+                if(pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) max = pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue();
+
+                Pet data = getPet(player.getUniqueId(), pet.getType());
+
+                messageHandler.sendPetActionBar(player, pet.customName() != null ? pet.customName() : pet.name(), data.getLevel(), hp, max);
+
+                // --- AI LOGIC ---
+                // 1. Hostile Mob Logic (uses default AI)
+                if (pet instanceof Mob) {
+                    Mob mob = (Mob) pet;
+                    double distSq = pet.getLocation().distanceSquared(player.getLocation());
+
+                    if (distSq > 400) { // 20 blocks
+                        pet.teleport(player.getLocation());
+                        mob.setTarget(null);
+                    }
+                    else if (distSq > 16) { // 4 blocks
+                        if (mob.getTarget() == null || distSq > 225) { // 15 blocks
+                            mob.setTarget(null);
+                            mob.getPathfinder().moveTo(player, 1.2);
+                        }
+                    }
+                    // 2. Passive Mob Logic (uses custom AI)
+                } else if (pet instanceof Creature) {
+                    Creature creature = (Creature) pet;
+                    UUID targetId = passivePetTargets.get(pet.getUniqueId());
+                    Entity target = (targetId != null) ? Bukkit.getEntity(targetId) : null;
+
+                    // A. Check if target is valid
+                    if (target == null || !target.isValid() || target.isDead() || (target instanceof LivingEntity && ((LivingEntity)target).getHealth() <= 0)) {
+                        passivePetTargets.remove(pet.getUniqueId());
+                        // B. No target, so follow player
+                        double distSq = pet.getLocation().distanceSquared(player.getLocation());
+                        if (distSq > 400) {
+                            pet.teleport(player.getLocation());
+                        } else if (distSq > 16) {
+                            creature.getPathfinder().moveTo(player, 1.2);
+                        }
+                        // C. Target is valid, engage!
+                    } else {
+                        double distSqToTarget = pet.getLocation().distanceSquared(target.getLocation());
+                        if (distSqToTarget > 225) { // Target is too far (15 blocks), give up
+                            passivePetTargets.remove(pet.getUniqueId());
+                        } else if (distSqToTarget > 4.0) { // Target is far (2+ blocks), pathfind
+                            // --- FIXED: Cast target to LivingEntity for moveTo ---
+                            if (target instanceof LivingEntity) {
+                                creature.getPathfinder().moveTo((LivingEntity) target, 1.2);
+                            } else {
+                                // Fallback to location if it's not a LivingEntity
+                                creature.getPathfinder().moveTo(target.getLocation(), 1.2);
+                            }
+                        } else { // Target is close, attack!
+                            // --- FIXED: Use stopPathfinding() instead of stop() ---
+                            creature.getPathfinder().stopPathfinding();
+                            // Attack cooldown (1.5 seconds)
+                            if (System.currentTimeMillis() > passivePetAttackCooldowns.getOrDefault(pet.getUniqueId(), 0L)) {
+                                if (target instanceof LivingEntity) {
+                                    ((LivingEntity) target).damage(config.getDamage(pet.getType(), data.getLevel()), pet);
+                                }
+                                passivePetAttackCooldowns.put(pet.getUniqueId(), System.currentTimeMillis() + 1500L);
+                            }
+                        }
+                    }
+                }
+                // Else (non-creature pets like Allay) just follow
+                else {
+                    double distSq = pet.getLocation().distanceSquared(player.getLocation());
+                    if (distSq > 400) {
+                        pet.teleport(player.getLocation());
+                    }
+                }
+            }
+        };
+        task.runTaskTimer(plugin, 0L, 20L);
+        followTasks.put(player.getUniqueId(), task);
+    }
+
+    public void onPetDeath(UUID uuid, EntityType type, String killerName) {
+        if (killerName != null) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) messageHandler.sendPlayerMessage(p, "<red>Your " + type.name() + " died fighting " + killerName + "!</red>");
+        }
+        long cd = System.currentTimeMillis() + (config.getPetCooldownSeconds() * 1000L);
+        database.setPetCooldown(uuid, type, cd);
+        Pet p = getPet(uuid, type);
+        if (p != null) p.setCooldownEndTime(cd);
+        despawnPet(uuid, false);
+    }
+
+    // --- Standard Methods ---
     public void addXp(Player player, Pet pet, double amount) {
         pet.setXp(pet.getXp() + amount);
         double req = config.getXpRequired(pet.getLevel());
-
         if (pet.getXp() >= req && pet.getLevel() < config.getMaxLevel()) {
             pet.setXp(pet.getXp() - req);
             pet.setLevel(pet.getLevel() + 1);
-
             messageHandler.sendPlayerMessage(player, "<gold>Your pet leveled up to " + pet.getLevel() + "!</gold>");
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
-
             database.updatePetStats(player.getUniqueId(), pet.getPetType(), pet.getLevel(), pet.getXp());
-
             if (hasActivePet(player.getUniqueId()) && getActivePet(player.getUniqueId()).getType() == pet.getPetType()) {
                 summonPet(player, pet.getPetType());
             }
@@ -205,7 +327,6 @@ public class PetManager {
             messageHandler.sendPlayerMessage(player, "<red>Summon a pet first!</red>");
             return;
         }
-
         if (fruitCooldowns.containsKey(player.getUniqueId())) {
             long timeLeft = (fruitCooldowns.get(player.getUniqueId()) - System.currentTimeMillis()) / 1000;
             if (timeLeft > 0) {
@@ -213,7 +334,6 @@ public class PetManager {
                 return;
             }
         }
-
         String fruitName = null;
         if (item.hasItemMeta()) {
             NamespacedKey key = new NamespacedKey("mineaurora", "pet_fruit_id");
@@ -221,60 +341,49 @@ public class PetManager {
                 fruitName = item.getItemMeta().getPersistentDataContainer().get(key, PersistentDataType.STRING);
             }
         }
-
         if (fruitName == null) return;
-
         LivingEntity entity = getActivePet(player.getUniqueId());
         Pet petData = getPet(player.getUniqueId(), entity.getType());
-
         double xp = config.getFruitXp(fruitName);
         addXp(player, petData, xp);
-
         item.setAmount(item.getAmount() - 1);
         messageHandler.sendPlayerActionBar(player, "<green>+ " + xp + " XP</green>");
-
         fruitCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + 3000L);
     }
 
     public void handlePetAggression(Player owner, Entity target) {
         if (!hasActivePet(owner.getUniqueId()) || !(target instanceof LivingEntity)) return;
         LivingEntity pet = getActivePet(owner.getUniqueId());
+
         if (pet instanceof Mob) {
             ((Mob) pet).setTarget((LivingEntity) target);
+        } else if (pet instanceof Creature) {
+            // Passive pet, set our custom target
+            passivePetTargets.put(pet.getUniqueId(), target.getUniqueId());
         }
     }
 
-    private void startFollowTask(Player player, LivingEntity pet) {
-        BukkitRunnable task = new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (pet == null || !pet.isValid() || player == null || !player.isOnline()) {
-                    despawnPet(player.getUniqueId(), false);
-                    this.cancel(); return;
-                }
-                double hp = pet.getHealth();
-                double max = 20.0;
-                if(pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) max = pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue();
-
-                Pet data = getPet(player.getUniqueId(), pet.getType());
-                messageHandler.sendPlayerActionBar(player, "<green>" + pet.getName() + " <white>Lvl " + data.getLevel() + " | <red>" + (int)hp + "/" + (int)max + " HP</red></white>");
-
-                if (pet instanceof Mob && ((Mob)pet).getTarget() == null) {
-                    double dist = pet.getLocation().distanceSquared(player.getLocation());
-                    if (dist > 400) pet.teleport(player.getLocation());
-                    else if (dist > 16) ((Mob)pet).getPathfinder().moveTo(player, 1.2);
-                }
-            }
-        };
-        task.runTaskTimer(plugin, 0L, 20L);
-        followTasks.put(player.getUniqueId(), task);
+    // Used by Amethyst Shard
+    public void setPetTarget(Player owner, Entity target) {
+        if (!hasActivePet(owner.getUniqueId()) || !(target instanceof LivingEntity)) return;
+        LivingEntity pet = getActivePet(owner.getUniqueId());
+        if (pet instanceof Mob) {
+            ((Mob) pet).setTarget((LivingEntity) target);
+        } else if (pet instanceof Creature) {
+            passivePetTargets.put(pet.getUniqueId(), target.getUniqueId());
+        }
     }
 
     public void despawnPet(UUID playerUuid, boolean msg) {
         if (followTasks.containsKey(playerUuid)) followTasks.remove(playerUuid).cancel();
         if (activePets.containsKey(playerUuid)) {
-            Entity e = Bukkit.getEntity(activePets.remove(playerUuid));
+            UUID petId = activePets.remove(playerUuid);
+            passivePetTargets.remove(petId); // Clear target map
+            passivePetAttackCooldowns.remove(petId); // Clear cooldown map
+
+            Entity e = Bukkit.getEntity(petId);
             if (e != null) e.remove();
+
             if (msg) messageHandler.sendPlayerMessage(Bukkit.getPlayer(playerUuid), "<yellow>Pet despawned.</yellow>");
         }
     }
@@ -287,6 +396,8 @@ public class PetManager {
         activePets.clear();
         for (BukkitRunnable task : followTasks.values()) task.cancel();
         followTasks.clear();
+        passivePetTargets.clear();
+        passivePetAttackCooldowns.clear();
     }
 
     public boolean hasActivePet(UUID uuid) { return activePets.containsKey(uuid); }
@@ -297,30 +408,35 @@ public class PetManager {
     public boolean hasPet(UUID uuid, EntityType type) {
         return getPet(uuid, type) != null;
     }
-    public boolean addPet(UUID uuid, EntityType type) { return database.addPet(uuid, type); }
-    public boolean removePet(UUID uuid, EntityType type) { return database.removePet(uuid, type); }
-
-    // --- FIXED: Re-added this method to fix compilation error ---
+    public boolean addPet(UUID uuid, EntityType type) {
+        if (database.addPet(uuid, type)) {
+            playerDataCache.invalidate(uuid);
+            return true;
+        }
+        return false;
+    }
+    public boolean removePet(UUID uuid, EntityType type) {
+        if (database.removePet(uuid, type)) {
+            playerDataCache.invalidate(uuid);
+            return true;
+        }
+        return false;
+    }
     public boolean revivePet(UUID ownerUuid, EntityType petType) {
         Pet pet = getPet(ownerUuid, petType);
-        if (pet == null) {
-            return false;
-        }
+        if (pet == null) return false;
         pet.setCooldownEndTime(0);
         database.setPetCooldown(ownerUuid, petType, 0);
         return true;
     }
-
     public boolean isPetOnCooldown(UUID ownerUuid, EntityType petType) {
         Pet pet = getPet(ownerUuid, petType);
         return pet != null && pet.isOnCooldown();
     }
-
     public long getPetCooldownRemaining(UUID ownerUuid, EntityType petType) {
         Pet pet = getPet(ownerUuid, petType);
         return (pet != null) ? pet.getRemainingCooldownSeconds() : 0;
     }
-
     public void updatePetName(UUID playerUuid, EntityType petType, String newName) {
         Pet petData = getPet(playerUuid, petType);
         if (petData != null) petData.setCustomName(newName);
@@ -330,19 +446,11 @@ public class PetManager {
             activePet.customName(MiniMessage.miniMessage().deserialize(newName));
         }
     }
-
-    public void onPetDeath(UUID uuid, EntityType type) {
-        long cd = System.currentTimeMillis() + (config.getPetCooldownSeconds() * 1000L);
-        database.setPetCooldown(uuid, type, cd);
-        Pet p = getPet(uuid, type);
-        if (p != null) p.setCooldownEndTime(cd);
-        despawnPet(uuid, false);
-    }
-
     public boolean isPet(Entity e) { return e.getPersistentDataContainer().has(PET_OWNER_KEY, PersistentDataType.STRING); }
     public UUID getPetOwner(Entity e) {
         try { return UUID.fromString(e.getPersistentDataContainer().get(PET_OWNER_KEY, PersistentDataType.STRING)); }
         catch (Exception ex) { return null; }
     }
+    public boolean isCapturing(UUID entityUuid) { return capturingEntities.contains(entityUuid); }
     public Login getPlugin() { return plugin; }
 }
