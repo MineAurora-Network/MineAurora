@@ -18,13 +18,13 @@ public class PetsLogger {
     private final Login plugin;
     private String discordChannelId;
     private String discordAdminChannelId;
+    // petsConfig removed - no longer needed for petDebug
 
     public PetsLogger(Login plugin) {
         this.plugin = plugin;
         loadConfig();
     }
 
-    // --- FIXED: Added missing loadConfig method ---
     public void loadConfig() {
         this.discordChannelId = plugin.getConfig().getString("discord.pets_log_channel_id", "");
         this.discordAdminChannelId = plugin.getConfig().getString("discord.pets_admin_log_channel_id", "");
@@ -38,6 +38,8 @@ public class PetsLogger {
         plugin.getLogger().info("[Pets] " + message);
     }
 
+    // petDebug method is completely removed. Use PetDebug.java instead.
+
     /**
      * Logs a successful capture to console and Discord.
      * @param playerName The name of the player.
@@ -46,7 +48,7 @@ public class PetsLogger {
      */
     public void logCapture(String playerName, String petType, String itemName) {
         String logMessage = playerName + " captured a " + petType + " using " + itemName + ".";
-        log(logMessage);
+        log(logMessage); // Log to console
 
         // Send to Discord (main log)
         sendEmbedToDiscord(
@@ -65,7 +67,7 @@ public class PetsLogger {
      */
     public void logAdmin(String adminName, String message) {
         String logMessage = "[ADMIN] " + adminName + " " + message;
-        log(logMessage);
+        log(logMessage); // Log to console
 
         // Send to Discord (admin log)
         sendEmbedToDiscord(
@@ -86,7 +88,7 @@ public class PetsLogger {
      */
     public void logRename(String playerName, String petType, String oldName, String newName) {
         String logMessage = playerName + " renamed their " + petType + " from '" + oldName + "' to '" + newName + "'.";
-        log(logMessage);
+        log(logMessage); // Log to console
 
         // Send to admin log
         sendEmbedToDiscord(
@@ -94,7 +96,7 @@ public class PetsLogger {
                 "Pet Renamed",
                 logMessage,
                 Color.CYAN,
-                "Player: " + playerName
+                "Player: " + playerName // <--- THIS LINE IS NOW FIXED
         );
     }
 
@@ -103,7 +105,7 @@ public class PetsLogger {
      * @param errorMessage The error message.
      */
     public void logError(String errorMessage) {
-        plugin.getLogger().severe("[Pets] " + errorMessage);
+        plugin.getLogger().severe("[Pets] " + errorMessage); // Log to console
 
         // Send to Discord (main log, as it's an error)
         sendEmbedToDiscord(
@@ -115,6 +117,9 @@ public class PetsLogger {
         );
     }
 
+    /**
+     * Private helper to send embedded messages to Discord.
+     */
     private void sendEmbedToDiscord(String channelId, String title, String description, Color color, String fieldsContent) {
         if (channelId == null || channelId.isEmpty() || channelId.equals("YOUR_PET_LOG_CHANNEL_ID_HERE")) {
             return; // Discord logging disabled or not configured

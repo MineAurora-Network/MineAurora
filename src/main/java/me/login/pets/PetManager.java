@@ -34,10 +34,11 @@ public class PetManager {
 
     // Tracks entities currently being captured to prevent damage
     private final Set<UUID> capturingEntities = ConcurrentHashMap.newKeySet();
-    // Tracks targets for passive mobs
-    private final Map<UUID, UUID> passivePetTargets = new ConcurrentHashMap<>();
-    private final Map<UUID, Long> passivePetAttackCooldowns = new ConcurrentHashMap<>();
 
+    // --- NEW: TargetSelection handler ---
+    private final TargetSelection targetSelection;
+
+    // Tracks cooldowns for item usage
     private final Map<UUID, Long> captureCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> fruitCooldowns = new ConcurrentHashMap<>();
 
@@ -53,6 +54,9 @@ public class PetManager {
         this.followTasks = new ConcurrentHashMap<>();
         this.playerDataCache = CacheBuilder.newBuilder().expireAfterAccess(30, TimeUnit.MINUTES).build();
         PET_OWNER_KEY = new NamespacedKey(plugin, "pet-owner-uuid");
+
+        // --- NEW: Initialize TargetSelection ---
+        this.targetSelection = new TargetSelection(this, config, logger);
     }
 
     // --- Data Methods ---
@@ -182,6 +186,7 @@ public class PetManager {
         if (pet instanceof Slime) ((Slime) pet).setSize(2);
 
         // --- FIXED: Use default mob health as base, not 20 ---
+        // This code is correct as per your request.
         double baseHealth = 20.0;
         if (pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
             // Get the mob's default health (e.g., Warden = 500, Zombie = 20)
@@ -209,7 +214,8 @@ public class PetManager {
             public void run() {
                 if (pet == null || !pet.isValid() || player == null || !player.isOnline()) {
                     despawnPet(player.getUniqueId(), false);
-                    passivePetTargets.remove(pet.getUniqueId()); // Clear target map on despawn
+                    // --- UPDATED: Clear target in new handler ---
+                    targetSelection.clearPetTarget(pet.getUniqueId()); // This method is now empty, but safe to call
                     this.cancel(); return;
                 }
 
@@ -221,71 +227,9 @@ public class PetManager {
 
                 messageHandler.sendPetActionBar(player, pet.customName() != null ? pet.customName() : pet.name(), data.getLevel(), hp, max);
 
-                // --- AI LOGIC ---
-                // 1. Hostile Mob Logic (uses default AI)
-                if (pet instanceof Mob) {
-                    Mob mob = (Mob) pet;
-                    double distSq = pet.getLocation().distanceSquared(player.getLocation());
-
-                    if (distSq > 400) { // 20 blocks
-                        pet.teleport(player.getLocation());
-                        mob.setTarget(null);
-                    }
-                    else if (distSq > 16) { // 4 blocks
-                        if (mob.getTarget() == null || distSq > 225) { // 15 blocks
-                            mob.setTarget(null);
-                            mob.getPathfinder().moveTo(player, 1.2);
-                        }
-                    }
-                    // 2. Passive Mob Logic (uses custom AI)
-                } else if (pet instanceof Creature) {
-                    Creature creature = (Creature) pet;
-                    UUID targetId = passivePetTargets.get(pet.getUniqueId());
-                    Entity target = (targetId != null) ? Bukkit.getEntity(targetId) : null;
-
-                    // A. Check if target is valid
-                    if (target == null || !target.isValid() || target.isDead() || (target instanceof LivingEntity && ((LivingEntity)target).getHealth() <= 0)) {
-                        passivePetTargets.remove(pet.getUniqueId());
-                        // B. No target, so follow player
-                        double distSq = pet.getLocation().distanceSquared(player.getLocation());
-                        if (distSq > 400) {
-                            pet.teleport(player.getLocation());
-                        } else if (distSq > 16) {
-                            creature.getPathfinder().moveTo(player, 1.2);
-                        }
-                        // C. Target is valid, engage!
-                    } else {
-                        double distSqToTarget = pet.getLocation().distanceSquared(target.getLocation());
-                        if (distSqToTarget > 225) { // Target is too far (15 blocks), give up
-                            passivePetTargets.remove(pet.getUniqueId());
-                        } else if (distSqToTarget > 4.0) { // Target is far (2+ blocks), pathfind
-                            // --- FIXED: Cast target to LivingEntity for moveTo ---
-                            if (target instanceof LivingEntity) {
-                                creature.getPathfinder().moveTo((LivingEntity) target, 1.2);
-                            } else {
-                                // Fallback to location if it's not a LivingEntity
-                                creature.getPathfinder().moveTo(target.getLocation(), 1.2);
-                            }
-                        } else { // Target is close, attack!
-                            // --- FIXED: Use stopPathfinding() instead of stop() ---
-                            creature.getPathfinder().stopPathfinding();
-                            // Attack cooldown (1.5 seconds)
-                            if (System.currentTimeMillis() > passivePetAttackCooldowns.getOrDefault(pet.getUniqueId(), 0L)) {
-                                if (target instanceof LivingEntity) {
-                                    ((LivingEntity) target).damage(config.getDamage(pet.getType(), data.getLevel()), pet);
-                                }
-                                passivePetAttackCooldowns.put(pet.getUniqueId(), System.currentTimeMillis() + 1500L);
-                            }
-                        }
-                    }
-                }
-                // Else (non-creature pets like Allay) just follow
-                else {
-                    double distSq = pet.getLocation().distanceSquared(player.getLocation());
-                    if (distSq > 400) {
-                        pet.teleport(player.getLocation());
-                    }
-                }
+                // --- AI LOGIC (Refactored) ---
+                targetSelection.handlePetAILogic(player, pet);
+                // --- End of AI Logic ---
             }
         };
         task.runTaskTimer(plugin, 0L, 20L);
@@ -351,35 +295,16 @@ public class PetManager {
         fruitCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + 3000L);
     }
 
-    public void handlePetAggression(Player owner, Entity target) {
-        if (!hasActivePet(owner.getUniqueId()) || !(target instanceof LivingEntity)) return;
-        LivingEntity pet = getActivePet(owner.getUniqueId());
-
-        if (pet instanceof Mob) {
-            ((Mob) pet).setTarget((LivingEntity) target);
-        } else if (pet instanceof Creature) {
-            // Passive pet, set our custom target
-            passivePetTargets.put(pet.getUniqueId(), target.getUniqueId());
-        }
-    }
-
-    // Used by Amethyst Shard
-    public void setPetTarget(Player owner, Entity target) {
-        if (!hasActivePet(owner.getUniqueId()) || !(target instanceof LivingEntity)) return;
-        LivingEntity pet = getActivePet(owner.getUniqueId());
-        if (pet instanceof Mob) {
-            ((Mob) pet).setTarget((LivingEntity) target);
-        } else if (pet instanceof Creature) {
-            passivePetTargets.put(pet.getUniqueId(), target.getUniqueId());
-        }
-    }
+    // --- METHODS MOVED to TargetSelection ---
+    // - handlePetAggression
+    // - setPetTarget
 
     public void despawnPet(UUID playerUuid, boolean msg) {
         if (followTasks.containsKey(playerUuid)) followTasks.remove(playerUuid).cancel();
         if (activePets.containsKey(playerUuid)) {
             UUID petId = activePets.remove(playerUuid);
-            passivePetTargets.remove(petId); // Clear target map
-            passivePetAttackCooldowns.remove(petId); // Clear cooldown map
+            // --- UPDATED: Clear target in new handler ---
+            targetSelection.clearPetTarget(petId); // This method is now empty, but safe to call
 
             Entity e = Bukkit.getEntity(petId);
             if (e != null) e.remove();
@@ -396,8 +321,26 @@ public class PetManager {
         activePets.clear();
         for (BukkitRunnable task : followTasks.values()) task.cancel();
         followTasks.clear();
-        passivePetTargets.clear();
-        passivePetAttackCooldowns.clear();
+        // --- UPDATED: Clear targets in new handler ---
+        targetSelection.clearAllTargets(); // This method is now empty, but safe to call
+    }
+
+    /**
+     * Kills the active pet for a player *without* triggering the death cooldown.
+     * Used for server quit or world change.
+     * @param playerUuid The owner's UUID.
+     */
+    public void killActivePet(UUID playerUuid) {
+        if (followTasks.containsKey(playerUuid)) followTasks.remove(playerUuid).cancel();
+        if (activePets.containsKey(playerUuid)) {
+            UUID petId = activePets.remove(playerUuid);
+            targetSelection.clearPetTarget(petId); // Clean up just in case
+
+            Entity e = Bukkit.getEntity(petId);
+            if (e != null) {
+                e.remove(); // Remove the entity from the world
+            }
+        }
     }
 
     public boolean hasActivePet(UUID uuid) { return activePets.containsKey(uuid); }
@@ -453,4 +396,9 @@ public class PetManager {
     }
     public boolean isCapturing(UUID entityUuid) { return capturingEntities.contains(entityUuid); }
     public Login getPlugin() { return plugin; }
+
+    // --- NEW: Getter for TargetSelection ---
+    public TargetSelection getTargetSelection() {
+        return targetSelection;
+    }
 }

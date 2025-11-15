@@ -6,6 +6,7 @@ import me.login.pets.data.PetsDatabase;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
@@ -55,10 +56,22 @@ public class PetDataListener implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
 
-        // Despawn any active pet
-        petManager.despawnPet(player.getUniqueId(), false);
+        // --- UPDATED ---
+        // Kills the pet without starting a cooldown
+        petManager.killActivePet(player.getUniqueId());
 
         // Clear their data from the cache
         petManager.clearPlayerData(player.getUniqueId());
+    }
+
+    /**
+     * Kills the player's active pet when they change worlds.
+     * @param event The event
+     */
+    @EventHandler
+    public void onPlayerChangeWorld(PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        // Kills the pet without starting a cooldown
+        petManager.killActivePet(player.getUniqueId());
     }
 }

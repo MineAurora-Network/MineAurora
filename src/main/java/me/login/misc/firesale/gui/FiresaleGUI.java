@@ -5,7 +5,7 @@ import me.login.misc.firesale.FiresaleListener;
 import me.login.misc.firesale.FiresaleManager;
 import me.login.misc.firesale.database.FiresaleDatabase;
 import me.login.misc.firesale.model.Firesale;
-import me.login.misc.firesale.model.SaleStatus; // --- FIX: Added missing import ---
+import me.login.misc.firesale.model.SaleStatus;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -30,7 +30,7 @@ import java.util.List;
 
 public class FiresaleGUI {
 
-    private final Login plugin;
+    private final Login plugin; // Added plugin instance for NamespacedKey
     private final FiresaleManager manager;
     private final FiresaleDatabase database;
     private final MiniMessage miniMessage;
@@ -40,6 +40,10 @@ public class FiresaleGUI {
     public static final NamespacedKey NBT_ACTION_KEY = new NamespacedKey("login", "firesale_action");
     public static final NamespacedKey NBT_SALE_ID_KEY = new NamespacedKey("login", "firesale_id");
     public static final NamespacedKey NBT_PAGE_KEY = new NamespacedKey("login", "firesale_page");
+
+    // Key to check for dye preview
+    public static final NamespacedKey NBT_DYE_HEX_KEY = new NamespacedKey("login", "dye_hex");
+
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm")
             .withZone(ZoneId.systemDefault());
@@ -51,12 +55,11 @@ public class FiresaleGUI {
     private static final int[] SLOTS_4_SALE = { 19, 21, 23, 25 };
 
     public FiresaleGUI(Login plugin, FiresaleManager manager, FiresaleDatabase database) {
-        this.plugin = plugin;
+        this.plugin = plugin; // Store plugin instance
         this.manager = manager;
         this.database = database;
         this.miniMessage = plugin.getComponentSerializer();
 
-        // --- FIX: Added 4th null argument for the nbtAction ---
         this.BORDER_PANE = createGuiItem(Material.GRAY_STAINED_GLASS_PANE, " ", null, null);
     }
 
@@ -132,9 +135,13 @@ public class FiresaleGUI {
         ItemMeta meta = item.getItemMeta();
 
         List<Component> newLore = new ArrayList<>();
+
+        // --- FIX: Remove the broken italic-stripping logic ---
+        // The lore is now correctly formatted by FiresaleItemManager.
         if (meta.hasLore()) {
             newLore.addAll(meta.lore());
         }
+        // --- END FIX ---
 
         newLore.add(Component.text(""));
         newLore.add(miniMessage.deserialize("<gray>--------------------"));
@@ -144,6 +151,14 @@ public class FiresaleGUI {
         newLore.add(Component.text(""));
         newLore.add(miniMessage.deserialize("<green><bold>CLICK TO BUY</bold>"));
         newLore.add(miniMessage.deserialize("<gray>--------------------"));
+
+        // --- NEW FEATURE: Add preview lore if item has dye_hex NBT ---
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        if (pdc.has(NBT_DYE_HEX_KEY, PersistentDataType.STRING)) {
+            newLore.add(Component.text(""));
+            newLore.add(miniMessage.deserialize("<gray>Shift + Right-click to preview</gray>").decoration(TextDecoration.ITALIC, false));
+        }
+        // --- END NEW FEATURE ---
 
         meta.lore(newLore);
         meta.getPersistentDataContainer().set(NBT_ACTION_KEY, PersistentDataType.STRING, "buy_sale_item");
@@ -199,11 +214,14 @@ public class FiresaleGUI {
         ItemMeta meta = item.getItemMeta();
 
         List<Component> newLore = new ArrayList<>();
+
+        // --- FIX: Remove the broken italic-stripping logic ---
+        // The lore is now correctly formatted by FiresaleItemManager.
         if (meta.hasLore()) {
             newLore.addAll(meta.lore());
         }
+        // --- END FIX ---
 
-        // --- FIX: SaleStatus enum is now imported and will work ---
         String statusColor = sale.getStatus() == SaleStatus.COMPLETED ? "<green>" :
                 sale.getStatus() == SaleStatus.EXPIRED ? "<gray>" : "<red>";
 
@@ -243,7 +261,6 @@ public class FiresaleGUI {
             meta.lore(loreComponents);
         }
 
-        // --- FIX: Removed HIDE_POTION_EFFECTS as it may not exist in all API versions ---
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
 
         if (nbtAction != null) {

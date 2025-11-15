@@ -1,4 +1,3 @@
-# items.yml
 # This file stores the display names and lores for custom lifesteal items.
 # You can use MiniMessage format for colors and styling.
 # <red>, <green>, <#FF00FF>, <gradient:#RRGGBB:#RRGGBB>, <bold>, <italic>, etc.
@@ -55,7 +54,6 @@ generators:
         - "<green>➜ <yellow>Drop Gen: <yellow>Wheat Generator"
         - "<green>➜ <yellow>Value: <gold>40 ⛃"
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
-
   melon:
     item:
       material: MELON
@@ -89,7 +87,6 @@ generators:
         - "<green>➜ <yellow>Drop Gen: <green>Melon Generator"
         - "<green>➜ <yellow>Value: <gold>60 ⛃"
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
-
   pumpkin:
     item:
       material: PUMPKIN
@@ -120,10 +117,9 @@ generators:
       lore:
         - "<dark_gray>Generator Drop"
         - ""
-        - "<green>➜ <yellow>Drop Gen: <aqua>Pumpkin Generator"
+        - "<green>➜ <yellow>Drop Gen: <#fa8406>Pumpkin Generator"
         - "<green>➜ <yellow>Value: <gold>80 ⛃"
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
-
   coal_ore:
     item:
       material: DEEPSLATE_COAL_ORE
@@ -157,7 +153,6 @@ generators:
         - "<green>➜ <yellow>Drop Gen: <#67605b>Coal Generator <aqua>[<white>V1<aqua>]"
         - "<green>➜ <yellow>Value: <gold>105 ⛃"
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
-
   coal_block:
     item:
       material: COAL_BLOCK
@@ -191,11 +186,633 @@ generators:
         - "<green>➜ <yellow>Drop Gen: <#67605b>Coal Generator <aqua>[<white>V2<aqua>]"
         - "<green>➜ <yellow>Value: <gold>140 ⛃"
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
-
-  # ... (Add all other tiers similarly following the structure above.
-  #      For Amethyst/Netherite, set stats.upgrade_cost to the credit value
-  #      and ensure the tier is >= 25 in stats.tier)
-
+  lapis_ore:
+    item:
+      material: DEEPSLATE_LAPIS_ORE
+      name: "<#3376f2>Lapis Generator <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>6"
+        - "<green>➜ <yellow>Price: <gold>6700 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>7600 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Lapis"
+        - "<green>➜ <yellow>Item Value: <gold>170 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#3376f2>Lapis Generator <aqua>[<white>V2<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 6
+      speed: 20
+      price: 6700
+      upgrade_cost: 7600
+      item_value: 170
+      next_gen: "lapis_block"
+      spawn_item_mat: "LAPIS_LAZULI"
+    drop:
+      name: "<yellow>Lapis <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#3376f2>Lapis Generator <aqua>[<white>V1<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>170 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  lapis_block:
+    item:
+      material: LAPIS_BLOCK
+      name: "<#3376f2>Lapis Generator <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>15"
+        - "<green>➜ <yellow>Tier: <white>7"
+        - "<green>➜ <yellow>Price: <gold>9000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>10250 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Lapis"
+        - "<green>➜ <yellow>Item Value: <gold>230 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#fd0c05>RedStone Generator <aqua>[<white>V1<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 7
+      speed: 15
+      price: 9000
+      upgrade_cost: 10250
+      item_value: 230
+      next_gen: "redstone_ore"
+      spawn_item_mat: "LAPIS_LAZULI"
+    drop:
+      name: "<yellow>Lapis <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#3376f2>Lapis Generator <aqua>[<white>V2<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>230 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  redstone_ore:
+    item:
+      material: DEEPSLATE_REDSTONE_ORE
+      name: "<#fd0c05>RedStone Generator <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>8"
+        - "<green>➜ <yellow>Price: <gold>12250 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>13850 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Redstone"
+        - "<green>➜ <yellow>Item Value: <gold>315 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#fd0c05>RedStone Generator <aqua>[<white>V2<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 8
+      speed: 20
+      price: 12250
+      upgrade_cost: 13850
+      item_value: 315
+      next_gen: "redstone_block"
+      spawn_item_mat: "REDSTONE"
+    drop:
+      name: "<yellow>Redstone <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#fd0c05>RedStone Generator <aqua>[<white>V1<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>315 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  redstone_block:
+    item:
+      material: REDSTONE_BLOCK
+      name: "<#fd0c05>RedStone Generator <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>15"
+        - "<green>➜ <yellow>Tier: <white>9"
+        - "<green>➜ <yellow>Price: <gold>16500 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>18700 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Redstone"
+        - "<green>➜ <yellow>Item Value: <gold>425 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#eee1e1>Iron Generator <aqua>[<white>V1<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 9
+      speed: 15
+      price: 16500
+      upgrade_cost: 18700
+      item_value: 425
+      next_gen: "iron_ore"
+      spawn_item_mat: "REDSTONE"
+    drop:
+      name: "<yellow>Redstone <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#fd0c05>RedStone Generator <aqua>[<white>V2<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>425 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  iron_ore:
+    item:
+      material: DEEPSLATE_IRON_ORE
+      name: "<#eee1e1>Iron Generator <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>10"
+        - "<green>➜ <yellow>Price: <gold>22300 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>25200 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Iron"
+        - "<green>➜ <yellow>Item Value: <gold>575 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#eee1e1>Iron Generator <aqua>[<white>V2<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 10
+      speed: 20
+      price: 22300
+      upgrade_cost: 25200
+      item_value: 575
+      next_gen: "iron_block"
+      spawn_item_mat: "IRON_INGOT"
+    drop:
+      name: "<yellow>Iron <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#eee1e1>Iron Generator <aqua>[<white>V1<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>575 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  iron_block:
+    item:
+      material: IRON_BLOCK
+      name: "<#eee1e1>Iron Generator <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>15"
+        - "<green>➜ <yellow>Tier: <white>11"
+        - "<green>➜ <yellow>Price: <gold>30000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>34000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Iron"
+        - "<green>➜ <yellow>Item Value: <gold>700 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#ffc702>Gold Generator <aqua>[<white>V1<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 11
+      speed: 15
+      price: 30000
+      upgrade_cost: 34000
+      item_value: 700
+      next_gen: "gold_ore"
+      spawn_item_mat: "IRON_INGOT"
+    drop:
+      name: "<yellow>Iron <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#eee1e1>Iron Generator <aqua>[<white>V2<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>700 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  gold_ore:
+    item:
+      material: DEEPSLATE_GOLD_ORE
+      name: "<#ffc702>Gold Generator <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>12"
+        - "<green>➜ <yellow>Price: <gold>40500 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>46000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Gold"
+        - "<green>➜ <yellow>Item Value: <gold>950 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#ffc702>Gold Generator <aqua>[<white>V2<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 12
+      speed: 20
+      price: 40500
+      upgrade_cost: 46000
+      item_value: 950
+      next_gen: "gold_block"
+      spawn_item_mat: "GOLD_INGOT"
+    drop:
+      name: "<yellow>Gold <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#ffc702>Gold Generator <aqua>[<white>V1<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>950 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  gold_block:
+    item:
+      material: GOLD_BLOCK
+      name: "<#ffc702>Gold Generator <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>15"
+        - "<green>➜ <yellow>Tier: <white>13"
+        - "<green>➜ <yellow>Price: <gold>55000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>62000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Gold"
+        - "<green>➜ <yellow>Item Value: <gold>1275 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#02ffdd>Diamond Generator <aqua>[<white>V1<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 13
+      speed: 15
+      price: 55000
+      upgrade_cost: 62000
+      item_value: 1275
+      next_gen: "diamond_ore"
+      spawn_item_mat: "GOLD_INGOT"
+    drop:
+      name: "<yellow>Gold <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#ffc702>Gold Generator <aqua>[<white>V2<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>1275 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  diamond_ore:
+    item:
+      material: DEEPSLATE_DIAMOND_ORE
+      name: "<#02ffdd>Diamond Generator <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>14"
+        - "<green>➜ <yellow>Price: <gold>74000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>84000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Diamond"
+        - "<green>➜ <yellow>Item Value: <gold>1725 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#02ffdd>Diamond Generator <aqua>[<white>V2<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 14
+      speed: 20
+      price: 74000
+      upgrade_cost: 84000
+      item_value: 1725
+      next_gen: "diamond_block"
+      spawn_item_mat: "DIAMOND"
+    drop:
+      name: "<yellow>Diamond <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#02ffdd>Diamond Generator <aqua>[<white>V1<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>1725 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  diamond_block:
+    item:
+      material: DIAMOND_BLOCK
+      name: "<#02ffdd>Diamond Generator <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>15"
+        - "<green>➜ <yellow>Tier: <white>15"
+        - "<green>➜ <yellow>Price: <gold>100000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>113000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Diamond"
+        - "<green>➜ <yellow>Item Value: <gold>2325 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#0fd605>Emerald Generator <aqua>[<white>V1<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 15
+      speed: 15
+      price: 100000
+      upgrade_cost: 113000
+      item_value: 2325
+      next_gen: "emerald_ore"
+      spawn_item_mat: "DIAMOND"
+    drop:
+      name: "<yellow>Diamond <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#02ffdd>Diamond Generator <aqua>[<white>V2<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>2325 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  emerald_ore:
+    item:
+      material: DEEPSLATE_EMERALD_ORE
+      name: "<#0fd605>Emerald Generator <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>16"
+        - "<green>➜ <yellow>Price: <gold>135000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>152500 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Emerald"
+        - "<green>➜ <yellow>Item Value: <gold>2875 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#0fd605>Emerald Generator <aqua>[<white>V2<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 16
+      speed: 20
+      price: 135000
+      upgrade_cost: 152500
+      item_value: 2875
+      next_gen: "emerald_block"
+      spawn_item_mat: "EMERALD"
+    drop:
+      name: "<yellow>Emerald <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#0fd605>Emerald Generator <aqua>[<white>V1<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>2875 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  emerald_block:
+    item:
+      material: EMERALD_BLOCK
+      name: "<#0fd605>Emerald Generator <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>15"
+        - "<green>➜ <yellow>Tier: <white>17"
+        - "<green>➜ <yellow>Price: <gold>182500 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>206000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Emerald"
+        - "<green>➜ <yellow>Item Value: <gold>3880 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#e9ece9>Quartz Generator <aqua>[<white>V1<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 17
+      speed: 15
+      price: 182500
+      upgrade_cost: 206000
+      item_value: 3880
+      next_gen: "quartz"
+      spawn_item_mat: "EMERALD"
+    drop:
+      name: "<yellow>Emerald <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#0fd605>Emerald Generator <aqua>[<white>V2<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>3880 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  quartz:
+    item:
+      material: NETHER_QUARTZ_ORE
+      name: "<#e9ece9>Quartz Generator <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>18"
+        - "<green>➜ <yellow>Price: <gold>246500 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>278500 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Quartz"
+        - "<green>➜ <yellow>Item Value: <gold>5250 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#e9ece9>Quartz Generator <aqua>[<white>V2<aqua>]"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 18
+      speed: 20
+      price: 246500
+      upgrade_cost: 278500
+      item_value: 5250
+      next_gen: "quartz_block"
+      spawn_item_mat: "QUARTZ"
+    drop:
+      name: "<yellow>Quartz <aqua>[<white>V1<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#e9ece9>Quartz Generator <aqua>[<white>V1<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>5250 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  quartz_block:
+    item:
+      material: QUARTZ_BLOCK
+      name: "<#e9ece9>Quartz Generator <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>15"
+        - "<green>➜ <yellow>Tier: <white>19"
+        - "<green>➜ <yellow>Price: <gold>333000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>375000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Quartz"
+        - "<green>➜ <yellow>Item Value: <gold>7080 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#5c1693>Obsidian Generator"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 19
+      speed: 15
+      price: 333000
+      upgrade_cost: 375000
+      item_value: 7080
+      next_gen: "obsidian"
+      spawn_item_mat: "QUARTZ"
+    drop:
+      name: "<yellow>Quartz <aqua>[<white>V2<aqua>]"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#e9ece9>Quartz Generator <aqua>[<white>V2<aqua>]"
+        - "<green>➜ <yellow>Value: <gold>7080 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  obsidian:
+    item:
+      material: OBSIDIAN
+      name: "<#5c1693>Obsidian Generator"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>20"
+        - "<green>➜ <yellow>Price: <gold>448000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>505000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Obsidian"
+        - "<green>➜ <yellow>Item Value: <gold>9530 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#a95cf1>Crying Obsidian Generator"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 20
+      speed: 20
+      price: 448000
+      upgrade_cost: 505000
+      item_value: 9530
+      next_gen: "crying_obsidian"
+      spawn_item_mat: "OBSIDIAN"
+    drop:
+      name: "<yellow>Obsidian"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#5c1693>Obsidian Generator"
+        - "<green>➜ <yellow>Value: <gold>9530 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  crying_obsidian:
+    item:
+      material: CRYING_OBSIDIAN
+      name: "<#a95cf1>Crying Obsidian Generator"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>20"
+        - "<green>➜ <yellow>Tier: <white>21"
+        - "<green>➜ <yellow>Price: <gold>600000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>683500 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Crying obsidian"
+        - "<green>➜ <yellow>Item Value: <gold>11850 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#9c9595>Reinforced Deepslate Generator"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 21
+      speed: 20
+      price: 600000
+      upgrade_cost: 683500
+      item_value: 11850
+      next_gen: "reinforced_deepslate"
+      spawn_item_mat: "CRYING_OBSIDIAN"
+    drop:
+      name: "<yellow>Crying Obsidian"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#a95cf1>Crying Obsidian Generator"
+        - "<green>➜ <yellow>Value: <gold>11850 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  reinforced_deepslate:
+    item:
+      material: REINFORCED_DEEPSLATE
+      name: "<#9c9595>Reinforced Deepslate Generator"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>25"
+        - "<green>➜ <yellow>Tier: <white>22"
+        - "<green>➜ <yellow>Price: <gold>815000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>922800 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Phantom membrane"
+        - "<green>➜ <yellow>Item Value: <gold>16000 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#ff8708>Magma Generator"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 22
+      speed: 25
+      price: 815000
+      upgrade_cost: 922800
+      item_value: 16000
+      next_gen: "magma_block"
+      spawn_item_mat: "PHANTOM_MEMBRANE"
+    drop:
+      name: "<yellow>Phantom Membrane"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#9c9595>Reinforced Deepslate Generator"
+        - "<green>➜ <yellow>Value: <gold>16000 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  magma_block:
+    item:
+      material: MAGMA_BLOCK
+      name: "<#ff8708>Magma Generator"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>25"
+        - "<green>➜ <yellow>Tier: <white>23"
+        - "<green>➜ <yellow>Price: <gold>1102500 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>1245000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Magma"
+        - "<green>➜ <yellow>Item Value: <gold>21500 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#8f4d07>Ancient Debris Generator"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 23
+      speed: 25
+      price: 1102500
+      upgrade_cost: 1245000
+      item_value: 21500
+      next_gen: "ancient_debris"
+      spawn_item_mat: "MAGMA_BLOCK"
+    drop:
+      name: "<yellow>Magma"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#ff8708>Magma Generator"
+        - "<green>➜ <yellow>Value: <gold>21500 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
+  ancient_debris:
+    item:
+      material: ANCIENT_DEBRIS
+      name: "<#8f4d07>Ancient Debris Generator"
+      lore:
+        - "<gray>Place down to start generating items!"
+        - ""
+        - "<green>➜ <yellow>Speed: <white>25"
+        - "<green>➜ <yellow>Tier: <white>24"
+        - "<green>➜ <yellow>Price: <gold>1500000 ⛃"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>1500000 ⛃"
+        - ""
+        - "<green>➜ <yellow>Spawn Item: <white>Netherite scrap"
+        - "<green>➜ <yellow>Item Value: <gold>29000 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#f84df1>Amethyst Generator"
+        - ""
+        - "<gray>Shift + Right click to upgrade this gen!"
+    stats:
+      tier: 24
+      speed: 25
+      price: 1500000
+      upgrade_cost: 1500000 # This was from your NBT
+      item_value: 29000
+      next_gen: "amethyst" # Inferred from tier list
+      spawn_item_mat: "NETHERITE_SCRAP"
+    drop:
+      name: "<yellow>Netherite Scrap"
+      lore:
+        - "<dark_gray>Gen Drop"
+        - ""
+        - "<green>➜ <yellow>Drop Gen: <#8f4d07>Ancient Debris Generator"
+        - "<green>➜ <yellow>Value: <gold>29000 ⛃"
+        - "<green>➜ <yellow>Command: <green>/sellgendrop"
   amethyst:
     item:
       material: AMETHYST_BLOCK
@@ -206,18 +823,20 @@ generators:
         - "<green>➜ <yellow>Speed: <white>25"
         - "<green>➜ <yellow>Tier: <white>25"
         - "<green>➜ <yellow>Price: <gold>170 <aqua>💰"
+        - "<green>➜ <yellow>Upgrade Cost: <gold>170 <aqua>💰"
         - ""
         - "<green>➜ <yellow>Spawn Item: <white>Amethyst"
-        - "<green>➜ <yellow>Item Value: <gold>370000 ⛃"
+        - "<green>➜ <yellow>Item Value: <gold>37000 ⛃"
+        - "<green>➜ <yellow>Next Gen: <#8f4d07>Netherite Generator"
         - ""
         - "<gray>Shift + Right click to upgrade this gen!"
     stats:
       tier: 25
       speed: 25
-      price: 170
-      upgrade_cost: 350 # Upgrade to Netherite
-      item_value: 370000
-      next_gen: "netherite_block"
+      price: 170 # Credits
+      upgrade_cost: 170 # Credits
+      item_value: 37000
+      next_gen: "netherite_block" # Inferred from tier list
       spawn_item_mat: "AMETHYST_SHARD"
     drop:
       name: "<yellow>Amethyst Shard"
@@ -225,9 +844,8 @@ generators:
         - "<dark_gray>Gen Drop"
         - ""
         - "<green>➜ <yellow>Drop Gen: <#f84df1>Amethyst Generator"
-        - "<green>➜ <yellow>Value: <gold>370000 ⛃"
+        - "<green>➜ <yellow>Value: <gold>37000 ⛃"
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
-
   netherite_block:
     item:
       material: NETHERITE_BLOCK
@@ -238,18 +856,20 @@ generators:
         - "<green>➜ <yellow>Speed: <white>25"
         - "<green>➜ <yellow>Tier: <white>26"
         - "<green>➜ <yellow>Price: <gold>350 <aqua>💰"
+        - "<green>➜ <yellow>Upgrade Cost: <red>MAX TIER"
         - ""
         - "<green>➜ <yellow>Spawn Item: <white>Netherite"
-        - "<green>➜ <yellow>Item Value: <gold>475000 ⛃"
+        - "<green>➜ <yellow>Item Value: <gold>47500 ⛃"
+        - "<green>➜ <yellow>Next Gen: <red>MAX TIER"
         - ""
         - "<gray>Shift + Right click to upgrade this gen!"
     stats:
       tier: 26
       speed: 25
-      price: 350
-      upgrade_cost: 0 # Max tier
-      item_value: 475000
-      next_gen: "none"
+      price: 350 # Credits
+      upgrade_cost: 0
+      item_value: 47500
+      next_gen: "none" # Max tier
       spawn_item_mat: "NETHERITE_INGOT"
     drop:
       name: "<yellow>Netherite Ingot"
@@ -257,27 +877,23 @@ generators:
         - "<dark_gray>Gen Drop"
         - ""
         - "<green>➜ <yellow>Drop Gen: <#8f4d07>Netherite Generator"
-        - "<green>➜ <yellow>Value: <gold>475000 ⛃"
+        - "<green>➜ <yellow>Value: <gold>47500 ⛃"
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
 
 firesale:
-  heart_fragment:
+  rainbow_dye:
     material: "PLAYER_HEAD"
     texture: "http://textures.minecraft.net/texture/..." # Your texture URL
-    name: "<red>Heart Fragment"
+    name: "<red>Rainbow dye"
     lore:
-      - "<gray>A fragment of a lost soul."
-  god_apple:
-    material: "ENCHANTED_GOLDEN_APPLE"
-    name: "<gold>God Apple"
-    lore:
-      - "<yellow>Very shiny."
+      - "<gray>A rainbow dye"
+    nbt:
+      dye_hex: "#FF5555"
 
 # ============================
 # NEW: Token Shop Items
 # ============================
 token-shop:
-  # --- Sell Wands ---
   sell-wand-1.5:
     material: BLAZE_ROD
     name: "<green>Sell Wand (1.5x)</green>"
@@ -322,132 +938,183 @@ token-shop:
       - "<yellow>This is a custom item!</yellow>"
 
 # ----------------------------------------------------------------
-# Pet Capture Items
-# ----------------------------------------------------------------
-# These items are used to capture pets.
-# The internal names (tier1_lead, tier2_lead, etc.) MUST match
-# the names used in config.yml pet_capture.chances
-#
-# The 'plugin_key' NBT value (e.g., 'mineaurora:pet_lead_1') MUST be
-# unique for each item.
+# PET UTILITY ITEMS (Target Selector, etc.)
 # ----------------------------------------------------------------
 utility_items:
   amethyst_shard:
     material: "AMETHYST_SHARD"
-    name: "<purple>Targeting Shard</purple>"
+    name: "<light_purple><b>Targeting Shard</b></light_purple>"
     lore:
-      - "<gray>Right-click an entity to command</gray>"
-      - "<gray>your pet to attack it.</gray>"
-      - "<dark_gray>(Consumable)</dark_gray>"
-      -
+      - "<gray>Right-click any mob to force"
+      - "<gray>your active pet to attack it."
+      - ""
+      - "<red><b>Consumed on use.</b></red>"
+    nbt:
+      plugin_key: "mineaurora:pet_utility_id"
+      value: "amethyst_shard"
+
+# ----------------------------------------------------------------
+# PET FRUITS (XP FOOD)
+# Must match: config.yml → pet_leveling.fruit-xp keys
+# ----------------------------------------------------------------
 pet_fruits:
-  common_apple:
-    material: APPLE
-    name: "<white>Common Apple"
+  apple:
+    material: "PLAYER_HEAD"
+    texture: "http://textures.minecraft.net/texture/12e430e4c95881c4a090284d609f77c70c3954a850d1d3152a91bb32581f0fd8"
+    name: "<white>Common Apple</white>"
     lore:
-      - "<gray>Gives 50 Pet XP"
-    xp_give: 50.0
+      - "<gray>+50 Pet XP"
+    xp_give: 50
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "apple"
+
   common_berry:
     material: SWEET_BERRIES
-    name: "<white>Common Berry"
+    name: "<white>Common Berry</white>"
     lore:
-      - "<gray>Gives 50 Pet XP"
-    xp_give: 50.0
+      - "<gray>+50 Pet XP"
+    xp_give: 50
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "common_berry"
+
   rare_melon:
     material: MELON_SLICE
-    name: "<blue>Rare Melon"
+    name: "<blue>Rare Melon</blue>"
     lore:
-      - "<gray>Gives 150 Pet XP"
-    xp_give: 150.0
+      - "<gray>+150 Pet XP"
+    xp_give: 150
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "rare_melon"
+
   rare_carrot:
     material: GOLDEN_CARROT
-    name: "<blue>Rare Carrot"
+    name: "<blue>Rare Carrot</blue>"
     lore:
-      - "<gray>Gives 150 Pet XP"
-    xp_give: 150.0
+      - "<gray>+150 Pet XP"
+    xp_give: 150
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "rare_carrot"
+
   epic_soup:
     material: MUSHROOM_STEW
-    name: "<purple>Epic Stew"
+    name: "<purple>Epic Stew</purple>"
     lore:
-      - "<gray>Gives 500 Pet XP"
-    xp_give: 500.0
+      - "<gray>+500 Pet XP"
+    xp_give: 500
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "epic_soup"
+
   epic_pie:
     material: PUMPKIN_PIE
-    name: "<purple>Epic Pie"
+    name: "<purple>Epic Pie</purple>"
     lore:
-      - "<gray>Gives 500 Pet XP"
-    xp_give: 500.0
+      - "<gray>+500 Pet XP"
+    xp_give: 500
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "epic_pie"
+
   legendary_steak:
     material: COOKED_BEEF
-    name: "<gold>Legendary Steak"
+    name: "<gold>Legendary Steak</gold>"
     lore:
-      - "<gray>Gives 1500 Pet XP"
-    xp_give: 1500.0
+      - "<gray>+1500 Pet XP"
+    xp_give: 1500
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "legendary_steak"
+
   legendary_pork:
     material: COOKED_PORKCHOP
-    name: "<gold>Legendary Pork"
+    name: "<gold>Legendary Pork</gold>"
     lore:
-      - "<gray>Gives 1500 Pet XP"
-    xp_give: 1500.0
+      - "<gray>+1500 Pet XP"
+    xp_give: 1500
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "legendary_pork"
+
   mythic_apple:
     material: GOLDEN_APPLE
-    name: "<red><b>Mythic Apple</b>"
+    name: "<red><b>Mythic Apple</b></red>"
     lore:
-      - "<gray>Gives 5000 Pet XP"
-    xp_give: 5000.0
+      - "<gray>+5000 Pet XP"
+    xp_give: 5000
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "mythic_apple"
+
   godly_star:
     material: NETHER_STAR
     name: "<gradient:red:gold><b>Godly Star</b></gradient>"
     lore:
-      - "<gray>Instantly levels up pet"
-    xp_give: 25000.0
+      - "<gray>+25000 Pet XP"
+      - "<yellow><b>Huge Power Source!</b></yellow>"
+    xp_give: 25000
+    nbt:
+      plugin_key: "mineaurora:pet_fruit_id"
+      value: "godly_star"
 
+# ----------------------------------------------------------------
+# PET CAPTURE ITEMS (Leads)
+# Names must match: config.yml → pet_capture.chances.x
+# ----------------------------------------------------------------
 pet_capture:
   tier1_lead:
-    material: "LEAD"
+    material: LEAD
     name: "<white>Basic Capture Lead</white>"
     lore:
-      - "<gray>A simple lead with a</gray>"
-      - "<gray>low chance to capture mobs.</gray>"
+      - "<gray>Lowest chance to capture mobs.</gray>"
     nbt:
       plugin_key: "mineaurora:pet_lead_1"
+      value: "tier1_lead"
+
   tier2_lead:
-    material: "LEAD"
+    material: LEAD
     name: "<green>Sturdy Capture Lead</green>"
     lore:
-      - "<gray>A reinforced lead with a</gray>"
-      - "<gray>decent chance to capture mobs.</gray>"
+      - "<gray>More reliable capture chances.</gray>"
     nbt:
       plugin_key: "mineaurora:pet_lead_2"
+      value: "tier2_lead"
+
   tier3_lead:
-    material: "LEAD"
+    material: LEAD
     name: "<blue>Strong Capture Lead</blue>"
     lore:
-      - "<gray>A strong lead with a</gray>"
-      - "<gray>good chance to capture mobs.</gray>"
+      - "<gray>Good capture chance.</gray>"
     nbt:
       plugin_key: "mineaurora:pet_lead_3"
+      value: "tier3_lead"
+
   tier4_lead:
-    material: "LEAD"
+    material: LEAD
     name: "<purple>Epic Capture Lead</purple>"
     lore:
-      - "<gray>An enchanted lead with a</gray>"
-      - "<gray>high chance to capture mobs.</gray>"
+      - "<gray>High capture chance.</gray>"
     nbt:
       plugin_key: "mineaurora:pet_lead_4"
+      value: "tier4_lead"
+
   tier5_lead:
-    material: "LEAD"
+    material: LEAD
     name: "<gold>Mystic Capture Lead</gold>"
     lore:
-      - "<gray>A mystical lead with a</gray>"
-      - "<gray>very high chance to capture mobs.</gray>"
+      - "<gray>Very high capture chance.</gray>"
     nbt:
       plugin_key: "mineaurora:pet_lead_5"
+      value: "tier5_lead"
+
   tier6_lead:
-    material: "LEAD"
-    name: "<red>Legendary Capture Lead</red>"
+    material: LEAD
+    name: "<red><b>Legendary Capture Lead</b></red>"
     lore:
-      - "<gray>A legendary lead.</gray>"
-      - "<gray>Almost guaranteed to capture.</gray>"
+      - "<gray>Almost guaranteed capture.</gray>"
     nbt:
       plugin_key: "mineaurora:pet_lead_6"
+      value: "tier6_lead"

@@ -24,6 +24,7 @@ public class PetsConfig {
     private int petCooldownSeconds;
     private String renamePermission;
     private int maxNameLength;
+    private boolean debugMode; // --- NEW ---
 
     // Leveling
     private double baseXpReq;
@@ -60,6 +61,7 @@ public class PetsConfig {
         petCooldownSeconds = config.getInt("pet_capture.pet-cooldown-seconds", 300);
         renamePermission = config.getString("pet_capture.rename-permission", "mineaurora.pets.rename");
         maxNameLength = config.getInt("pet_capture.max-name-length", 20);
+        debugMode = config.getBoolean("pet_capture.pet_debug_mode", false); // --- NEW ---
 
         // Leveling Settings
         baseXpReq = config.getDouble("pet_leveling.base-xp-req", 100.0);
@@ -175,17 +177,27 @@ public class PetsConfig {
 
     private void loadPetTiers() {
         petTiers.clear();
-        tierOrder = config.getStringList("pet_capture.tiers.tier-order");
-        ConfigurationSection tiersSection = config.getConfigurationSection("pet_capture.tiers");
-        if (tiersSection == null) return;
-        for (String tier : tierOrder) {
-            List<String> mobNames = tiersSection.getStringList(tier);
-            for (String mobName : mobNames) {
-                try {
-                    petTiers.put(EntityType.valueOf(mobName.toUpperCase()), tier);
-                } catch (Exception e) {}
-            }
-        }
+
+        // --- UPDATED: Hardcoded tiers and pets as requested ---
+        tierOrder = Arrays.asList("common", "rare", "epic", "legendary");
+
+        // Manually add pets to tiers
+        petTiers.put(EntityType.ZOMBIE, "common");
+        petTiers.put(EntityType.SPIDER, "common");
+        petTiers.put(EntityType.HUSK, "common");
+        petTiers.put(EntityType.SKELETON, "common");
+
+        petTiers.put(EntityType.CREEPER, "rare");
+        petTiers.put(EntityType.DROWNED, "rare");
+        petTiers.put(EntityType.PILLAGER, "rare");
+
+        petTiers.put(EntityType.BLAZE, "epic");
+        petTiers.put(EntityType.CAVE_SPIDER, "epic");
+
+        petTiers.put(EntityType.VINDICATOR, "legendary");
+        petTiers.put(EntityType.WITHER_SKELETON, "legendary");
+        // --- END UPDATED SECTION ---
+
         allCapturablePets = Collections.unmodifiableSet(petTiers.keySet());
     }
 
@@ -281,4 +293,7 @@ public class PetsConfig {
     public int getMaxNameLength() { return maxNameLength; }
     public List<String> getTierOrder() { return tierOrder; }
     public String getPetTier(EntityType type) { return petTiers.getOrDefault(type, "unknown"); }
+
+    // --- NEW: Debug Mode Getter ---
+    public boolean isDebugMode() { return debugMode; }
 }

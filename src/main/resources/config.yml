@@ -215,18 +215,19 @@ coinflip:
     - "end"
 
 # ============================
-# Pet Capture System
+# Pet Capture & Pet System
 # ============================
 pet_capture:
-  # Cooldown in seconds for a pet after it dies
-  pet-cooldown-seconds: 300 # 5 minutes
+  # Cooldown in seconds after a pet dies before it can be summoned again
+  pet-cooldown-seconds: 300
 
-  # Permission required to use /pets rename or the rename button
+  # Permission required for /pets rename
   rename-permission: "mineaurora.pets.rename"
-  # Max length for a pet's name
+
+  # Max rename characters
   max-name-length: 20
 
-  # Define tiers of mobs. The order here matters for sorting by rarity.
+  # Pet tiers
   tiers:
     tier-order:
       - "easier"
@@ -235,6 +236,7 @@ pet_capture:
       - "hard"
       - "elite"
       - "godly"
+
     easier:
       - "CHICKEN"
       - "PIG"
@@ -242,36 +244,40 @@ pet_capture:
       - "SHEEP"
       - "ALLAY"
       - "FOX"
+
     bit_harder:
       - "HUSK"
       - "ZOMBIE"
       - "SKELETON"
       - "BEE"
       - "WOLF"
+
     medium:
       - "SLIME"
       - "SPIDER"
       - "CREEPER"
       - "ENDERMAN"
       - "DROWNED"
+
     hard:
       - "WITHER_SKELETON"
       - "BLAZE"
       - "PILLAGER"
       - "VEX"
+
     elite:
       - "PIGLIN_BRUTE"
       - "GHAST"
       - "VINDICATOR"
       - "RAVAGER"
+
     godly:
       - "WARDEN"
       - "ENDER_DRAGON"
       - "WITHER"
       - "IRON_GOLEM"
 
-  # Define capture chances (0.0 to 1.0) for each tier based on the item used.
-  # The item name (e.g., 'tier1_lead') MUST match the key in items.yml
+  # Capture chances based on lead item used
   chances:
     easier:
       tier1_lead: 0.50
@@ -316,7 +322,7 @@ pet_capture:
       tier5_lead: 0.10
       tier6_lead: 0.15
 
-  # Damage dealt by pets from each tier
+  # Base damage per tier BEFORE level bonuses
   damage:
     easier: 1.5
     bit_harder: 2.5
@@ -325,15 +331,25 @@ pet_capture:
     elite: 8.0
     godly: 12.0
 
+# ============================
+# Pet Leveling System
+# ============================
 pet_leveling:
-  base-xp-req: 100.0
-  xp-multiplier: 1.2  # XP req increases by 20% per level
+  base-xp-req: 100.0     # level 1 → 100 XP
+  xp-multiplier: 1.2     # next levels require 20% more XP
   damage-multiplier: 0.5 # +0.5 damage per level
-  health-multiplier: 2.0 # +2 HP per level
+  health-multiplier: 2.0 # +2 health per level
   max-level: 50
-# Add this to your discord section
+
+  # XP gained from pet fruits (items.yml must match these keys)
+  fruit-xp:
+    basic_fruit: 25
+    advanced_fruit: 60
+    elite_fruit: 120
+    godly_fruit: 250
+    warden_fruit: 400
+
 discord:
-  # ... other channel IDs
   pets_log_channel_id: "YOUR_PET_LOG_CHANNEL_ID_HERE"
   pets_admin_log_channel_id: "YOUR_PET_ADMIN_LOG_CHANNEL_ID_HERE"
 

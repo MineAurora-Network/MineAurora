@@ -22,6 +22,9 @@ public class FiresaleModule {
     private FiresaleGUI firesaleGUI;
     private NPC firesaleNpc;
 
+    // Store the hologram updater to clean it up later
+    private FiresaleHologramUpdater hologramUpdater;
+
     public FiresaleModule(Login plugin) {
         this.plugin = plugin;
     }
@@ -37,8 +40,7 @@ public class FiresaleModule {
             // 2. Items
             firesaleItemManager = new FiresaleItemManager(plugin);
 
-            // 3. Logger - FIX: Updated config path to match user's config (firesale.log-channel-id)
-            // Also ensured getJda() casing is correct per your main class
+            // 3. Logger
             firesaleLogger = new FiresaleLogger(plugin.getJda(), plugin.getConfig().getString("firesale.log-channel-id", ""));
 
             // 4. Manager
@@ -49,7 +51,7 @@ public class FiresaleModule {
             // 5. GUI
             firesaleGUI = new FiresaleGUI(plugin, firesaleManager, firesaleDatabase);
 
-            // 6. Listener & NPC - FIX: Updated config path to match user's config (firesale.fire-npc-id)
+            // 6. Listener & NPC
             int npcId = plugin.getConfig().getInt("firesale.fire-npc-id", -1);
 
             firesaleListener = new FiresaleListener(plugin, firesaleManager, firesaleGUI, npcId);
@@ -63,9 +65,15 @@ public class FiresaleModule {
                         if (this.firesaleNpc != null) {
                             firesaleManager.setNpc(this.firesaleNpc);
 
-                            // Start hologram updater
-                            FiresaleHologramUpdater updater = new FiresaleHologramUpdater(plugin, firesaleManager, this.firesaleNpc);
-                            updater.runTaskTimer(plugin, 0L, 20L * 5); // Run every 5 seconds
+                            // Start hologram updater and store the instance
+                            // --- FIX: Pass MiniMessage serializer to the updater ---
+                            this.hologramUpdater = new FiresaleHologramUpdater(
+                                    plugin,
+                                    firesaleManager,
+                                    this.firesaleNpc,
+                                    plugin.getComponentSerializer()
+                            );
+                            this.hologramUpdater.runTaskTimer(plugin, 0L, 20L * 5); // Run every 5 seconds
 
                             plugin.getLogger().info("Firesale NPC linked to ID " + npcId);
                         } else {
@@ -99,6 +107,12 @@ public class FiresaleModule {
     public void disable() {
         if (firesaleManager != null) firesaleManager.shutdown();
         if (firesaleDatabase != null) firesaleDatabase.close();
+
+        // Cleanup hologram displays
+        if (hologramUpdater != null) {
+            hologramUpdater.cancel(); // Stop the task
+            hologramUpdater.cleanup(); // Remove all text displays
+        }
     }
 
     public FiresaleManager getManager() {

@@ -184,6 +184,14 @@ commands:
     permission: "mineaurora.pets.use"
     aliases: [pet]
 
+  armourgive:
+    description: Admin command to give custom armor pieces.
+    usage: /armourgive <piece_name> [player]
+    permission: mineaurora.armor.give
+  anvil:
+    description: Open custom anvil menus
+    usage: /anvil dye
+
   generator:
     description: Manage generators.
     usage: /generator <check|remove|give|setlimit>

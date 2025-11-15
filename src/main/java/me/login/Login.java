@@ -60,6 +60,7 @@ import me.login.lifesteal.DatabaseManager;
 import me.login.lifesteal.ItemManager;
 import me.login.lifesteal.LifestealManager;
 import me.login.lifesteal.DeadPlayerManager;
+import me.login.items.CustomArmorModule;
 
 import net.luckperms.api.LuckPerms;
 
@@ -71,7 +72,7 @@ public class Login extends JavaPlugin implements Listener {
     private LoginSystemLogger loginSystemLogger;
     private GenModule genModule;
     private OrderModule orderModule;
-
+    private CustomArmorModule customArmorModule; // Add this field
     private DamageIndicator damageIndicator;
     private int defaultOrderLimit;
     private ScoreboardManager scoreboardManager;
@@ -196,6 +197,10 @@ public class Login extends JavaPlugin implements Listener {
 
             this.lagClearLogger = new LagClearLogger(this);
             getLogger().info("LagClear Logger initialization requested...");
+
+            getLogger().info("Initializing CustomArmorModule...");
+            customArmorModule = new CustomArmorModule(this);
+            customArmorModule.enable();
 
             new BukkitRunnable() {
                 int attempts = 0;
@@ -630,6 +635,9 @@ public class Login extends JavaPlugin implements Listener {
     }
     public Map<UUID, Boolean> getAdminCheckMap() {
         return adminCheckMap;
+    }
+    public CustomArmorModule getCustomArmorModule() {
+        return customArmorModule;
     }
     public boolean isAdminChecking(UUID staffUUID) {
         return adminCheckMap.getOrDefault(staffUUID, false);

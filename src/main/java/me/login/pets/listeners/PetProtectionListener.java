@@ -132,7 +132,8 @@ public class PetProtectionListener implements Listener {
         if (event.getDamager() instanceof Player && event.getEntity() instanceof LivingEntity) {
             Player player = (Player) event.getDamager();
             if (petManager.hasActivePet(player.getUniqueId())) {
-                petManager.handlePetAggression(player, event.getEntity());
+                // --- UPDATED: Call TargetSelection ---
+                petManager.getTargetSelection().handlePetAggression(player, event.getEntity());
             }
         }
 
@@ -141,7 +142,8 @@ public class PetProtectionListener implements Listener {
             if (petManager.hasActivePet(player.getUniqueId())) {
                 LivingEntity attacker = (LivingEntity) event.getDamager();
                 if (!petManager.isPet(attacker)) {
-                    petManager.handlePetAggression(player, attacker);
+                    // --- UPDATED: Call TargetSelection ---
+                    petManager.getTargetSelection().handlePetAggression(player, attacker);
                 }
             }
         }
@@ -210,8 +212,8 @@ public class PetProtectionListener implements Listener {
                         return;
                     }
 
-                    // Set pet's target
-                    petManager.setPetTarget(player, target);
+                    // --- UPDATED: Call TargetSelection ---
+                    petManager.getTargetSelection().setPetTarget(player, target);
                     item.setAmount(item.getAmount() - 1);
                     messageHandler.sendPlayerMessage(player, "<green>Your pet is now targeting " + target.getName() + "!</green>");
                     event.setCancelled(true);
