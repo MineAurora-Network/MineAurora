@@ -122,8 +122,8 @@ public class LoginSystem implements Listener {
             plugin.getLogger().severe("Hub world 'hub' not found! Post-login teleport disabled.");
             this.hubLocation = null;
         } else {
-            this.hubLocation = new Location(hubWorld, 0.5, 80, 0.5, 180, 0);
-            plugin.getLogger().info("Hub location set to 'hub' world at 0.5, 80, 0.5 (Yaw 180)");
+            this.hubLocation = new Location(hubWorld, 178.5, 118, -5.5, 90, 0);
+            plugin.getLogger().info("Hub location set to 'hub' world at 178.5, 118, -5.5 (Yaw 90)");
         }
     }
 

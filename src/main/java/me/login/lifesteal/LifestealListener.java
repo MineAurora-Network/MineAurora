@@ -41,20 +41,19 @@ public class LifestealListener implements Listener {
         this.logger = logger; // <-- STORE LOGGER
     }
 
-    // --- (onPlayerJoin, onWorldChange, onPlayerQuit... remain the same) ---
-
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         lifestealManager.loadPlayerData(player);
         if (deadPlayerManager.isDead(player.getUniqueId())) {
-            // Player is dead, kick them
-            // --- MODIFIED (Request 1) ---
-            // Using a slightly different message as per your request to ensure they know they can be revived
             final Component kickMessage = itemManager.formatMessage("<red>You are dead! A player must revive you using a Revive Beacon.");
             Bukkit.getScheduler().runTask(plugin, () -> {
                 player.kick(kickMessage);
             });
+        } else {
+            if (player.getGameMode() == GameMode.SPECTATOR) {
+                player.setGameMode(GameMode.SURVIVAL);
+            }
         }
     }
 

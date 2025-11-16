@@ -12,24 +12,25 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 public class PetsDatabase {
-
     private final Login plugin;
     private Connection connection;
-
     public PetsDatabase(Login plugin) {
         this.plugin = plugin;
     }
-
-    // --- FIXED: Added missing getter used by Listeners ---
     public Login getPlugin() {
         return plugin;
     }
 
     public boolean connect() {
-        File dataFolder = new File(plugin.getDataFolder(), "pets.db");
-        if (!dataFolder.exists()) {
+        // Create the /plugins/Login/database directory
+        File databaseDir = new File(plugin.getDataFolder(), "database");
+        if (!databaseDir.exists()) {
+            databaseDir.mkdirs();
+        }
+        File dataFile = new File(databaseDir, "pets.db");
+        if (!dataFile.exists()) {
             try {
-                dataFolder.createNewFile();
+                dataFile.createNewFile();
             } catch (IOException e) {
                 plugin.getLogger().log(Level.SEVERE, "Failed to create pets database file!", e);
                 return false;
@@ -38,7 +39,7 @@ public class PetsDatabase {
 
         try {
             Class.forName("org.sqlite.JDBC");
-            connection = DriverManager.getConnection("jdbc:sqlite:" + dataFolder);
+            connection = DriverManager.getConnection("jdbc:sqlite:" + dataFile);
             createTables();
             return true;
         } catch (SQLException | ClassNotFoundException e) {
@@ -71,8 +72,13 @@ public class PetsDatabase {
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(sql);
 
+            // Add new columns (safe to run multiple times)
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN level INTEGER DEFAULT 1;"); } catch (SQLException ignored) {}
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN xp DOUBLE DEFAULT 0;"); } catch (SQLException ignored) {}
+
+            // --- NEW: Add inventory columns ---
+            try { stmt.execute("ALTER TABLE player_pets ADD COLUMN armor_contents TEXT;"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE player_pets ADD COLUMN weapon_content TEXT;"); } catch (SQLException ignored) {}
 
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Could not create pets table!", e);
@@ -92,7 +98,11 @@ public class PetsDatabase {
                 int level = rs.getInt("level");
                 double xp = rs.getDouble("xp");
 
-                Pet pet = new Pet(playerUuid, petType, displayName, cooldownEndTime, level, xp);
+                // --- NEW: Load inventory ---
+                String armor = rs.getString("armor_contents");
+                String weapon = rs.getString("weapon_content");
+
+                Pet pet = new Pet(playerUuid, petType, displayName, cooldownEndTime, level, xp, armor, weapon);
                 pets.add(pet);
             }
         } catch (SQLException | IllegalArgumentException e) {
@@ -161,6 +171,18 @@ public class PetsDatabase {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Error updating pet stats for " + playerUuid, e);
+        }
+    }
+    public void updatePetInventory(UUID playerUuid, EntityType petType, String armor, String weapon) {
+        String sql = "UPDATE player_pets SET armor_contents = ?, weapon_content = ? WHERE player_uuid = ? AND pet_type = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, armor);
+            pstmt.setString(2, weapon);
+            pstmt.setString(3, playerUuid.toString());
+            pstmt.setString(4, petType.name());
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Error updating pet inventory for " + playerUuid, e);
         }
     }
 }

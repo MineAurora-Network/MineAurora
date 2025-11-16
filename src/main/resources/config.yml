@@ -8,8 +8,6 @@ store-ticket-channel-id: 1437028289431732255
 store-helper-role-id: 1437031142745313461
 store-owner-role-id: 1437030461359784059
 payment-verification-channel-id: "1437030165657161901"
-# coinflip-log-channel-id: 1431926295847243858 (Moved to end)
-# coinflip-admin-log-channel-id: 1435165917779591218 (Moved to end)
 lifesteal-normal-channel-id: 1434006801011048621
 lifesteal-admin-channel-id: 1434006967357145168
 combat-log-channel-id: 1435687676161429546
@@ -19,7 +17,7 @@ token-shop-channel-id: 1435894542334169138
 token-admin-channel-id: 1435894607027109918
 creator-code-channel-id: 1436624030814965832
 rank-log-channel-id: 1436623612571553896
-link-system-log-channel-id: 0
+link-system-log-channel-id: 1430931902650388490
 verification-channel-id: 1430953529463279696
 
 verified-role-id: 1430766504575635508
@@ -58,23 +56,17 @@ login-book:
     - "<click:run_command:/server creative><hover:show_text:'Click to join Creative!'>[Creative]</click></hover>"
     -
 
-    # coinflip-npc-id: 4 (Moved to end)
 daily-reward-npc-id: 6
 playtime-reward-npc-id: -1
 token-shop-npc-id: 13
 
-# coinflip: (Moved to end)
-#   broadcast-worlds:
-#     - "lifesteal"
-# ...
-
 # ============================
 # Logging Configuration
 # ============================
-link-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-login-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-staff-system-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-discord-staff-log-webhook: "https.://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+link-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+login-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+staff-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+discord-staff-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
 
 # ============================
 # Order System Configuration
@@ -97,6 +89,14 @@ discord-logging:
     errors: "1437287895332425818"
 
 # ============================
+# Custom Armor System
+# ============================
+armor-system:
+  log-channel-id: 123456789012345678 # Replace with your real channel ID
+  # This prefix is used for in-game messages from this module
+  prefix: "<gradient:#FF5555:#AA0000><b>ARMOR</b></gradient> <dark_gray>» <gray>"
+
+# ============================
 # Scoreboard Configuration
 # ============================
 scoreboard:
@@ -113,9 +113,8 @@ scoreboard:
       - '&6&l╏ &fPing: &a%player_ping%'
       - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
-      - '      &eplay.aplhamc.fun  '
+      - '      &eplay.mineaurora.fun  '
       - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
-
   lifesteal:
     title: "&6&l✦ &e&lALPHA &b&lMC &7||  &a%server_online% &6&l✦"
     worlds:
@@ -133,10 +132,10 @@ scoreboard:
       - "&6&l╏ &fLevel: &a{lifesteal_level_%player's uuid%}"
       - '&6&l╏ &fHeart: &a%player_health_rounded%'
       - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
-      - '&6&lGlow &fPing: &a%player_ping%'
+      - '&6&l╏ &fPing: &a%player_ping%'
       - '&6&l╏ &fPlaytime: &a%statistic_time_played%'
       - '&r'
-      - '      &eplay.aplhamc.fun  '
+      - '      &eplay.mineaurora.fun  '
       - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
 
 # ============================
@@ -178,17 +177,12 @@ leaderboards:
 # ============================
 # ClearLag Configuration
 # ============================
-# Note: These values are read from the root of config.yml
-# Prefixes are read by LagClearConfig.java
 cleaner_prefix: "<b><gradient:#F04747:#FF00F6>ᴄʟᴇᴀɴᴇʀ</gradient></b><white>:"
 cleaner_prefix_2: "&x&F&0&4&7&4&7&lᴄ&x&F&3&3&B&6&4&lʟ&x&F&5&2&F&8&1&lᴇ&x&F&8&2&4&9&F&lᴀ&x&F&A&1&8&B&C&lɴ&x&F&D&0&C&D&9&lᴇ&x&F&F&0&0&F&6&lʀ&f:"
 
-# Log channel is read by LagClearLogger.java
 lagclear-log-channel-id: 1434707657633169611
 
-# Limits are read by PlacementLimitListener.java
 clearlag-limits:
-  # Limits are per-chunk
   armor-stand: 3
   hopper: 10
   repeater: 20
@@ -197,15 +191,11 @@ clearlag-limits:
 # ============================
 # Coinflip Configuration
 # ============================
-# Note: These values are read from the root of config.yml
-# Log channels are read by CoinflipLogger.java
 coinflip-log-channel-id: 1431926295847243858
 coinflip-admin-log-channel-id: 1435165917779591218
 
-# NPC ID is read by CoinflipNpcListener.java
 coinflip-npc-id: 4
 
-# Broadcast worlds are read by MessageManager.java
 coinflip:
   broadcast-worlds:
     - "lifesteal"
@@ -215,131 +205,103 @@ coinflip:
     - "end"
 
 # ============================
+# Tablist Configuration
+# ============================
+tablist:
+  hub:
+    header:
+      - "&bWelcome to the &lHub&r!"
+      - ""
+      - "&eplay.mineaurora.fun"
+    footer:
+      - ""
+      - "&ePlayers in Hub: &f%hub_online%"
+      - ""
+
+# ============================
 # Pet Capture & Pet System
 # ============================
 pet_capture:
-  # Cooldown in seconds after a pet dies before it can be summoned again
   pet-cooldown-seconds: 300
-
-  # Permission required for /pets rename
+  pet_debug_mode: true
   rename-permission: "mineaurora.pets.rename"
-
-  # Max rename characters
   max-name-length: 20
 
-  # Pet tiers
+  # --- NEW SECTION (For GUI Sorting) ---
+  tier-order:
+    - "legendary"
+    - "epic"
+    - "rare"
+    - "common"
+
   tiers:
-    tier-order:
-      - "easier"
-      - "bit_harder"
-      - "medium"
-      - "hard"
-      - "elite"
-      - "godly"
-
-    easier:
-      - "CHICKEN"
-      - "PIG"
-      - "COW"
-      - "SHEEP"
-      - "ALLAY"
-      - "FOX"
-
-    bit_harder:
-      - "HUSK"
-      - "ZOMBIE"
-      - "SKELETON"
-      - "BEE"
-      - "WOLF"
-
-    medium:
-      - "SLIME"
-      - "SPIDER"
-      - "CREEPER"
-      - "ENDERMAN"
-      - "DROWNED"
-
-    hard:
-      - "WITHER_SKELETON"
-      - "BLAZE"
-      - "PILLAGER"
-      - "VEX"
-
-    elite:
-      - "PIGLIN_BRUTE"
-      - "GHAST"
-      - "VINDICATOR"
-      - "RAVAGER"
-
-    godly:
-      - "WARDEN"
-      - "ENDER_DRAGON"
-      - "WITHER"
-      - "IRON_GOLEM"
+    common:
+      - "zombie"
+      - "spider"
+      - "husk"
+      - "skeleton"
+    rare:
+      - "creeper"
+      - "drowned"
+      - "pillager"
+    epic:
+      - "blaze"
+      - "cave_spider"
+    legendary:
+      - "vindicator"
+      - "wither_skeleton"
 
   # Capture chances based on lead item used
   chances:
-    easier:
+    common:
       tier1_lead: 0.50
       tier2_lead: 0.60
       tier3_lead: 0.70
-      tier4_lead: 0.80
-      tier5_lead: 0.90
-      tier6_lead: 1.00
-    bit_harder:
+      tier4_lead: 1.00
+    rare:
       tier1_lead: 0.25
       tier2_lead: 0.35
       tier3_lead: 0.45
-      tier4_lead: 0.55
-      tier5_lead: 0.65
-      tier6_lead: 0.85
-    medium:
+      tier4_lead: 1.00
+    epic:
       tier1_lead: 0.10
       tier2_lead: 0.20
       tier3_lead: 0.30
-      tier4_lead: 0.40
-      tier5_lead: 0.50
-      tier6_lead: 0.70
-    hard:
+      tier4_lead: 1.00
+    legendary:
       tier1_lead: 0.05
       tier2_lead: 0.10
       tier3_lead: 0.15
-      tier4_lead: 0.20
-      tier5_lead: 0.30
-      tier6_lead: 0.50
-    elite:
-      tier1_lead: 0.01
-      tier2_lead: 0.05
-      tier3_lead: 0.10
-      tier4_lead: 0.15
-      tier5_lead: 0.20
-      tier6_lead: 0.30
-    godly:
-      tier1_lead: 0.00
-      tier2_lead: 0.01
-      tier3_lead: 0.02
-      tier4_lead: 0.05
-      tier5_lead: 0.10
-      tier6_lead: 0.15
+      tier4_lead: 1.00
 
   # Base damage per tier BEFORE level bonuses
   damage:
-    easier: 1.5
-    bit_harder: 2.5
-    medium: 4.0
-    hard: 6.0
-    elite: 8.0
-    godly: 12.0
+    common: 1.5
+    rare: 2.5
+    epic: 4.0
+    legendary: 6.0
 
 # ============================
 # Pet Leveling System
 # ============================
 pet_leveling:
-  base-xp-req: 100.0     # level 1 → 100 XP
-  xp-multiplier: 1.2     # next levels require 20% more XP
+  base-xp-req: 100.0
+  xp-multiplier: 1.2
   damage-multiplier: 0.5 # +0.5 damage per level
   health-multiplier: 2.0 # +2 health per level
   max-level: 50
+
+  # --- NEW (For Creeper Pet Ability) ---
+  creeper-explosion-damage: 10.0 # Damage dealt by Creeper pet explosion
+
+  # --- NEW SECTION (For XP from Pet Kills) ---
+  kill-xp:
+    ZOMBIE: 5
+    SKELETON: 5
+    SPIDER: 5
+    ENDERMAN: 10
+    # Add any other mobs you want to give XP
+    DEFAULT: 2 # (Optional: add a DEFAULT in the code if you want)
 
   # XP gained from pet fruits (items.yml must match these keys)
   fruit-xp:
@@ -349,10 +311,16 @@ pet_leveling:
     godly_fruit: 250
     warden_fruit: 400
 
+# ============================
+# Discord Configuration
+# ============================
 discord:
-  pets_log_channel_id: "YOUR_PET_LOG_CHANNEL_ID_HERE"
-  pets_admin_log_channel_id: "YOUR_PET_ADMIN_LOG_CHANNEL_ID_HERE"
+  pets_log_channel_id: "1438382226260623391"
+  pets_admin_log_channel_id: "1438382251787292682"
 
+# ============================
+# Generator Configuration
+# ============================
 generator:
-  log-channel-id: 1437287692500205581 # Replace with your channel ID
-  admin-log-channel-id: 1437287692500205581
+  log-channel-id: 1425308102915391588
+  admin-log-channel-id: 1425301611391094845

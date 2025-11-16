@@ -150,13 +150,6 @@ public class CombatLogManager implements Listener {
         }
     }
 
-    @EventHandler
-    public void onDeadPlayerJoin(PlayerJoinEvent event) {
-        if (deadPlayerManager != null && deadPlayerManager.isDead(event.getPlayer().getUniqueId())) {
-            event.getPlayer().setGameMode(GameMode.SPECTATOR);
-        }
-    }
-
     private static class CombatData {
         long lastHitTime;
         UUID lastAttackerUUID;

@@ -1,6 +1,7 @@
 package me.login.pets;
 
 import me.login.Login;
+import me.login.utility.TextureToHead; // --- FIXED: Added import ---
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -24,7 +25,7 @@ public class PetsConfig {
     private int petCooldownSeconds;
     private String renamePermission;
     private int maxNameLength;
-    private boolean debugMode; // --- NEW ---
+    private boolean debugMode;
 
     // Leveling
     private double baseXpReq;
@@ -32,7 +33,9 @@ public class PetsConfig {
     private double damageMultiplierPerLevel;
     private double healthMultiplierPerLevel;
     private int maxLevel;
-    private Map<String, Double> fruitXpMap = new HashMap<>(); // Fruit Name -> XP
+    private Map<String, Double> fruitXpMap = new HashMap<>();
+    private Map<EntityType, Double> killXpMap = new HashMap<>();
+    private double creeperExplosionDamage;
 
     private Map<EntityType, String> petTiers = new HashMap<>();
     private List<String> tierOrder;
@@ -40,10 +43,9 @@ public class PetsConfig {
     private Map<String, Double> petDamages = new HashMap<>();
     private Map<String, ItemStack> captureItems = new HashMap<>();
     private Map<String, ItemStack> fruitItems = new HashMap<>();
-    private Map<String, ItemStack> utilityItems = new HashMap<>(); // --- NEW ---
+    private Map<String, ItemStack> utilityItems = new HashMap<>();
     private Set<EntityType> allCapturablePets;
 
-    // --- NEW KEYS ---
     private NamespacedKey fruitKey;
     private NamespacedKey utilityKey;
 
@@ -61,7 +63,7 @@ public class PetsConfig {
         petCooldownSeconds = config.getInt("pet_capture.pet-cooldown-seconds", 300);
         renamePermission = config.getString("pet_capture.rename-permission", "mineaurora.pets.rename");
         maxNameLength = config.getInt("pet_capture.max-name-length", 20);
-        debugMode = config.getBoolean("pet_capture.pet_debug_mode", false); // --- NEW ---
+        debugMode = config.getBoolean("pet_capture.pet_debug_mode", false);
 
         // Leveling Settings
         baseXpReq = config.getDouble("pet_leveling.base-xp-req", 100.0);
@@ -69,13 +71,15 @@ public class PetsConfig {
         damageMultiplierPerLevel = config.getDouble("pet_leveling.damage-multiplier", 0.5);
         healthMultiplierPerLevel = config.getDouble("pet_leveling.health-multiplier", 2.0);
         maxLevel = config.getInt("pet_leveling.max-level", 100);
+        creeperExplosionDamage = config.getDouble("pet_leveling.creeper-explosion-damage", 10.0);
 
         loadPetTiers();
         loadCaptureChances();
         loadPetDamages();
         loadCaptureItems();
         loadFruitItems();
-        loadUtilityItems(); // --- NEW ---
+        loadUtilityItems();
+        loadKillXp();
     }
 
     public void reloadItemsConfig() {
@@ -92,7 +96,7 @@ public class PetsConfig {
 
         for (String fruitName : fruitSection.getKeys(false)) {
             String path = "pet_fruits." + fruitName;
-            ItemStack item = loadItemFromConfig(path, fruitName, fruitKey); // Use key
+            ItemStack item = loadItemFromConfig(path, fruitName, fruitKey);
             if (item != null) {
                 fruitItems.put(fruitName, item);
                 fruitXpMap.put(fruitName, itemsConfig.getDouble(path + ".xp_give", 50.0));
@@ -100,7 +104,6 @@ public class PetsConfig {
         }
     }
 
-    // --- NEW ---
     private void loadUtilityItems() {
         utilityItems.clear();
         if (itemsConfig == null) return;
@@ -110,14 +113,28 @@ public class PetsConfig {
 
         for (String itemName : utilitySection.getKeys(false)) {
             String path = "utility_items." + itemName;
-            ItemStack item = loadItemFromConfig(path, itemName, utilityKey); // Use key
+            ItemStack item = loadItemFromConfig(path, itemName, utilityKey);
             if (item != null) {
                 utilityItems.put(itemName, item);
             }
         }
     }
 
-    // --- UPDATED to accept a key ---
+    private void loadKillXp() {
+        killXpMap.clear();
+        ConfigurationSection xpSection = config.getConfigurationSection("pet_leveling.kill-xp");
+        if (xpSection == null) return;
+        for (String key : xpSection.getKeys(false)) {
+            try {
+                EntityType type = EntityType.valueOf(key.toUpperCase());
+                double xp = xpSection.getDouble(key);
+                killXpMap.put(type, xp);
+            } catch (IllegalArgumentException e) {
+                plugin.getLogger().warning("Invalid entity type '" + key + "' in pet_leveling.kill-xp section.");
+            }
+        }
+    }
+
     private ItemStack loadItemFromConfig(String path, String internalName, NamespacedKey nbtKey) {
         try {
             String mat = itemsConfig.getString(path + ".material");
@@ -126,17 +143,25 @@ public class PetsConfig {
 
             if (mat == null || name == null) return null;
 
-            ItemStack item = new ItemStack(Material.valueOf(mat.toUpperCase()));
+            ItemStack item;
+            if (mat.equalsIgnoreCase("PLAYER_HEAD") && itemsConfig.contains(path + ".texture")) {
+                // --- FIXED: Use applyTexture, not getHead ---
+                item = new ItemStack(Material.PLAYER_HEAD);
+                item = TextureToHead.applyTexture(item, itemsConfig.getString(path + ".texture"));
+            } else {
+                item = new ItemStack(Material.valueOf(mat.toUpperCase()));
+            }
+
             ItemMeta meta = item.getItemMeta();
 
             meta.getPersistentDataContainer().set(nbtKey, PersistentDataType.STRING, internalName);
 
-            meta.displayName(MiniMessage.miniMessage().deserialize(name).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
-            meta.lore(lore.stream().map(l -> MiniMessage.miniMessage().deserialize(l).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)).collect(Collectors.toList()));
+            meta.displayName(MiniMessage.miniMessage().deserialize(name));
+            meta.lore(lore.stream().map(l -> MiniMessage.miniMessage().deserialize(l)).collect(Collectors.toList()));
             item.setItemMeta(meta);
             return item;
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to load item: " + internalName);
+            plugin.getLogger().warning("Failed to load item: " + internalName + " at " + path);
             return null;
         }
     }
@@ -165,8 +190,8 @@ public class PetsConfig {
                     meta.getPersistentDataContainer().set(new NamespacedKey(parts[0], parts[1]), PersistentDataType.STRING, key);
                 }
 
-                meta.displayName(MiniMessage.miniMessage().deserialize(name).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
-                meta.lore(lore.stream().map(l -> MiniMessage.miniMessage().deserialize(l).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)).collect(Collectors.toList()));
+                meta.displayName(MiniMessage.miniMessage().deserialize(name));
+                meta.lore(lore.stream().map(l -> MiniMessage.miniMessage().deserialize(l)).collect(Collectors.toList()));
                 item.setItemMeta(meta);
                 captureItems.put(key, item);
             } catch (Exception e) {
@@ -177,27 +202,21 @@ public class PetsConfig {
 
     private void loadPetTiers() {
         petTiers.clear();
+        tierOrder = config.getStringList("pet_capture.tier-order");
+        ConfigurationSection tiersSection = config.getConfigurationSection("pet_capture.tiers");
+        if (tiersSection == null) return;
 
-        // --- UPDATED: Hardcoded tiers and pets as requested ---
-        tierOrder = Arrays.asList("common", "rare", "epic", "legendary");
-
-        // Manually add pets to tiers
-        petTiers.put(EntityType.ZOMBIE, "common");
-        petTiers.put(EntityType.SPIDER, "common");
-        petTiers.put(EntityType.HUSK, "common");
-        petTiers.put(EntityType.SKELETON, "common");
-
-        petTiers.put(EntityType.CREEPER, "rare");
-        petTiers.put(EntityType.DROWNED, "rare");
-        petTiers.put(EntityType.PILLAGER, "rare");
-
-        petTiers.put(EntityType.BLAZE, "epic");
-        petTiers.put(EntityType.CAVE_SPIDER, "epic");
-
-        petTiers.put(EntityType.VINDICATOR, "legendary");
-        petTiers.put(EntityType.WITHER_SKELETON, "legendary");
-        // --- END UPDATED SECTION ---
-
+        for (String tier : tiersSection.getKeys(false)) {
+            List<String> petsInTier = tiersSection.getStringList(tier);
+            for (String petName : petsInTier) {
+                try {
+                    EntityType type = EntityType.valueOf(petName.toUpperCase());
+                    petTiers.put(type, tier);
+                } catch (IllegalArgumentException e) {
+                    plugin.getLogger().log(Level.WARNING, "Invalid pet EntityType in config: " + petName);
+                }
+            }
+        }
         allCapturablePets = Collections.unmodifiableSet(petTiers.keySet());
     }
 
@@ -248,13 +267,20 @@ public class PetsConfig {
     public double getDamage(EntityType type, int level) {
         String tier = petTiers.get(type);
         double base = petDamages.getOrDefault(tier, 1.0);
-        // --- ADDED: Ensure passive mobs have a damage value in config! ---
-        if (base <= 0) base = 1.0; // Default to 1 if not set
+        if (base <= 0) base = 1.0;
         return base + ((level - 1) * damageMultiplierPerLevel);
     }
 
     public double getHealthBonus(int level) {
         return (level - 1) * healthMultiplierPerLevel;
+    }
+
+    public double getXpForKill(EntityType type) {
+        return killXpMap.getOrDefault(type, 0.0);
+    }
+
+    public double getCreeperExplosionDamage() {
+        return creeperExplosionDamage;
     }
 
     public int getMaxLevel() { return maxLevel; }
@@ -273,7 +299,6 @@ public class PetsConfig {
         return captureItems.keySet();
     }
 
-    // --- NEW Utility Item Methods ---
     public ItemStack getUtilityItem(String itemName) {
         return utilityItems.get(itemName) != null ? utilityItems.get(itemName).clone() : null;
     }
@@ -293,7 +318,5 @@ public class PetsConfig {
     public int getMaxNameLength() { return maxNameLength; }
     public List<String> getTierOrder() { return tierOrder; }
     public String getPetTier(EntityType type) { return petTiers.getOrDefault(type, "unknown"); }
-
-    // --- NEW: Debug Mode Getter ---
     public boolean isDebugMode() { return debugMode; }
 }

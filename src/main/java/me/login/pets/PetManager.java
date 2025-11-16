@@ -10,6 +10,7 @@ import org.bukkit.*;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.*;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -41,6 +42,9 @@ public class PetManager {
     // Tracks cooldowns for item usage
     private final Map<UUID, Long> captureCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Long> fruitCooldowns = new ConcurrentHashMap<>();
+
+    // --- NEW: Cooldown for particle effect ---
+    private final Map<UUID, Long> petInteractCooldowns = new ConcurrentHashMap<>();
 
     public static NamespacedKey PET_OWNER_KEY;
 
@@ -165,7 +169,7 @@ public class PetManager {
         }
     }
 
-    // --- Summoning & Follow ---
+    // --- Summoning & Follow (MODIFIED) ---
     public void summonPet(Player player, EntityType petType) {
         Pet petData = getPet(player.getUniqueId(), petType);
         if (petData == null) return;
@@ -185,23 +189,46 @@ public class PetManager {
         pet.setRemoveWhenFarAway(false);
         if (pet instanceof Slime) ((Slime) pet).setSize(2);
 
-        // --- FIXED: Use default mob health as base, not 20 ---
-        // This code is correct as per your request.
         double baseHealth = 20.0;
         if (pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
-            // Get the mob's default health (e.g., Warden = 500, Zombie = 20)
             baseHealth = pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getDefaultValue();
         }
-        double health = baseHealth + config.getHealthBonus(petData.getLevel());
-        // ---
 
+        double healthBonus = config.getHealthBonus(petData.getLevel());
+        double damageBonus = config.getDamage(petType, petData.getLevel());
+
+        for (ItemStack armorPiece : petData.getArmorContents()) {
+            if (armorPiece != null && armorPiece.hasItemMeta()) {
+                PersistentDataContainer pdc = armorPiece.getItemMeta().getPersistentDataContainer();
+                NamespacedKey healthKey = new NamespacedKey(plugin, "health_bonus");
+                NamespacedKey damageKey = new NamespacedKey(plugin, "damage_bonus");
+
+                if (pdc.has(healthKey, PersistentDataType.STRING)) {
+                    try { healthBonus += Double.parseDouble(pdc.get(healthKey, PersistentDataType.STRING)); } catch (NumberFormatException e) {}
+                }
+                if (pdc.has(damageKey, PersistentDataType.STRING)) {
+                    try { damageBonus += Double.parseDouble(pdc.get(damageKey, PersistentDataType.STRING)); } catch (NumberFormatException e) {}
+                }
+            }
+        }
+
+        ItemStack weapon = petData.getWeaponContent();
+        if (weapon != null && weapon.hasItemMeta()) {
+            PersistentDataContainer pdc = weapon.getItemMeta().getPersistentDataContainer();
+            NamespacedKey damageKey = new NamespacedKey(plugin, "damage_bonus");
+            if (pdc.has(damageKey, PersistentDataType.STRING)) {
+                try { damageBonus += Double.parseDouble(pdc.get(damageKey, PersistentDataType.STRING)); } catch (NumberFormatException e) {}
+            }
+        }
+
+        double finalHealth = baseHealth + healthBonus;
         if (pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
-            pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(health);
-            pet.setHealth(health);
+            pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(finalHealth);
+            pet.setHealth(finalHealth);
         }
 
         if (pet.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE) != null) {
-            pet.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE).setBaseValue(config.getDamage(petType, petData.getLevel()));
+            pet.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE).setBaseValue(damageBonus);
         }
 
         activePets.put(player.getUniqueId(), pet.getUniqueId());
@@ -214,8 +241,8 @@ public class PetManager {
             public void run() {
                 if (pet == null || !pet.isValid() || player == null || !player.isOnline()) {
                     despawnPet(player.getUniqueId(), false);
-                    // --- UPDATED: Clear target in new handler ---
-                    targetSelection.clearPetTarget(pet.getUniqueId()); // This method is now empty, but safe to call
+                    // --- FIXED: Removed call to non-existent method ---
+                    // The pet entity is already invalid, no target to clear.
                     this.cancel(); return;
                 }
 
@@ -225,11 +252,9 @@ public class PetManager {
 
                 Pet data = getPet(player.getUniqueId(), pet.getType());
 
-                messageHandler.sendPetActionBar(player, pet.customName() != null ? pet.customName() : pet.name(), data.getLevel(), hp, max);
+                messageHandler.sendPetActionBar(player, pet.customName() != null ? pet.customName() : MiniMessage.miniMessage().deserialize(data.getDefaultName()), data.getLevel(), hp, max);
 
-                // --- AI LOGIC (Refactored) ---
                 targetSelection.handlePetAILogic(player, pet);
-                // --- End of AI Logic ---
             }
         };
         task.runTaskTimer(plugin, 0L, 20L);
@@ -248,19 +273,65 @@ public class PetManager {
         despawnPet(uuid, false);
     }
 
-    // --- Standard Methods ---
+    // --- addXp (MODIFIED) ---
     public void addXp(Player player, Pet pet, double amount) {
         pet.setXp(pet.getXp() + amount);
         double req = config.getXpRequired(pet.getLevel());
-        if (pet.getXp() >= req && pet.getLevel() < config.getMaxLevel()) {
+
+        int maxLevel = config.getMaxLevel();
+
+        if (pet.getXp() >= req && pet.getLevel() < maxLevel) {
             pet.setXp(pet.getXp() - req);
             pet.setLevel(pet.getLevel() + 1);
             messageHandler.sendPlayerMessage(player, "<gold>Your pet leveled up to " + pet.getLevel() + "!</gold>");
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
             database.updatePetStats(player.getUniqueId(), pet.getPetType(), pet.getLevel(), pet.getXp());
-            if (hasActivePet(player.getUniqueId()) && getActivePet(player.getUniqueId()).getType() == pet.getPetType()) {
-                summonPet(player, pet.getPetType());
+
+            LivingEntity activePet = getActivePet(player.getUniqueId());
+            if (activePet != null && activePet.getType() == pet.getPetType()) {
+
+                double baseHealth = 20.0;
+                if (activePet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
+                    baseHealth = activePet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getDefaultValue();
+                }
+
+                double healthBonus = config.getHealthBonus(pet.getLevel()); // Use NEW level
+                double damageBonus = config.getDamage(pet.getPetType(), pet.getLevel()); // Use NEW level
+
+                for (ItemStack armorPiece : pet.getArmorContents()) {
+                    if (armorPiece != null && armorPiece.hasItemMeta()) {
+                        PersistentDataContainer pdc = armorPiece.getItemMeta().getPersistentDataContainer();
+                        NamespacedKey healthKey = new NamespacedKey(plugin, "health_bonus");
+                        NamespacedKey damageKey = new NamespacedKey(plugin, "damage_bonus");
+                        if (pdc.has(healthKey, PersistentDataType.STRING)) {
+                            try { healthBonus += Double.parseDouble(pdc.get(healthKey, PersistentDataType.STRING)); } catch (NumberFormatException e) {}
+                        }
+                        if (pdc.has(damageKey, PersistentDataType.STRING)) {
+                            try { damageBonus += Double.parseDouble(pdc.get(damageKey, PersistentDataType.STRING)); } catch (NumberFormatException e) {}
+                        }
+                    }
+                }
+                ItemStack weapon = pet.getWeaponContent();
+                if (weapon != null && weapon.hasItemMeta()) {
+                    PersistentDataContainer pdc = weapon.getItemMeta().getPersistentDataContainer();
+                    NamespacedKey damageKey = new NamespacedKey(plugin, "damage_bonus");
+                    if (pdc.has(damageKey, PersistentDataType.STRING)) {
+                        try { damageBonus += Double.parseDouble(pdc.get(damageKey, PersistentDataType.STRING)); } catch (NumberFormatException e) {}
+                    }
+                }
+
+                double finalHealth = baseHealth + healthBonus;
+                if (activePet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
+                    activePet.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(finalHealth);
+                }
+                if (activePet.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE) != null) {
+                    activePet.getAttribute(Attribute.GENERIC_ATTACK_DAMAGE).setBaseValue(damageBonus);
+                }
+
+                String displayName = pet.getDisplayName() + " <gray>[Lvl " + pet.getLevel() + "]</gray>";
+                activePet.customName(MiniMessage.miniMessage().deserialize(displayName));
             }
+
         } else {
             database.updatePetStats(player.getUniqueId(), pet.getPetType(), pet.getLevel(), pet.getXp());
         }
@@ -295,18 +366,18 @@ public class PetManager {
         fruitCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + 3000L);
     }
 
-    // --- METHODS MOVED to TargetSelection ---
-    // - handlePetAggression
-    // - setPetTarget
-
     public void despawnPet(UUID playerUuid, boolean msg) {
         if (followTasks.containsKey(playerUuid)) followTasks.remove(playerUuid).cancel();
         if (activePets.containsKey(playerUuid)) {
             UUID petId = activePets.remove(playerUuid);
-            // --- UPDATED: Clear target in new handler ---
-            targetSelection.clearPetTarget(petId); // This method is now empty, but safe to call
 
+            // --- FIXED: Manually clear target ---
             Entity e = Bukkit.getEntity(petId);
+            if (e instanceof Mob) {
+                ((Mob) e).setTarget(null);
+            }
+            // ---
+
             if (e != null) e.remove();
 
             if (msg) messageHandler.sendPlayerMessage(Bukkit.getPlayer(playerUuid), "<yellow>Pet despawned.</yellow>");
@@ -316,29 +387,32 @@ public class PetManager {
     public void despawnAllActivePets() {
         for (UUID petUuid : activePets.values()) {
             Entity pet = Bukkit.getEntity(petUuid);
+            // --- FIXED: Manually clear target ---
+            if (pet instanceof Mob) {
+                ((Mob) pet).setTarget(null);
+            }
             if (pet != null) pet.remove();
         }
         activePets.clear();
         for (BukkitRunnable task : followTasks.values()) task.cancel();
         followTasks.clear();
-        // --- UPDATED: Clear targets in new handler ---
-        targetSelection.clearAllTargets(); // This method is now empty, but safe to call
+        // --- FIXED: Removed call to non-existent method ---
     }
 
-    /**
-     * Kills the active pet for a player *without* triggering the death cooldown.
-     * Used for server quit or world change.
-     * @param playerUuid The owner's UUID.
-     */
     public void killActivePet(UUID playerUuid) {
         if (followTasks.containsKey(playerUuid)) followTasks.remove(playerUuid).cancel();
         if (activePets.containsKey(playerUuid)) {
             UUID petId = activePets.remove(playerUuid);
-            targetSelection.clearPetTarget(petId); // Clean up just in case
 
+            // --- FIXED: Manually clear target ---
             Entity e = Bukkit.getEntity(petId);
+            if (e instanceof Mob) {
+                ((Mob) e).setTarget(null);
+            }
+            // ---
+
             if (e != null) {
-                e.remove(); // Remove the entity from the world
+                e.remove();
             }
         }
     }
@@ -386,7 +460,8 @@ public class PetManager {
         database.updatePetName(playerUuid, petType, newName);
         LivingEntity activePet = getActivePet(playerUuid);
         if (activePet != null && activePet.getType() == petType) {
-            activePet.customName(MiniMessage.miniMessage().deserialize(newName));
+            String displayName = newName + " <gray>[Lvl " + petData.getLevel() + "]</gray>";
+            activePet.customName(MiniMessage.miniMessage().deserialize(displayName));
         }
     }
     public boolean isPet(Entity e) { return e.getPersistentDataContainer().has(PET_OWNER_KEY, PersistentDataType.STRING); }
@@ -397,8 +472,33 @@ public class PetManager {
     public boolean isCapturing(UUID entityUuid) { return capturingEntities.contains(entityUuid); }
     public Login getPlugin() { return plugin; }
 
-    // --- NEW: Getter for TargetSelection ---
     public TargetSelection getTargetSelection() {
         return targetSelection;
+    }
+
+    public void showPetParticles(Player player, LivingEntity pet) {
+        if (petInteractCooldowns.containsKey(player.getUniqueId())) {
+            long timeLeft = (petInteractCooldowns.get(player.getUniqueId()) - System.currentTimeMillis());
+            if (timeLeft > 0) {
+                return; // On cooldown
+            }
+        }
+
+        pet.getWorld().spawnParticle(Particle.HEART, pet.getLocation().add(0, 1, 0), 3, 0.5, 0.5, 0.5);
+        petInteractCooldowns.put(player.getUniqueId(), System.currentTimeMillis() + 3000L); // 3 sec cooldown
+    }
+
+    public void savePetInventory(Pet pet) {
+        String armor = pet.serializeArmor();
+        String weapon = pet.serializeWeapon();
+        database.updatePetInventory(pet.getOwnerUuid(), pet.getPetType(), armor, weapon);
+    }
+
+    public PetMessageHandler getMessageHandler() {
+        return messageHandler;
+    }
+
+    public PetsConfig getPetsConfig() {
+        return config;
     }
 }

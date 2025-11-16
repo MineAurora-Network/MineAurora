@@ -3,8 +3,8 @@ package me.login.pets;
 import me.login.Login;
 import me.login.pets.data.Pet;
 import me.login.pets.gui.PetMenu;
+import me.login.pets.listeners.PetInventoryListener;
 import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -13,8 +13,12 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class PetCommand implements CommandExecutor, TabCompleter {
 
@@ -23,342 +27,324 @@ public class PetCommand implements CommandExecutor, TabCompleter {
     private final PetMessageHandler messageHandler;
     private final PetsLogger logger;
     private final PetsConfig config;
+    private final PetItemManager itemManager;
+    private final PetInventoryListener inventoryListener;
 
-    public PetCommand(Login plugin, PetManager petManager, PetMessageHandler messageHandler, PetsLogger logger, PetsConfig config) {
+    private final String permAdmin = "mineaurora.pets.admin";
+
+    public PetCommand(Login plugin, PetManager petManager, PetMessageHandler messageHandler, PetsLogger logger, PetsConfig config, PetItemManager itemManager, PetInventoryListener inventoryListener) {
         this.plugin = plugin;
         this.petManager = petManager;
         this.messageHandler = messageHandler;
         this.logger = logger;
         this.config = config;
+        this.itemManager = itemManager;
+        this.inventoryListener = inventoryListener;
     }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (!(sender instanceof Player)) {
-            messageHandler.sendConsoleMessage("<red>Only players can use this command.</red>");
-            return true;
-        }
-        Player player = (Player) sender;
 
         if (args.length == 0) {
+            if (!(sender instanceof Player)) {
+                messageHandler.sendSenderMessage(sender, "<red>Only players can open the pet menu.</red>");
+                return true;
+            }
+            Player player = (Player) sender;
             new PetMenu(player, petManager, PetMenu.PetMenuSort.RARITY).open();
             return true;
         }
 
-        String sub = args[0].toLowerCase(Locale.ROOT);
+        // --- Admin Command Handling ---
+        String sub = args[0].toLowerCase();
+        if (!sender.hasPermission(permAdmin)) {
+            if (!(sender instanceof Player)) {
+                messageHandler.sendSenderMessage(sender, "<red>You do not have permission.</red>");
+                return true;
+            }
+            new PetMenu((Player) sender, petManager, PetMenu.PetMenuSort.RARITY).open();
+            return true;
+        }
+
+        // Sender has admin perms
         switch (sub) {
-            case "summon": return handleSummon(player, args);
-            case "despawn": return handleDespawn(player);
-            case "check": return handleAdminCheck(player, args);
-            case "add": return handleAdminAdd(player, args);
-            case "remove": return handleAdminRemove(player, args);
-            case "give": return handleAdminGive(player, args);
-            case "revive": return handleAdminRevive(player, args);
-            case "menu":
-                new PetMenu(player, petManager, PetMenu.PetMenuSort.RARITY).open();
-                return true;
-            case "debug":
-                return handleDebugToggle(player, args);
+            case "reload":
+                config.loadConfig();
+                itemManager.loadPetItems();
+                messageHandler.sendSenderMessage(sender, "<green>Pets config and items reloaded.</green>");
+                logger.log("Pets config reloaded by " + sender.getName());
+                break;
+
+            case "check":
+                handleCheck(sender, args);
+                break;
+
+            case "give":
+                handleGive(sender, args);
+                break;
+
+            case "remove":
+                handleRemove(sender, args);
+                break;
+
+            case "add":
+                handleAdd(sender, args);
+                break;
+
+            case "revive":
+                handleRevive(sender, args);
+                break;
+
+            case "petinvcheck":
+                handlePetInvCheck(sender, args);
+                break;
+
             default:
-                messageHandler.sendPlayerMessage(player, "<red>Unknown command. Use /pet</red>");
-                return true;
+                sendAdminHelp(sender);
+                break;
+        }
+        return true;
+    }
+
+    private void sendAdminHelp(CommandSender sender) {
+        messageHandler.sendSenderMessage(sender, "<gold>--- Pet Admin Commands ---</gold>");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet check <player></yellow> - Check a player's pets.");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet give <player> <item> [amount]</yellow> - Give pet items.");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet remove <player> <pet_type></yellow> - Remove a pet.");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet add <player> <pet_type></yellow> - Add a pet.");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet revive <player> <pet_type | all></yellow> - Revive pet(s).");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet petinvcheck <player> <pet_type></yellow> - Open a pet's inventory.");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet reload</yellow> - Reload config.");
+    }
+
+    // --- Command Handlers ---
+
+    private void handleCheck(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            messageHandler.sendSenderMessage(sender, "<red>Usage: /pet check <player></red>");
+            return;
+        }
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) {
+            messageHandler.sendSenderMessage(sender, "<red>Player not found.</red>");
+            return;
+        }
+        List<Pet> pets = petManager.getPlayerData(target.getUniqueId());
+        if (pets.isEmpty()) {
+            messageHandler.sendSenderMessage(sender, "<yellow>" + target.getName() + " has no pets.</yellow>");
+            return;
+        }
+        messageHandler.sendSenderMessage(sender, "<gold>" + target.getName() + "'s Pets:</gold>");
+        for (Pet pet : pets) {
+            messageHandler.sendSenderMessage(sender, "<gray>- <white>" + pet.getPetType() + "</white> [Lvl " + pet.getLevel() + "]</gray>");
         }
     }
 
-    private boolean handleDebugToggle(Player player, String[] args) {
-        if (!player.hasPermission("mineaurora.pets.debug")) {
-            messageHandler.sendPlayerMessage(player, "<red>You don't have permission to toggle pet debug.</red>");
-            return true;
-        }
-        if (args.length < 2) {
-            messageHandler.sendPlayerMessage(player, "<yellow>Usage: /pet debug on|off OR /pet debug <category> on|off</yellow>");
-            return true;
-        }
-
-        String a1 = args[1].toLowerCase(Locale.ROOT);
-        if ("on".equals(a1) || "off".equals(a1)) {
-            boolean on = "on".equals(a1);
-            PetDebug.setMaster(on);
-            return true;
-        }
-
-        // category toggle
+    private void handleGive(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            messageHandler.sendPlayerMessage(player, "<yellow>Usage: /pet debug <category> on|off</yellow>");
-            return true;
+            messageHandler.sendSenderMessage(sender, "<red>Usage: /pet give <player> <item_key> [amount]</red>");
+            return;
         }
-        String cat = a1.toUpperCase(Locale.ROOT);
-        String mode = args[2].toLowerCase(Locale.ROOT);
-        try {
-            PetDebug.Cat c = PetDebug.Cat.valueOf(cat);
-            boolean on = "on".equals(mode);
-            PetDebug.setCategory(c, on);
-            return true;
-        } catch (IllegalArgumentException ex) {
-            messageHandler.sendPlayerMessage(player, "<red>Unknown debug category. Available: ALL, AI, TARGET, FEEDING, SUMMON, COMBAT</red>");
-            return true;
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) {
+            messageHandler.sendSenderMessage(sender, "<red>Player not found.</red>");
+            return;
         }
-    }
-
-    private boolean handleSummon(Player player, String[] args) {
-        if (args.length < 2) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet summon <pet_type></red>");
-            return true;
-        }
-        EntityType petType;
-        try { petType = EntityType.valueOf(args[1].toUpperCase(Locale.ROOT)); }
-        catch (IllegalArgumentException e) {
-            messageHandler.sendPlayerMessage(player, "<red>'" + args[1] + "' is not a valid pet type.</red>");
-            return true;
-        }
-        if (!petManager.hasPet(player.getUniqueId(), petType)) {
-            messageHandler.sendPlayerMessage(player, "<red>You do not own this pet.</red>");
-            return true;
-        }
-        if (petManager.isPetOnCooldown(player.getUniqueId(), petType)) {
-            long remaining = petManager.getPetCooldownRemaining(player.getUniqueId(), petType);
-            messageHandler.sendPlayerMessage(player, "<red>Your " + petType.name() + " is on cooldown for " + remaining + "s.</red>");
-            return true;
-        }
-        petManager.despawnPet(player.getUniqueId(), false);
-        petManager.summonPet(player, petType);
-        messageHandler.sendPlayerMessage(player, "<green>Your " + petType.name() + " has been summoned!</green>");
-        PetDebug.debugOwner(player, PetDebug.Cat.SUMMON, "Summoned pet " + petType);
-        return true;
-    }
-
-    private boolean handleDespawn(Player player) {
-        if (!petManager.hasActivePet(player.getUniqueId())) {
-            messageHandler.sendPlayerMessage(player, "<red>You do not have a pet summoned.</red>");
-            return true;
-        }
-        petManager.despawnPet(player.getUniqueId(), true);
-        PetDebug.debugOwner(player, PetDebug.Cat.AI, "Despawned active pet.");
-        return true;
-    }
-
-    private boolean handleAdminCheck(Player player, String[] args) {
-        if (!player.hasPermission("mineaurora.pets.admin.check")) {
-            messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
-            return true;
-        }
-        if (args.length < 2) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet check <player></red>");
-            return true;
-        }
-        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<Pet> pets = petManager.getPlayerData(target.getUniqueId());
-            if (pets == null || pets.isEmpty()) {
-                messageHandler.sendPlayerMessage(player, "<red>" + target.getName() + " has no pets.</red>");
-                return;
-            }
-            messageHandler.sendPlayerMessage(player, "<gold>Pets owned by " + target.getName() + ":</gold>");
-            for (Pet pet : pets) {
-                String color = pet.isOnCooldown() ? "<red>" : "<green>";
-                messageHandler.sendPlayerMessage(player, " <gray>-</gray> " + color + pet.getDisplayName() + "</" + (pet.isOnCooldown() ? "red" : "green") + ">" +
-                        " <gray>(" + pet.getPetType().name() + ")</gray> <yellow>Lvl " + pet.getLevel() + "</yellow>");
-            }
-        });
-        return true;
-    }
-
-    private boolean handleAdminAdd(Player player, String[] args) {
-        if (!player.hasPermission("mineaurora.pets.admin.add")) {
-            messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
-            return true;
-        }
-        if (args.length < 3) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet add <player> <pet_type></red>");
-            return true;
-        }
-        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
-        EntityType petType;
-        try { petType = EntityType.valueOf(args[2].toUpperCase(Locale.ROOT)); }
-        catch (IllegalArgumentException e) {
-            messageHandler.sendPlayerMessage(player, "<red>'" + args[2] + "' is not a valid pet type.</red>");
-            return true;
-        }
-        if (!config.isCapturable(petType)) {
-            messageHandler.sendPlayerMessage(player, "<red>This entity type is not a capturable pet.</red>");
-            return true;
-        }
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            if (petManager.addPet(target.getUniqueId(), petType)) {
-                messageHandler.sendPlayerMessage(player, "<green>Gave " + petType.name() + " pet to " + target.getName() + ".</green>");
-                logger.logAdmin(player.getName(), "Added pet " + petType.name() + " to " + target.getName());
-            } else {
-                messageHandler.sendPlayerMessage(player, "<red>That player already has that pet.</red>");
-            }
-        });
-        return true;
-    }
-
-    private boolean handleAdminRemove(Player player, String[] args) {
-        if (!player.hasPermission("mineaurora.pets.admin.remove")) {
-            messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
-            return true;
-        }
-        if (args.length < 3) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet remove <player> <pet_type></red>");
-            return true;
-        }
-        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
-        EntityType petType;
-        try { petType = EntityType.valueOf(args[2].toUpperCase(Locale.ROOT)); }
-        catch (IllegalArgumentException e) {
-            messageHandler.sendPlayerMessage(player, "<red>'" + args[2] + "' is not a valid pet type.</red>");
-            return true;
-        }
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            if (petManager.removePet(target.getUniqueId(), petType)) {
-                messageHandler.sendPlayerMessage(player, "<green>Removed " + petType.name() + " pet from " + target.getName() + ".</green>");
-                logger.logAdmin(player.getName(), "Removed pet " + petType.name() + " from " + target.getName());
-            } else {
-                messageHandler.sendPlayerMessage(player, "<red>That player does not have that pet.</red>");
-            }
-        });
-        return true;
-    }
-
-    private boolean handleAdminGive(Player player, String[] args) {
-        if (!player.hasPermission("mineaurora.pets.admin.give")) {
-            messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
-            return true;
-        }
-        if (args.length < 2) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give [player] <item> [amount]</red>");
-            return true;
-        }
-
-        Player target = player;
-        String itemName;
-        int amount = 1;
-        int offset = 0;
-
-        Player possible = Bukkit.getPlayer(args[1]);
-        if (possible != null) {
-            target = possible;
-            if (args.length < 3) {
-                messageHandler.sendPlayerMessage(player, "<red>Usage: /pet give " + target.getName() + " <item> [amount]</red>");
-                return true;
-            }
-            itemName = args[2];
-            offset = 1;
-        } else {
-            itemName = args[1];
-        }
-
-        if (args.length > 2 + offset) {
-            try { amount = Integer.parseInt(args[2 + offset]); }
-            catch (NumberFormatException ex) {
-                messageHandler.sendPlayerMessage(player, "<red>'" + args[2 + offset] + "' is not a valid amount.</red>");
-                return true;
-            }
-        }
-
-        ItemStack item = config.getCaptureItem(itemName);
-        if (item == null) item = config.getFruit(itemName);
-        if (item == null) item = config.getUtilityItem(itemName);
-
+        String itemKey = args[2];
+        ItemStack item = itemManager.getItem(itemKey);
         if (item == null) {
-            messageHandler.sendPlayerMessage(player, "<red>No item found for '" + itemName + "'.</red>");
-            return true;
+            messageHandler.sendSenderMessage(sender, "<red>Unknown item key: " + itemKey + "</red>");
+            messageHandler.sendSenderMessage(sender, "<gray>Valid keys: " + itemManager.getItemKeys().toString() + "</gray>");
+            return;
         }
-
+        int amount = 1;
+        if (args.length > 3) {
+            try { amount = Integer.parseInt(args[3]); } catch (NumberFormatException e) { /* default 1 */ }
+        }
         item.setAmount(amount);
         target.getInventory().addItem(item);
-
-        String msg = "<green>Gave " + amount + "x " + itemName;
-        if (target.equals(player)) messageHandler.sendPlayerMessage(player, msg + " to yourself.</green>");
-        else {
-            messageHandler.sendPlayerMessage(player, msg + " to " + target.getName() + ".</green>");
-            messageHandler.sendPlayerMessage(target, "<green>Received " + amount + "x " + itemName + ".</green>");
-        }
-
-        logger.logAdmin(player.getName(), "Gave " + target.getName() + " " + amount + "x " + itemName);
-        PetDebug.debugOwner(player, PetDebug.Cat.AI, "Gave item " + itemName + " x" + amount + " to " + target.getName());
-        return true;
+        messageHandler.sendSenderMessage(sender, "<green>Gave " + amount + "x " + itemKey + " to " + target.getName() + ".</green>");
+        logger.log(sender.getName() + " gave " + amount + "x " + itemKey + " to " + target.getName());
     }
 
-    private boolean handleAdminRevive(Player player, String[] args) {
-        if (!player.hasPermission("mineaurora.pets.admin.revive")) {
-            messageHandler.sendPlayerMessage(player, "<red>You do not have permission.</red>");
-            return true;
+    private void handleRemove(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            messageHandler.sendSenderMessage(sender, "<red>Usage: /pet remove <player> <pet_type></red>");
+            return;
+        }
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) { messageHandler.sendSenderMessage(sender, "<red>Player not found.</red>"); return; }
+        EntityType petType;
+        try { petType = EntityType.valueOf(args[2].toUpperCase()); } catch (IllegalArgumentException e) {
+            messageHandler.sendSenderMessage(sender, "<red>Invalid pet type: " + args[2] + "</red>"); return;
+        }
+
+        if (!petManager.hasPet(target.getUniqueId(), petType)) {
+            messageHandler.sendSenderMessage(sender, "<red>" + target.getName() + " does not own that pet.</red>");
+            return;
+        }
+
+        if (petManager.removePet(target.getUniqueId(), petType)) {
+            messageHandler.sendSenderMessage(sender, "<green>Removed " + petType + " from " + target.getName() + ".</green>");
+            logger.log(sender.getName() + " removed pet " + petType + " from " + target.getName());
+        } else {
+            messageHandler.sendSenderMessage(sender, "<red>Failed to remove pet from database.</red>");
+        }
+    }
+
+    private void handleAdd(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            messageHandler.sendSenderMessage(sender, "<red>Usage: /pet add <player> <pet_type></red>");
+            return;
+        }
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) { messageHandler.sendSenderMessage(sender, "<red>Player not found.</red>"); return; }
+        EntityType petType;
+        try { petType = EntityType.valueOf(args[2].toUpperCase()); } catch (IllegalArgumentException e) {
+            messageHandler.sendSenderMessage(sender, "<red>Invalid pet type: " + args[2] + "</red>"); return;
+        }
+
+        if (!config.isCapturable(petType)) {
+            messageHandler.sendSenderMessage(sender, "<red>That entity type is not a valid pet in the config.</red>");
+            return;
+        }
+        if (petManager.hasPet(target.getUniqueId(), petType)) {
+            messageHandler.sendSenderMessage(sender, "<red>" + target.getName() + " already owns that pet.</red>");
+            return;
+        }
+
+        if (petManager.addPet(target.getUniqueId(), petType)) {
+            messageHandler.sendSenderMessage(sender, "<green>Added " + petType + " to " + target.getName() + ".</green>");
+            logger.log(sender.getName() + " added pet " + petType + " to " + target.getName());
+        } else {
+            messageHandler.sendSenderMessage(sender, "<red>Failed to add pet (database error or already exists).</red>");
+        }
+    }
+
+    private void handleRevive(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            messageHandler.sendSenderMessage(sender, "<red>Usage: /pet revive <player> <pet_type | all></red>");
+            return;
+        }
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) { messageHandler.sendSenderMessage(sender, "<red>Player not found.</red>"); return; }
+
+        String typeArg = args[2].toUpperCase();
+        if (typeArg.equals("ALL")) {
+            List<Pet> pets = petManager.getPlayerData(target.getUniqueId());
+            int count = 0;
+            for (Pet pet : pets) {
+                if (pet.isOnCooldown()) {
+                    petManager.revivePet(target.getUniqueId(), pet.getPetType());
+                    count++;
+                }
+            }
+            messageHandler.sendSenderMessage(sender, "<green>Revived " + count + " pets for " + target.getName() + ".</green>");
+            logger.log(sender.getName() + " revived all pets for " + target.getName());
+        } else {
+            EntityType petType;
+            try { petType = EntityType.valueOf(typeArg); } catch (IllegalArgumentException e) {
+                messageHandler.sendSenderMessage(sender, "<red>Invalid pet type: " + typeArg + "</red>"); return;
+            }
+            if (!petManager.hasPet(target.getUniqueId(), petType)) {
+                messageHandler.sendSenderMessage(sender, "<red>" + target.getName() + " does not own that pet.</red>");
+                return;
+            }
+            if (petManager.revivePet(target.getUniqueId(), petType)) {
+                messageHandler.sendSenderMessage(sender, "<green>Revived " + petType + " for " + target.getName() + ".</green>");
+                logger.log(sender.getName() + " revived pet " + petType + " for " + target.getName());
+            } else {
+                messageHandler.sendSenderMessage(sender, "<red>Failed to revive pet.</red>");
+            }
+        }
+    }
+
+    private void handlePetInvCheck(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player)) {
+            messageHandler.sendSenderMessage(sender, "<red>This command can only be run by a player.</red>");
+            return;
         }
         if (args.length < 3) {
-            messageHandler.sendPlayerMessage(player, "<red>Usage: /pet revive <player> <pet_type></red>");
-            return true;
+            messageHandler.sendSenderMessage(sender, "<red>Usage: /pet petinvcheck <player> <pet_type></red>");
+            return;
         }
-        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
+
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) { messageHandler.sendSenderMessage(sender, "<red>Player not found.</red>"); return; }
+
         EntityType petType;
-        try { petType = EntityType.valueOf(args[2].toUpperCase(Locale.ROOT)); }
-        catch (IllegalArgumentException e) {
-            messageHandler.sendPlayerMessage(player, "<red>'" + args[2] + "' is not a valid pet type.</red>");
-            return true;
+        try { petType = EntityType.valueOf(args[2].toUpperCase()); } catch (IllegalArgumentException e) {
+            messageHandler.sendSenderMessage(sender, "<red>Invalid pet type: " + args[2] + "</red>"); return;
         }
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            if (petManager.revivePet(target.getUniqueId(), petType)) {
-                messageHandler.sendPlayerMessage(player, "<green>Revived " + petType.name() + " for " + target.getName() + ".</green>");
-                logger.logAdmin(player.getName(), "Revived pet " + petType.name() + " for " + target.getName());
-            } else {
-                messageHandler.sendPlayerMessage(player, "<red>That player does not have that pet.</red>");
-            }
-        });
-        return true;
+
+        Pet pet = petManager.getPet(target.getUniqueId(), petType);
+        if (pet == null) {
+            messageHandler.sendSenderMessage(sender, "<red>" + target.getName() + " does not own that pet.</red>");
+            return;
+        }
+
+        // Open the inventory in admin mode
+        inventoryListener.openPetInventory((Player) sender, pet, true);
     }
 
+
+    // --- Tab Completion ---
+
     @Override
-    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
-        if (!(sender instanceof Player)) return Collections.emptyList();
-        Player player = (Player) sender;
-        List<String> completions = new ArrayList<>();
-        List<String> options = new ArrayList<>();
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (!sender.hasPermission(permAdmin)) {
+            return List.of(); // No tab complete for non-admins
+        }
 
         if (args.length == 1) {
-            options.addAll(Arrays.asList("summon", "despawn", "menu", "debug"));
-            if (player.hasPermission("mineaurora.pets.admin.check")) options.add("check");
-            if (player.hasPermission("mineaurora.pets.admin.add")) options.add("add");
-            if (player.hasPermission("mineaurora.pets.admin.remove")) options.add("remove");
-            if (player.hasPermission("mineaurora.pets.admin.give")) options.add("give");
-            if (player.hasPermission("mineaurora.pets.admin.revive")) options.add("revive");
-        } else if (args.length == 2) {
-            switch (args[0].toLowerCase(Locale.ROOT)) {
-                case "summon":
-                    options.addAll(petManager.getPlayerData(player.getUniqueId()).stream().map(p -> p.getPetType().name()).toList());
-                    break;
-                case "give":
-                    options.addAll(config.getCaptureItemNames());
-                    options.addAll(config.getFruitNames());
-                    options.addAll(config.getUtilityItemNames());
-                    options.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList());
-                    break;
-                case "check":
-                case "add":
-                case "remove":
-                case "revive":
-                    options.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList());
-                    break;
-                case "debug":
-                    options.addAll(List.of("on", "off", "ALL", "AI", "TARGET", "FEEDING", "SUMMON", "COMBAT"));
-                    break;
-            }
-        } else if (args.length == 3) {
-            if ("give".equalsIgnoreCase(args[0])) {
-                if (Bukkit.getPlayer(args[1]) != null) {
-                    options.addAll(config.getCaptureItemNames());
-                    options.addAll(config.getFruitNames());
-                    options.addAll(config.getUtilityItemNames());
-                }
-            } else if ("add".equalsIgnoreCase(args[0]) || "remove".equalsIgnoreCase(args[0]) || "revive".equalsIgnoreCase(args[0])) {
-                options.addAll(config.getAllCapturablePetTypes().stream().map(Enum::name).toList());
-            } else if ("debug".equalsIgnoreCase(args[0])) {
-                options.addAll(List.of("on", "off"));
+            return Arrays.asList("check", "give", "remove", "add", "revive", "petinvcheck", "reload")
+                    .stream().filter(s -> s.startsWith(args[0].toLowerCase())).collect(Collectors.toList());
+        }
+
+        if (args.length == 2) {
+            if (Arrays.asList("check", "give", "remove", "add", "revive", "petinvcheck").contains(args[0].toLowerCase())) {
+                return null; // Suggest online players
             }
         }
 
-        String cur = args[args.length - 1].toLowerCase(Locale.ROOT);
-        for (String opt : options) if (opt.toLowerCase(Locale.ROOT).startsWith(cur)) completions.add(opt);
-        return completions;
+        if (args.length == 3) {
+            String sub = args[0].toLowerCase();
+            Player target = Bukkit.getPlayer(args[1]);
+            if (target == null) return List.of();
+            UUID targetUuid = target.getUniqueId();
+
+            switch (sub) {
+                case "give":
+                    return itemManager.getItemKeys().stream()
+                            .filter(s -> s.toLowerCase().startsWith(args[2].toLowerCase()))
+                            .collect(Collectors.toList());
+                case "remove":
+                case "petinvcheck":
+                    return petManager.getPlayerData(targetUuid).stream()
+                            .map(pet -> pet.getPetType().name())
+                            .filter(s -> s.toLowerCase().startsWith(args[2].toLowerCase()))
+                            .collect(Collectors.toList());
+                case "add":
+                    List<String> ownedTypes = petManager.getPlayerData(targetUuid).stream()
+                            .map(pet -> pet.getPetType().name()).collect(Collectors.toList());
+                    // --- FIXED: Use correct method name ---
+                    return config.getAllCapturablePetTypes().stream()
+                            .filter(type -> !ownedTypes.contains(type.name()))
+                            .map(Enum::name)
+                            .filter(s -> s.toLowerCase().startsWith(args[2].toLowerCase()))
+                            .collect(Collectors.toList());
+                case "revive":
+                    List<String> cooldowPets = petManager.getPlayerData(targetUuid).stream()
+                            .filter(Pet::isOnCooldown)
+                            .map(pet -> pet.getPetType().name())
+                            .collect(Collectors.toList());
+                    cooldowPets.add("ALL");
+                    return cooldowPets.stream()
+                            .filter(s -> s.toLowerCase().startsWith(args[2].toLowerCase()))
+                            .collect(Collectors.toList());
+            }
+        }
+
+        return List.of();
     }
 }

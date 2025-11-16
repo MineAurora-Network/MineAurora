@@ -1,7 +1,6 @@
 package me.login.pets.gui;
 
 import me.login.Login;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;

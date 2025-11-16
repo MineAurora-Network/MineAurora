@@ -20,6 +20,48 @@ revive-beacon:
     - "<yellow>Right-click this beacon</yellow>"
     - "<yellow>to open the revive menu.</yellow>"
 
+# ============================
+# Custom Armor Definitions
+# ============================
+custom_armor:
+  obsidian_helmet:
+    material: LEATHER_HELMET
+    name: "<#341f38><b>Obsidian Helmet</b>"
+    color: "#1a0e1c" # Hex color for Leather Armor
+    max-durability: 500
+    lore:
+      - "<gray>A helmet forged from"
+      - "<gray>hardened volcanic glass."
+      - ""
+      - "<white>Durability: <green>%current%<gray>/<green>%max%"
+    nbt:
+      custom_tier: "obsidian"
+      rarity: "epic"
+
+  obsidian_chestplate:
+    material: LEATHER_CHESTPLATE
+    name: "<#341f38><b>Obsidian Chestplate</b>"
+    color: "#1a0e1c"
+    max-durability: 800
+    lore:
+      - "<gray>Heavy protection."
+      - ""
+      - "<white>Durability: <green>%current%<gray>/<green>%max%"
+    nbt:
+      custom_tier: "obsidian"
+  zombie_helmet:
+    material: LEATHER_HELMET
+    name: "<#341f38><b>Zombie Helmet</b>"
+    color: "#1a0e1c" # Hex color for Leather Armor
+    max-durability: 200
+    lore:
+      - "<gray>A helmet forged from"
+      - "<gray>hardened volcanic glass."
+      - ""
+      - "<white>Durability: <green>%current%<gray>/<green>%max%"
+    nbt:
+      entity_armor_type: "zombie"
+
 generators:
   wheat:
     item:
@@ -881,19 +923,26 @@ generators:
         - "<green>➜ <yellow>Command: <green>/sellgendrop"
 
 firesale:
-  rainbow_dye:
+  heart_fragment:
     material: "PLAYER_HEAD"
-    texture: "http://textures.minecraft.net/texture/..." # Your texture URL
-    name: "<red>Rainbow dye"
+    texture: "http://textures.minecraft.net/texture/9e88214694d09941e27855bf3a2a6d8f78050e30eb9f0bcb31ab9ac8f756b234"
+    name: "<red>Heart Fragment"
     lore:
       - "<gray>A rainbow dye"
     nbt:
-      dye_hex: "#FF5555"
+      dye_hex: "#DE26FF"
+
+  god_apple:
+    material: "ENCHANTED_GOLDEN_APPLE"
+    name: "<gold>God Apple"
+    lore:
+      - "<yellow>Very shiny."
 
 # ============================
 # NEW: Token Shop Items
 # ============================
 token-shop:
+  # --- Sell Wands ---
   sell-wand-1.5:
     material: BLAZE_ROD
     name: "<green>Sell Wand (1.5x)</green>"
@@ -966,99 +1015,70 @@ pet_fruits:
       - "<gray>+50 Pet XP"
     xp_give: 50
     nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
+      plugin_key: "mineaurora:pet_fruit"
       value: "apple"
-
-  common_berry:
-    material: SWEET_BERRIES
-    name: "<white>Common Berry</white>"
+  inferno_fruit:
+    material: "PLAYER_HEAD"
+    textture: "http://textures.minecraft.net/texture/37faca995aa2bfa391f1c9ddcb20118fdc331bf5c8a5172bb4c7eb038e3d2b2c"
+    name: ""
     lore:
-      - "<gray>+50 Pet XP"
-    xp_give: 50
+      - ""
+    xp_give:
     nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "common_berry"
-
-  rare_melon:
-    material: MELON_SLICE
-    name: "<blue>Rare Melon</blue>"
+      plugin_key: "mineaurota:pet_fruit"
+      value: "inferno_fruit"
+  coconut_fruit:
+    material: "PLAYER_HEAD"
+    textture: "http://textures.minecraft.net/texture/6a974bcd9ea2d14b434e8ce93322673365445643ff78e08ef8d51930017f001b"
+    name: "<white>Coconut</white>"
     lore:
-      - "<gray>+150 Pet XP"
-    xp_give: 150
+      - "<gray>+100 Pet XP"
+    xp_give: 100
     nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "rare_melon"
-
-  rare_carrot:
-    material: GOLDEN_CARROT
-    name: "<blue>Rare Carrot</blue>"
+      plugin_key: "mineaurota:pet_fruit"
+      value: "cocunut"
+  dragon_fruit:
+    material: "PLAYER_HEAD"
+    textture: "http://textures.minecraft.net/texture/915ec4f4297ea93ba9f7a7b397dd478fbd121185dedd846ef8c67c7487fd1130"
+    name: ""
     lore:
-      - "<gray>+150 Pet XP"
-    xp_give: 150
+      - ""
+    xp_give:
     nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "rare_carrot"
-
-  epic_soup:
-    material: MUSHROOM_STEW
-    name: "<purple>Epic Stew</purple>"
+      plugin_key: "mineaurota:pet_fruit"
+      value: "dragon_fruit"
+  fruit_cake:
+    material: "PLAYER_HEAD"
+    textture: "http://textures.minecraft.net/texture/294ed0edd9bff1c0d8bd34e11257448b715194fab9f61b7ab461d9f77c7f484"
+    name: ""
     lore:
-      - "<gray>+500 Pet XP"
-    xp_give: 500
+      - ""
+    xp_give:
     nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "epic_soup"
-
-  epic_pie:
-    material: PUMPKIN_PIE
-    name: "<purple>Epic Pie</purple>"
+      plugin_key: "mineaurota:pet_fruit"
+      value: "fruit_cake"
+  magical_fruit:
+    material: "PLAYER_HEAD"
+    textture: "http://textures.minecraft.net/texture/91d002d550b3b3b51a8c2130651fe985b62a00fce693ded30efe1d5a9eecffe4"
+    name: ""
     lore:
-      - "<gray>+500 Pet XP"
-    xp_give: 500
+      - ""
+    xp_give:
     nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "epic_pie"
-
-  legendary_steak:
-    material: COOKED_BEEF
-    name: "<gold>Legendary Steak</gold>"
+      plugin_key: "mineaurota:pet_fruit"
+      value: "magical_fruit"
+  aliean_fruit:
+    material: "PLAYER_HEAD"
+    textture: "http://textures.minecraft.net/texture/7586f53cfed412f3562eed2545050c34210a569d34140255d368521acc1c6909"
+    name: ""
     lore:
-      - "<gray>+1500 Pet XP"
-    xp_give: 1500
+      - ""
+    xp_give:
     nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "legendary_steak"
+      plugin_key: "mineaurota:pet_fruit"
+      value: "aliean_fruit"
 
-  legendary_pork:
-    material: COOKED_PORKCHOP
-    name: "<gold>Legendary Pork</gold>"
-    lore:
-      - "<gray>+1500 Pet XP"
-    xp_give: 1500
-    nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "legendary_pork"
 
-  mythic_apple:
-    material: GOLDEN_APPLE
-    name: "<red><b>Mythic Apple</b></red>"
-    lore:
-      - "<gray>+5000 Pet XP"
-    xp_give: 5000
-    nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "mythic_apple"
-
-  godly_star:
-    material: NETHER_STAR
-    name: "<gradient:red:gold><b>Godly Star</b></gradient>"
-    lore:
-      - "<gray>+25000 Pet XP"
-      - "<yellow><b>Huge Power Source!</b></yellow>"
-    xp_give: 25000
-    nbt:
-      plugin_key: "mineaurora:pet_fruit_id"
-      value: "godly_star"
 
 # ----------------------------------------------------------------
 # PET CAPTURE ITEMS (Leads)
@@ -1094,27 +1114,9 @@ pet_capture:
 
   tier4_lead:
     material: LEAD
-    name: "<purple>Epic Capture Lead</purple>"
+    name: "<pink>Epic Capture Lead</pink>"
     lore:
       - "<gray>High capture chance.</gray>"
     nbt:
       plugin_key: "mineaurora:pet_lead_4"
       value: "tier4_lead"
-
-  tier5_lead:
-    material: LEAD
-    name: "<gold>Mystic Capture Lead</gold>"
-    lore:
-      - "<gray>Very high capture chance.</gray>"
-    nbt:
-      plugin_key: "mineaurora:pet_lead_5"
-      value: "tier5_lead"
-
-  tier6_lead:
-    material: LEAD
-    name: "<red><b>Legendary Capture Lead</b></red>"
-    lore:
-      - "<gray>Almost guaranteed capture.</gray>"
-    nbt:
-      plugin_key: "mineaurora:pet_lead_6"
-      value: "tier6_lead"

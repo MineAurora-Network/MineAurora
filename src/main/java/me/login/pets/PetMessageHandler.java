@@ -7,6 +7,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.time.Duration;
@@ -32,6 +33,15 @@ public class PetMessageHandler {
 
     public void sendConsoleMessage(String message) {
         Bukkit.getConsoleSender().sendMessage(mm.deserialize(prefix + message));
+    }
+
+    // --- NEW: Send to any CommandSender ---
+    public void sendSenderMessage(CommandSender sender, String message) {
+        if (sender instanceof Player) {
+            sendPlayerMessage((Player) sender, message);
+        } else {
+            sendConsoleMessage(message);
+        }
     }
 
     public void sendPlayerTitle(Player player, String titleMessage, String subtitleMessage) {

@@ -3,10 +3,7 @@ package me.login.pets;
 import me.login.Login;
 import me.login.pets.data.PetsDatabase;
 import me.login.pets.gui.PetGuiListener;
-import me.login.pets.listeners.CaptureListener;
-import me.login.pets.listeners.PetDataListener;
-import me.login.pets.listeners.PetProtectionListener;
-import org.bukkit.Bukkit;
+import me.login.pets.listeners.*; // Import all listeners
 
 /**
  * Main module class for the Pet system.
@@ -22,11 +19,20 @@ public class PetsModule {
     private PetsLogger petsLogger;
     private PetCommand petCommand;
 
+    // --- NEW: Pet Item Manager ---
+    private PetItemManager petItemManager;
+
     // Listeners
     private PetDataListener petDataListener;
-    private CaptureListener captureListener;
-    private PetProtectionListener petProtectionListener;
     private PetGuiListener petGuiListener;
+
+    // --- NEW Listeners ---
+    private PetInteractListener petInteractListener;
+    private PetCombatListener petCombatListener;
+    private PetProtectionListener petProtectionListener;
+    private PetInventoryListener petInventoryListener;
+    private PetPlacementListener petPlacementListener;
+
 
     public PetsModule(Login plugin) {
         this.plugin = plugin;
@@ -55,28 +61,39 @@ public class PetsModule {
             return false;
         }
 
-        // 4. Core Manager
+        // --- NEW: 4. Pet Item Manager (must be before PetManager) ---
+        this.petItemManager = new PetItemManager(plugin);
+
+        // 5. Core Manager
         this.petManager = new PetManager(plugin, petsDatabase, petsConfig, messageHandler, petsLogger);
 
-        // 5. Listeners
+        // 6. Listeners
         this.petDataListener = new PetDataListener(petManager, petsDatabase);
-        this.captureListener = new CaptureListener(petManager, petsConfig, messageHandler, petsLogger);
-
-        // --- THIS IS THE FIX ---
-        // Added messageHandler to the constructor so it can send messages
-        this.petProtectionListener = new PetProtectionListener(petManager, petsConfig, messageHandler);
-        // --- END FIX ---
-
         this.petGuiListener = new PetGuiListener(petManager, messageHandler);
 
-        // 6. Commands
-        this.petCommand = new PetCommand(plugin, petManager, messageHandler, petsLogger, petsConfig);
+        // --- NEW Listeners Initialized ---
+        this.petInventoryListener = new PetInventoryListener(plugin, petManager, petsConfig);
+        this.petInteractListener = new PetInteractListener(petManager, messageHandler, petInventoryListener);
+        this.petCombatListener = new PetCombatListener(petManager, petsConfig, messageHandler);
+        this.petProtectionListener = new PetProtectionListener(petManager);
+        this.petPlacementListener = new PetPlacementListener(plugin);
 
-        // 7. Register
+
+        // 7. Commands
+        this.petCommand = new PetCommand(plugin, petManager, messageHandler, petsLogger, petsConfig, petItemManager, petInventoryListener);
+
+        // 8. Register
         plugin.getServer().getPluginManager().registerEvents(petDataListener, plugin);
-        plugin.getServer().getPluginManager().registerEvents(captureListener, plugin);
-        plugin.getServer().getPluginManager().registerEvents(petProtectionListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petGuiListener, plugin);
+
+        // --- NEW Listeners Registered ---
+        plugin.getServer().getPluginManager().registerEvents(petInteractListener, plugin);
+        plugin.getServer().getPluginManager().registerEvents(petCombatListener, plugin);
+        plugin.getServer().getPluginManager().registerEvents(petProtectionListener, plugin);
+        plugin.getServer().getPluginManager().registerEvents(petInventoryListener, plugin);
+        plugin.getServer().getPluginManager().registerEvents(petPlacementListener, plugin);
+
+        // Note: CaptureListener is removed, its logic is now in PetInteractListener
 
         plugin.getCommand("pet").setExecutor(petCommand);
         plugin.getCommand("pet").setTabCompleter(petCommand);
@@ -110,5 +127,10 @@ public class PetsModule {
 
     public PetsLogger getPetsLogger() {
         return petsLogger;
+    }
+
+    // --- NEW Getter ---
+    public PetItemManager getPetItemManager() {
+        return petItemManager;
     }
 }
