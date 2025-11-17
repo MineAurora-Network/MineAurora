@@ -19,6 +19,7 @@ creator-code-channel-id: 1436624030814965832
 rank-log-channel-id: 1436623612571553896
 link-system-log-channel-id: 1430931902650388490
 verification-channel-id: 1430953529463279696
+rtp-log-channel-id: 123456789012345679
 
 verified-role-id: 1430766504575635508
 unverified-role-id: 1430779094077014066
@@ -38,6 +39,11 @@ alert_prefix: "<gray>[<red>ALERT</red>]<white> "
 lifesteal-world: "lifesteal"
 
 discord-server-link: "your-discord.gg/invite"
+
+worlds:
+  overworld: "world"
+  nether: "world_nether"
+  end: "world_the_end"
 
 firesale:
   fire-npc-id: 16

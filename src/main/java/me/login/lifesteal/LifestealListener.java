@@ -1,18 +1,18 @@
 package me.login.lifesteal;
 
 import me.login.Login;
-import net.kyori.adventure.text.Component; // <-- IMPORT ADDED
-import net.kyori.adventure.text.format.NamedTextColor; // <-- IMPORT ADDED
-import org.bukkit.Bukkit; // <-- IMPORT ADDED
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
-import org.bukkit.World; // <-- IMPORT ADDED
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
+import org.bukkit.event.EventPriority; // <-- IMPORT ADDED
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockPlaceEvent;
+// import org.bukkit.event.block.BlockPlaceEvent; // <-- This import is unused
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -29,19 +29,21 @@ public class LifestealListener implements Listener {
     private final LifestealManager lifestealManager;
     private final DeadPlayerManager deadPlayerManager;
     private final ReviveMenu reviveMenu;
-    private LifestealLogger logger; // <-- ADDED FIELD
+    private LifestealLogger logger;
 
-    // --- CONSTRUCTOR UPDATED ---
     public LifestealListener(Login plugin, ItemManager itemManager, LifestealManager lifestealManager, DeadPlayerManager deadPlayerManager, ReviveMenu reviveMenu, LifestealLogger logger) {
         this.plugin = plugin;
         this.itemManager = itemManager;
         this.lifestealManager = lifestealManager;
         this.deadPlayerManager = deadPlayerManager;
         this.reviveMenu = reviveMenu;
-        this.logger = logger; // <-- STORE LOGGER
+        this.logger = logger;
     }
 
-    @EventHandler
+    // --- FIX: Added EventPriority.HIGH ---
+    // This forces this event to run *before* other plugins (like LoginSystem)
+    // allowing us to fix the player's gamemode first.
+    @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         lifestealManager.loadPlayerData(player);
@@ -51,6 +53,9 @@ public class LifestealListener implements Listener {
                 player.kick(kickMessage);
             });
         } else {
+            // --- FIX: For revived players bypassing login ---
+            // If a player was revived offline, they might join as a spectator.
+            // This forces them back to SURVIVAL so the LoginSystem can see them.
             if (player.getGameMode() == GameMode.SPECTATOR) {
                 player.setGameMode(GameMode.SURVIVAL);
             }
@@ -67,51 +72,53 @@ public class LifestealListener implements Listener {
         lifestealManager.savePlayerData(event.getPlayer());
     }
 
+    // --- FIX: Logic completely restructured ---
+    // Now, heart loss and banning ONLY happen if there is a player killer.
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player victim = event.getEntity();
         Player killer = victim.getKiller();
 
-        int victimHearts = lifestealManager.getHearts(victim.getUniqueId());
+        // --- MAIN FIX ---
+        // Only run Lifesteal logic if the death was a true PvP kill.
+        if (killer != null && !killer.equals(victim)) {
 
-        if (victimHearts > lifestealManager.getMinHearts()) {
-            lifestealManager.removeHearts(victim.getUniqueId(), 1);
-            victim.sendMessage(itemManager.formatMessage("<red>You lost a heart!"));
-        } else {
-            // --- MODIFIED (Request 3) ---
-            deadPlayerManager.addDeadPlayer(victim.getUniqueId(), victim.getName());
+            // --- Victim's Logic ---
+            int victimHearts = lifestealManager.getHearts(victim.getUniqueId());
 
-            final Component kickMessage = itemManager.formatMessage("<dark_red>You have lost your final life. You are now dead.</dark_red>");
+            if (victimHearts > lifestealManager.getMinHearts()) {
+                // Victim loses a heart
+                lifestealManager.removeHearts(victim.getUniqueId(), 1);
+                victim.sendMessage(itemManager.formatMessage("<red>You lost a heart!"));
+            } else {
+                // Victim loses their final life and is banned
+                deadPlayerManager.addDeadPlayer(victim.getUniqueId(), victim.getName());
 
-            // --- BROADCAST (Request 3) ---
-            Component broadcastMessage = Component.text(victim.getName(), NamedTextColor.RED)
-                    .append(Component.text(" has been banned for running out of hearts.", NamedTextColor.GRAY));
+                final Component kickMessage = itemManager.formatMessage("<dark_red>You have lost your final life. You are now dead.</dark_red>");
 
-            for (String worldName : lifestealManager.getLifestealWorlds()) {
-                World world = Bukkit.getWorld(worldName);
-                if (world != null) {
-                    for (Player playerInWorld : world.getPlayers()) {
-                        // Use the ItemManager to format the broadcast with the server prefix
-                        playerInWorld.sendMessage(itemManager.formatMessage(broadcastMessage));
+                Component broadcastMessage = Component.text(victim.getName(), NamedTextColor.RED)
+                        .append(Component.text(" has been banned for running out of hearts.", NamedTextColor.GRAY));
+
+                for (String worldName : lifestealManager.getLifestealWorlds()) {
+                    World world = Bukkit.getWorld(worldName);
+                    if (world != null) {
+                        for (Player playerInWorld : world.getPlayers()) {
+                            playerInWorld.sendMessage(itemManager.formatMessage(broadcastMessage));
+                        }
                     }
                 }
+
+                // Kick player on the next tick
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    victim.kick(kickMessage);
+                });
+
+                if (logger != null) {
+                    logger.logNormal("Player `" + victim.getName() + "` lost their final life (killed by `" + killer.getName() + "`) and was kicked.");
+                }
             }
-            // --- END BROADCAST ---
 
-            // Kick player on the next tick to ensure death event processing is complete
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                victim.kick(kickMessage);
-            });
-            // --- END MODIFICATION ---
-
-            // --- LOGGING UPDATED ---
-            if (logger != null) {
-                String killerName = (killer != null) ? killer.getName() : "Unknown Causes";
-                logger.logNormal("Player `" + victim.getName() + "` lost their final life (killed by `" + killerName + "`) and was kicked.");
-            }
-        }
-
-        if (killer != null && !killer.equals(victim)) {
+            // --- Killer's Logic ---
             int killerHearts = lifestealManager.getHearts(killer.getUniqueId());
             if (killerHearts < lifestealManager.getMaxHearts()) {
                 lifestealManager.addHearts(killer.getUniqueId(), 1);
@@ -120,6 +127,8 @@ public class LifestealListener implements Listener {
                 killer.sendMessage(itemManager.formatMessage("<yellow>" + victim.getName() + " had no heart to steal (you are at max)."));
             }
         }
+        // If killer is null (e.g., fall damage, lava, mobs), nothing happens.
+        // The player respawns normally with no heart loss.
     }
 
     @EventHandler
@@ -140,9 +149,6 @@ public class LifestealListener implements Listener {
         }
     }
 
-    // --- REMOVED onBeaconPlace ---
-
-    // --- ADDED (Request 2 & 3) ---
     @EventHandler
     public void onBeaconUse(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -156,7 +162,6 @@ public class LifestealListener implements Listener {
         if (item.getItemMeta().getPersistentDataContainer().has(itemManager.beaconItemKey, PersistentDataType.BYTE)) {
             event.setCancelled(true);
 
-            // Prevent opening menu if right-clicking an interactable block (like a chest)
             if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
                 if (event.getClickedBlock().getType().isInteractable()) {
                     return;
@@ -170,9 +175,7 @@ public class LifestealListener implements Listener {
 
             reviveMenu.openMenu(player, 0, null);
 
-            // Consume the beacon
             item.setAmount(item.getAmount() - 1);
         }
     }
-    // --- END ADDITION ---
 }

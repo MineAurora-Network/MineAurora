@@ -172,9 +172,7 @@ public class FiresaleListener implements Listener {
             player.sendMessage(miniMessage.deserialize("<red>Cannot spawn preview: World 'lifesteal' not found.</red>"));
             return;
         }
-        // Location(world, x, y, z, yaw, pitch) - Yaw 180 = facing South
-        Location spawnLoc = new Location(world, 2.5, 63, -27.5, 180, 0);
-        // --- END FIX ---
+        Location spawnLoc = new Location(world, 282.5, 57, 159.5, 90, 0);
 
         // 3. Spawn Armor Stand
         ArmorStand as = world.spawn(spawnLoc, ArmorStand.class);

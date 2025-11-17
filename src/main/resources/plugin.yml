@@ -1,9 +1,9 @@
 name: Login
-version: '1.0.0'
+version: '1'
 main: me.login.Login
 api-version: '1.21'
-depend: [Vault, Citizens, Skript, LuckPerms] # Hard dependencies
-softdepend: [Essentials, PlaceholderAPI, Citizens ] # PAPI is already here, perfect!
+depend: [Vault, Citizens, Skript, LuckPerms, PlaceholderAPI] # Hard dependencies
+softdepend: [Essentials, PlaceholderAPI, Citizens] # PAPI is already here, perfect!
 
 commands:
   firesale:
@@ -172,7 +172,14 @@ commands:
     description: Admin command to remove a creator code.
     usage: /removecreditcode <name>
     permission: login.creatorcode.admin
-
+  rtp:
+    description: Randomly teleports you to a location in the specified world.
+    usage: /rtp <world>
+    permission: mineaurora.rtp
+  hologram: # <-- ADD THIS COMMAND
+    description: Manage server holograms.
+    usage: /hologram <spawn|reload> <name>
+    permission: mineaurora.admin.hologram
   rank:
     description: Manages player ranks.
     usage: /rank <set|remove|info>
@@ -214,7 +221,9 @@ permissions:
   logincore.adminchangepass:
     description: Allows use of /adminchangepass
     default: op
-
+  mineaurora.rtp:
+    description: Allows using the /rtp command.
+    default: op
   discord.unlink.admin:
     description: Allows use of /adminunlink
     default: op
@@ -222,7 +231,9 @@ permissions:
   login.scoreboard.reload:
     description: Allows use of /scoreboard reload command.
     default: op
-
+  mineaurora.admin.hologram: # <-- ADD THIS PERMISSION
+    description: Allows managing server holograms.
+    default: op
   leaderboards.admin:
     description: Allows users to create and manage leaderboards.
     default: op

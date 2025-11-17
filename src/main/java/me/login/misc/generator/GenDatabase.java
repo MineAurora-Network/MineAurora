@@ -13,7 +13,13 @@ public class GenDatabase {
 
     public GenDatabase(Login plugin) {
         this.plugin = plugin;
-        this.dbPath = plugin.getDataFolder().getAbsolutePath() + File.separator + "generators.db";
+
+        File databaseDir = new File(plugin.getDataFolder(), "database");
+        if (!databaseDir.exists()) {
+            databaseDir.mkdirs(); // This creates the directory if it doesn't exist
+        }
+
+        this.dbPath = databaseDir.getAbsolutePath() + File.separator + "generators.db";
         initializeDatabase();
     }
 

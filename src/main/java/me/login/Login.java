@@ -4,6 +4,7 @@ import me.login.discord.store.TicketModule;
 import me.login.discord.linking.*;
 import me.login.discord.moderation.DiscordModConfig;
 import me.login.loginsystem.*;
+import me.login.misc.hologram.HologramModule;
 import me.login.misc.generator.GenModule;
 import me.login.misc.dailyreward.DailyRewardDatabase;
 import me.login.misc.dailyreward.DailyRewardModule;
@@ -24,7 +25,8 @@ import me.login.scoreboard.ScoreboardManager;
 import me.login.clearlag.LagClearConfig;
 import me.login.clearlag.LagClearLogger;
 import me.login.clearlag.LagClearModule;
-import net.kyori.adventure.text.Component;
+import me.login.misc.rtp.RTPLogger;
+import me.login.misc.rtp.RTPModule;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -42,10 +44,8 @@ import org.bukkit.scheduler.BukkitRunnable;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import me.login.leaderboards.LeaderboardModule;
-import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,6 +65,7 @@ import me.login.items.CustomArmorModule;
 import net.luckperms.api.LuckPerms;
 
 public class Login extends JavaPlugin implements Listener {
+    private HologramModule hologramModule; // <-- ADD THIS
     private DiscordLinkDatabase discordLinkDatabase;
     private DiscordLinkingModule discordLinkingModule;
     private LoginSystem loginSystem;
@@ -74,7 +75,9 @@ public class Login extends JavaPlugin implements Listener {
     private OrderModule orderModule;
     private CustomArmorModule customArmorModule; // Add this field
     private DamageIndicator damageIndicator;
+    private RTPLogger rtpLogger;
     private int defaultOrderLimit;
+    private RTPModule rtpModule; // <-- DECLARED AS FIELD
     private ScoreboardManager scoreboardManager;
     private Economy vaultEconomy = null;
     private LeaderboardModule leaderboardModule;
@@ -122,8 +125,6 @@ public class Login extends JavaPlugin implements Listener {
 
         this.miniMessage = MiniMessage.miniMessage();
         this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
-
-        getServer().getPluginManager().registerEvents(new me.login.misc.GuiCleanup.MetaDataRemover(this), this);
 
         this.discordModConfig = new DiscordModConfig(this);
         this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3);
@@ -187,6 +188,26 @@ public class Login extends JavaPlugin implements Listener {
         }
         if (getServer().getPluginManager().getPlugin("Skript") == null) {
             getLogger().warning("Skript not found! Scoreboard variables via SkriptUtils will not work.");
+        }
+        rtpLogger = new RTPLogger(this);
+        try {
+            new RTPModule(this, rtpLogger).enable(); // <-- ADD THIS
+        } catch (Exception e) {
+            getLogger().severe("Failed to enable RTP Module!");
+            e.printStackTrace();
+        }
+        try {
+            if (rtpModule == null) {
+                getLogger().severe("RTP Module failed to load, Hologram Module will be disabled.");
+            } else {
+                // This will now work because rtpModule is a field and has been initialized
+                hologramModule = new HologramModule(this, rtpModule);
+                hologramModule.enable();
+            }
+            // --- END OF FIX ---
+        } catch (Exception e) {
+            getLogger().severe("Failed to enable Hologram Module!");
+            e.printStackTrace();
         }
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
@@ -358,7 +379,6 @@ public class Login extends JavaPlugin implements Listener {
         }
         return itemsConfig;
     }
-    // --- END ADD ---
 
     private boolean setupEconomy() {
         if (getServer().getPluginManager().getPlugin("Vault") == null) {
@@ -542,6 +562,9 @@ public class Login extends JavaPlugin implements Listener {
 
             if (lagClearLogger != null) {
                 lagClearLogger.shutdown();
+            }
+            if (hologramModule != null) {
+                hologramModule.disable(); // <-- ADD THIS
             }
 
             try {

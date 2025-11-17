@@ -3,7 +3,6 @@ package me.login.loginsystem;
 import me.login.Login;
 import me.login.discord.linking.DiscordLinkDatabase;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.boss.BarColor;
@@ -15,13 +14,12 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
-import java.util.ArrayList;
+import org.bukkit.event.EventPriority;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.*;
 import org.bukkit.potion.PotionEffect;
@@ -154,7 +152,7 @@ public class LoginSystem implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player p = event.getPlayer();
         UUID uuid = p.getUniqueId();

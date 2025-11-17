@@ -97,6 +97,7 @@ public class LagClearLogger {
         }
     }
 
+
     /**
      * Returns the JDA instance for this logger bot.
      * @return The JDA instance, or null if not connected.
