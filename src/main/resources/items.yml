@@ -987,7 +987,7 @@ token-shop:
       - "<yellow>This is a custom item!</yellow>"
 
 # ----------------------------------------------------------------
-# PET UTILITY ITEMS (Target Selector, etc.)
+# PET UTILITY ITEMS
 # ----------------------------------------------------------------
 utility_items:
   amethyst_shard:
@@ -1002,6 +1002,70 @@ utility_items:
       plugin_key: "mineaurora:pet_utility_id"
       value: "amethyst_shard"
 
+pet_attributes:
+  damage_shard:
+    material: PLAYER_HEAD
+    texture: http://textures.minecraft.net/texture/8ff968c905223491a4e390c7d5f10c1843a6ba04820d6b1784f52e410d11ab5b
+    name: <red>Damage Attribute
+    lore:
+      - "<gray>Increases pet damage by 25%"
+    nbt:
+      plugin_key: mineaurora:pet_attribute_id
+      value: damage_shard
+  health_shard:
+    material: PLAYER_HEAD
+    texture: http://textures.minecraft.net/texture/c5299526b4a35392d4a41bcb4bf32e0db04d0f01d25cda137198a35719685f6
+    name: <green>Health Attribute
+    lore:
+      - "<gray>Increase pet health by 25%"
+    nbt:
+      plugin_key: mineaurora:pet_attribute_id
+      value: health_shard
+  speed_shard:
+    material: PLAYER_HEAD
+    texture: http://textures.minecraft.net/texture/f06706eecb2d558ace27abda0b0b7b801d36d17dd7a890a9520dbe522374f8a6
+    name: <white>Speed Attribute
+    lore:
+      - "<gray>Increases pet speed by 100%"
+    nbt:
+      plugin_key: mineaurora:pet_attribute_id
+      value: speed_shard
+  xp_shard:
+    material: PLAYER_HEAD
+    texture: http://textures.minecraft.net/texture/bd0f7034c1ac9f65f94aabe30c69ef7e7bc08cc0ca287a39af140436e5093aae
+    name: <yellow>XP Attribute
+    lore:
+      - "<gray>Increases pet XP gain by 25%"
+    nbt:
+      plugin_key: mineaurora:pet_attribute_id
+      value: xp_shard
+  posion_shard:
+    material: PLAYER_HEAD
+    texture: http://textures.minecraft.net/texture/d936bb1cc4ab6ecce65b64298394fafc5fe3f7876d7c941d05a9294fa392b7c
+    name: <dark_green>Poison Attribute
+    lore:
+      - "<gray>Inflicts Poison for 5s"
+    nbt:
+      plugin_key: mineaurora:pet_attribute_id
+      value: posion_shard
+  weakness_shard:
+    material: PLAYER_HEAD
+    texture: http://textures.minecraft.net/texture/19b99238d9f8134015d74341b17115be30f125a37ea49032b8c9e3b769cf7ee1
+    name: <gray>Weakness Attribute
+    lore:
+      - "<gray>Inflicts Weakness III for 5s"
+    nbt:
+      plugin_key: mineaurora:pet_attribute_id
+      value: weakness_shard
+  healer_shard:
+    material: PLAYER_HEAD
+    texture: http://textures.minecraft.net/texture/eb9cb45cdeccbc1431b1154f8828dcc83e367e8c6d8c42a8506175735cbd7819
+    name: <light_purple>Healer Attribute
+    lore:
+      - "<gray>Reduces owner damage taken by 20%"
+    nbt:
+      plugin_key: mineaurora:pet_attribute_id
+      value: healer_shard
 # ----------------------------------------------------------------
 # PET FRUITS (XP FOOD)
 # Must match: config.yml → pet_leveling.fruit-xp keys

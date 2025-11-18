@@ -1,16 +1,19 @@
 package me.login.misc.hologram;
 
+import io.papermc.paper.event.player.PlayerArmSwingEvent;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Interaction;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.event.player.PlayerQuitEvent; // <-- ADDED IMPORT
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.event.world.ChunkUnloadEvent;
+
+import java.util.UUID;
 
 public class HologramListener implements Listener {
 
@@ -22,71 +25,85 @@ public class HologramListener implements Listener {
         this.rtpInteraction = rtpInteraction;
     }
 
-    @EventHandler
-    public void onEntityInteract(PlayerInteractEntityEvent event) {
-        Entity clicked = event.getRightClicked();
-        if (!(clicked instanceof Interaction)) {
-            return;
-        }
-
-        Hologram hologram = manager.getHologramByEntity(clicked.getUniqueId());
-        if (hologram == null) {
-            return;
-        }
-
-        // We found a hologram interaction!
-        event.setCancelled(true);
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerInteract(PlayerInteractAtEntityEvent event) {
         Player player = event.getPlayer();
+        Entity clickedEntity = event.getRightClicked();
+        UUID entityUUID = clickedEntity.getUniqueId();
 
-        // Handle specific hologram logic
-        if (hologram.getName().equals("rtp")) {
-            rtpInteraction.handleClick(player, hologram, clicked.getUniqueId());
+        Hologram hologram = manager.getHologramByEntity(entityUUID);
+        if (hologram == null) return;
+
+        // Prevent default interaction (e.g., armor stand GUI)
+        event.setCancelled(true);
+
+        // Check which hologram was clicked and delegate
+        if (hologram.getName().equalsIgnoreCase("rtp")) {
+            rtpInteraction.handleClick(player, hologram, entityUUID);
         }
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onEntityDamage(EntityDamageEvent event) {
-        Entity entity = event.getEntity();
-        if (entity.getType() != EntityType.TEXT_DISPLAY && entity.getType() != EntityType.INTERACTION) {
-            return;
-        }
-
-        Hologram hologram = manager.getHologramByEntity(entity.getUniqueId());
-        if (hologram != null) {
-            event.setCancelled(true); // Protect our entities
-
-            // If it was "killed" (e.g., /kill command), respawn it
-            if (event.getCause() == EntityDamageEvent.DamageCause.VOID || event.getCause() == EntityDamageEvent.DamageCause.CUSTOM) {
-                if (entity.isDead()) {
-                    manager.respawnHologram(hologram);
-                }
-            }
-        }
+        // ... add other hologram interactions here if needed
     }
 
     @EventHandler
-    public void onChunkLoad(ChunkLoadEvent event) {
-        // This is a simple check. For servers with many holograms, this could be optimized.
-        // We just check if any entities are dead and respawn them.
-        for (Entity entity : event.getChunk().getEntities()) {
-            if (entity.getType() != EntityType.TEXT_DISPLAY && entity.getType() != EntityType.INTERACTION) {
-                continue;
-            }
-
-            if (entity.isDead()) {
-                Hologram hologram = manager.getHologramByEntity(entity.getUniqueId());
-                if (hologram != null) {
-                    manager.respawnHologram(hologram);
-                }
-            }
-        }
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        // Clear player page cache
+        rtpInteraction.clearPlayerPage(event.getPlayer());
     }
 
     /**
-     * Clears player page data on quit to prevent memory leaks.
+     * This handler is modified because ChunkUnloadEvent is not cancellable on Spigot
+     * and hologram entities are non-persistent by design, so they are *supposed*
+     * to be removed when the chunk unloads. They are respawned in onChunkLoad.
      */
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        rtpInteraction.clearPlayerPage(event.getPlayer());
+    public void onChunkUnload(ChunkUnloadEvent event) {
+        // The error "cannot find symbol: method setCancelled(boolean)" is because
+        // this event is not cancellable on Spigot.
+        // We remove the problematic code. The entities will unload with the chunk,
+        // which is correct.
+        /*
+        for (Entity entity : event.getChunk().getEntities()) {
+            Hologram hologram = manager.getHologramByEntity(entity.getUniqueId());
+            if (hologram != null) {
+                // This was the error:
+                // event.setCancelled(true);
+                return;
+            }
+        }
+        */
+    }
+
+    /**
+     * Respawn holograms when their chunk loads if they are missing.
+     */
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent event) {
+        // Iterate over active holograms
+        for (Hologram hologram : manager.getActiveHolograms()) {
+            Location holoLoc = hologram.getBaseLocation();
+            if (holoLoc.getWorld() == null || !holoLoc.getWorld().equals(event.getWorld())) {
+                continue; // Not the right world
+            }
+
+            // Check if the hologram's base location is in the chunk that just loaded
+            if (holoLoc.getBlockX() >> 4 == event.getChunk().getX() &&
+                    holoLoc.getBlockZ() >> 4 == event.getChunk().getZ()) {
+
+                // Hologram is in this chunk. Check if its entities are loaded.
+                // We'll check the first entity.
+                UUID firstEntityUUID = hologram.getAllEntityUUIDs().stream().findFirst().orElse(null);
+                if (firstEntityUUID != null) {
+                    Entity entity = Bukkit.getEntity(firstEntityUUID);
+                    // If the entity is null or invalid, it needs respawning.
+                    if (entity == null || !entity.isValid()) {
+                        // Respawn the entire hologram
+                        // Need to run this on the next tick to ensure chunk is fully loaded
+                        Bukkit.getScheduler().runTask(manager.getModule().getPlugin(), () -> {
+                            manager.respawnHologram(hologram);
+                        });
+                    }
+                }
+            }
+        }
     }
 }

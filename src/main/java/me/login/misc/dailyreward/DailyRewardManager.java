@@ -29,7 +29,6 @@ public class DailyRewardManager {
     private final Map<String, Reward> rankRewards = new LinkedHashMap<>();
 
     // A simple struct-like class for rewards
-    // --- FIX: Made record public ---
     public record Reward(String permission, int coins, int tokens, String prettyName) {}
 
     public DailyRewardManager(Login plugin, DailyRewardDatabase database, DailyRewardLogger logger, Economy economy) {
@@ -42,14 +41,13 @@ public class DailyRewardManager {
         String prefixString = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>:");
         this.serverPrefix = miniMessage.deserialize(prefixString + " ");
 
-        // --- FIX: Re-ordered ranks from lowest to highest for GUI display ---
+        // --- Ranks ---
         rankRewards.put("elite", new Reward("mineaurora.dailyreward.elite", 1750, 2, "<green>Elite</green>"));
         rankRewards.put("ace", new Reward("mineaurora.dailyreward.ace", 2500, 2, "<blue>Ace</blue>"));
         rankRewards.put("overlord", new Reward("mineaurora.dailyreward.overlord", 4000, 4, "<red>Overlord</red>"));
         rankRewards.put("immortal", new Reward("mineaurora.dailyreward.immortal", 5000, 5, "<gold>Immortal</gold>"));
         rankRewards.put("supreme", new Reward("mineaurora.dailyreward.supreme", 6000, 6, "<dark_red>Supreme</dark_red>"));
         rankRewards.put("phantom", new Reward("mineaurora.dailyreward.phantom", 8500, 8, "<dark_purple>Phantom</dark_purple>"));
-        // --- END FIX ---
     }
 
     /**
@@ -73,11 +71,9 @@ public class DailyRewardManager {
         return rankRewards;
     }
 
-    // --- ADDED: Getter for the database ---
     public DailyRewardDatabase getDatabase() {
         return database;
     }
-    // --- END ADD ---
 
     /**
      * Main entry point for claiming a reward (from command or NPC).
@@ -102,34 +98,23 @@ public class DailyRewardManager {
      * @return The Reward object, or null if they have no rank permission.
      */
     public Reward getBestRankReward(Player player) {
-        // This is no longer used by the GUI but can be kept for other purposes
-        // It needs to iterate in reverse (best to worst)
         Reward best = null;
         for (Reward reward : rankRewards.values()) {
             if (player.hasPermission(reward.permission)) {
                 best = reward; // Keep updating to the "last" one in the map
             }
         }
-        return best; // This will be Phantom if they have Phantom
+        return best;
     }
 
     /**
      * Gets the start of the "day" for rewards (24h cooldown).
-     * This is just the last claim time + 24h. A simpler model.
-     * For a "reset at midnight" model, this logic would be different.
      */
     private long getCooldownExpiry(long lastClaim) {
         return lastClaim + COOLDOWN_MS;
     }
 
-    /**
-     * Calculates the timestamp for the start of the *current* reward period.
-     * This is used to check if a claim has *already* been made today.
-     * We'll define a "day" as 24 hours.
-     */
     public long getStartOfCurrentDay() {
-        // This is a simple 24h cooldown, not a "resets at midnight" system.
-        // The "start of the day" is just "now - 24 hours".
         return System.currentTimeMillis() - COOLDOWN_MS;
     }
 
@@ -138,7 +123,7 @@ public class DailyRewardManager {
      * Handles claiming the default (non-ranked) reward.
      */
     public void claimDefaultReward(Player player) {
-        // --- MODIFIED: Check cooldown for "default" rank key ---
+        // Check cooldown for "default" rank key
         database.getLastClaimTime(player.getUniqueId(), "default").thenAccept(lastClaim -> {
             long now = System.currentTimeMillis();
             long expiry = getCooldownExpiry(lastClaim);
@@ -158,15 +143,13 @@ public class DailyRewardManager {
             economy.depositPlayer(player, coins);
             addTokens(player.getUniqueId(), tokens);
 
-            database.setLastClaimTime(player.getUniqueId(), now, "default"); // Use "default" key
+            database.setLastClaimTime(player.getUniqueId(), now, "default");
 
-            // --- FIX: Combine messages ---
-            String message = "<green>You claimed your daily reward!</green><newline>" +
-                    "<gray>+ <white>" + coins + " Coins</white></gray><newline>" +
-                    "<gray>+ <white>" + tokens + " Token</white></gray>";
-            sendMsg(player, message);
+            // --- FIX: Split messages to prevent multiple prefixes ---
+            sendMsg(player, "<green>You claimed your daily reward!</green>");
+            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + coins + " Coins</white></gray>"));
+            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + tokens + " Token</white></gray>"));
             // --- END FIX ---
-            // No Discord log for default users per request
         });
     }
 
@@ -175,7 +158,7 @@ public class DailyRewardManager {
      * @return CompletableFuture<Boolean> true if successful, false if on cooldown.
      */
     public CompletableFuture<Boolean> claimRankedReward(Player player, String rankKey, Reward reward) {
-        // --- MODIFIED: Check cooldown for the specific rankKey ---
+        // Check cooldown for the specific rankKey
         return database.getLastClaimTime(player.getUniqueId(), rankKey).thenApply(lastClaim -> {
             long now = System.currentTimeMillis();
             long expiry = getCooldownExpiry(lastClaim);
@@ -195,13 +178,10 @@ public class DailyRewardManager {
             // Set cooldown
             database.setLastClaimTime(player.getUniqueId(), now, rankKey);
 
-            // --- REMOVED: player.closeInventory(); ---
-
-            // --- FIX: Combine messages ---
-            String message = "<green>You claimed your " + reward.prettyName + " <green>daily reward!</green><newline>" +
-                    "<gray>+ <white>" + reward.coins + " Coins</white></gray><newline>" +
-                    "<gray>+ <white>" + reward.tokens + (reward.tokens > 1 ? " Tokens" : " Token") + "</white></gray>";
-            sendMsg(player, message);
+            // --- FIX: Split messages to prevent multiple prefixes ---
+            sendMsg(player, "<green>You claimed your " + reward.prettyName + " <green>daily reward!</green>");
+            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + reward.coins + " Coins</white></gray>"));
+            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + reward.tokens + (reward.tokens > 1 ? " Tokens" : " Token") + "</white></gray>"));
             // --- END FIX ---
 
             // Log to Discord
@@ -216,13 +196,11 @@ public class DailyRewardManager {
      */
     private void addTokens(UUID uuid, int amount) {
         if (amount <= 0) return;
-
-        // Call the database method
         database.addTokens(uuid, amount);
     }
 
     /**
-     * Formats milliseconds into a human-readable string (e.g., "12h 30m 5s").
+     * Formats milliseconds into a human-readable string.
      */
     public String formatTimeLeft(long millis) {
         if (millis <= 0) {

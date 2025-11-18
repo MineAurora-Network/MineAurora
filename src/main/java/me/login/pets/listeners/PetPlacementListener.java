@@ -13,7 +13,11 @@ public class PetPlacementListener implements Listener {
     private final NamespacedKey fruitKey;
 
     public PetPlacementListener(Login plugin) {
-        this.fruitKey = new NamespacedKey(plugin, "pet_fruit_id");
+        // --- BUG FIX: Hard-coded namespace to match item creation ---
+        // The old key (new NamespacedKey(plugin, "pet_fruit_id"))
+        // might not resolve to "mineaurora" if the plugin name in plugin.yml is different.
+        // This is safer and matches PetManager and PetInteractListener.
+        this.fruitKey = new NamespacedKey("mineaurora", "pet_fruit_id");
     }
 
     @EventHandler

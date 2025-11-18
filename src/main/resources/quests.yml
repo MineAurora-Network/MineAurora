@@ -1,0 +1,151 @@
+# quests.yml
+# This file defines all available quests for the daily quest system.
+#
+# Objective Format:
+# "ACTION" "AMOUNT" "TARGET"
+#
+# Valid Actions:
+# BREAK, MINE: Target must be a valid Material (e.g., OAK_LOG, STONE, DIAMOND_ORE)
+# KILL: Target must be a valid EntityType (e.g., ZOMBIE, SPIDER, PLAYER)
+# PLANT: Target must be the Material of the SEED (e.g., WHEAT_SEEDS, CARROT, POTATO)
+# HARVEST: Target must be the Material of the CROP (e.g., WHEAT, CARROTS, POTATOES)
+#
+# Reward Format:
+# - "AMOUNT" "TYPE"
+#
+# Valid Types:
+# cash, token
+
+easy:
+  - objective: "BREAK 100 OAK_LOG"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "BREAK 100 STONE"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "KILL 50 CHICKEN"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "KILL 20 ZOMBIE"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "KILL 20 SPIDER"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "PLANT 150 WHEAT_SEEDS"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "HARVEST 100 WHEAT"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "HARVEST 100 CARROTS"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "HARVEST 100 POTATOES"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "MINE 5 DIAMOND_ORE"
+    reward:
+      - "1000 cash"
+      - "2 token"
+  - objective: "MINE 20 COAL_ORE"
+    reward:
+      - "1000 cash"
+      - "2 token"
+
+hard:
+  - objective: "BREAK 250 OAK_LOG"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "MINE 250 STONE"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "MINE 15 DIAMOND_ORE"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "MINE 5 ANCIENT_DEBRIS"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "KILL 50 ZOMBIE"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "KILL 50 SPIDER"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "KILL 50 CREEPER"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "HARVEST 250 WHEAT"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "HARVEST 250 CARROTS"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "KILL 7 PLAYER"
+    reward:
+      - "2000 cash"
+      - "3 token"
+  - objective: "MINE 50 COAL_ORE"
+    reward:
+      - "2000 cash"
+      - "3 token"
+
+extreme:
+  - objective: "BREAK 500 OAK_LOG"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "MINE 500 STONE"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "MINE 125 COAL_ORE"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "MINE 45 DIAMOND_ORE"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "MINE 15 ANCIENT_DEBRIS"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "KILL 100 ZOMBIE"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "KILL 15 PLAYER"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "KILL 100 SPIDER"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "KILL 100 CREEPER"
+    reward:
+      - "3500 cash"
+      - "5 token"
+  - objective: "HARVEST 500 WHEAT"
+    reward:
+      - "3500 cash"
+      - "5 token"

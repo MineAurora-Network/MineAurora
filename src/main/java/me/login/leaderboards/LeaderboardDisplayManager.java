@@ -125,6 +125,24 @@ public class LeaderboardDisplayManager {
         }
         String type = info.type(); // Get type from the info object
 
+        // --- CHUNK-LOADING CHECK ---
+        Location leaderboardLoc = info.getLocation();
+
+        if (leaderboardLoc == null) {
+            // This can happen if the world is just not loaded at all
+            plugin.getLogger().warning("Cannot update leaderboard " + type + ": World '" + info.worldName() + "' is not loaded.");
+            return; // Skip update cycle, will try again later
+        }
+
+        if (!leaderboardLoc.isWorldLoaded() || !leaderboardLoc.getChunk().isLoaded()) {
+            // The chunk is not loaded. This is NORMAL.
+            // Do not try to get the entity, and DO NOT respawn it.
+            // Just skip this update cycle. It will try again in 60s.
+            return;
+        }
+        // --- END CHUNK-LOADING CHECK ---
+
+
         Entity currentEntity = Bukkit.getEntity(uuid);
         TextDisplay textDisplay;
 
@@ -133,11 +151,8 @@ public class LeaderboardDisplayManager {
             plugin.getLogger().info("Leaderboard " + type + " (UUID: " + uuid + ") not found or invalid. Respawning...");
 
             // Use the info object to get the location FROM the YML data
-            Location respawnLoc = info.getLocation();
-            if (respawnLoc == null) {
-                plugin.getLogger().warning("Cannot respawn leaderboard " + type + ": World '" + info.worldName() + "' is not loaded.");
-                return; // Skip update cycle, will try again later
-            }
+            // We already have the location from our check above
+            Location respawnLoc = leaderboardLoc;
 
             TextDisplay newDisplay = spawnNewDisplay(respawnLoc, type);
             if (newDisplay == null) {

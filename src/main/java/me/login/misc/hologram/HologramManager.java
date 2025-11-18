@@ -143,6 +143,15 @@ public class HologramManager {
         return activeHolograms.get(name);
     }
 
+    /**
+     * Gets all currently active holograms.
+     * Required by HologramListener to check for respawns on chunk load.
+     * @return A collection of active holograms.
+     */
+    public Collection<Hologram> getActiveHolograms() {
+        return activeHolograms.values();
+    }
+
     public Collection<String> getHologramNames() {
         ConfigurationSection config = module.getPlugin().getConfig().getConfigurationSection("hologram");
         if (config == null) {
@@ -160,6 +169,15 @@ public class HologramManager {
         module.getPlugin().getLogger().info("Respawning hologram: " + hologram.getName());
         hologram.spawn(getHologramLines(hologram.getName(), 1)); // Respawn with page 1
         hologram.getAllEntityUUIDs().forEach(uuid -> entityToHologramMap.put(uuid, hologram));
+    }
+
+    /**
+     * Gets the parent HologramModule.
+     * Required by HologramListener to schedule tasks.
+     * @return The HologramModule instance.
+     */
+    public HologramModule getModule() {
+        return module;
     }
 
     //

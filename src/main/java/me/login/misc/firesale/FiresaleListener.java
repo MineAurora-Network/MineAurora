@@ -262,6 +262,7 @@ public class FiresaleListener implements Listener {
             Inventory top = player.getOpenInventory().getTopInventory();
 
             if (top == null || top.getType() != InventoryType.CHEST) {
+                // --- FIX: Corrected typo from METADTATA_KEY to METADATA_KEY ---
                 player.removeMetadata(METADATA_KEY, plugin);
             }
         });

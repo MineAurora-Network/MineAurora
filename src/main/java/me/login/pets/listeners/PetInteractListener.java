@@ -110,7 +110,9 @@ public class PetInteractListener implements Listener {
             // --- FIXED: Call method with (Player, Entity) ---
             petManager.getTargetSelection().setPetTarget(player, livingEntity);
             messageHandler.sendPlayerActionBar(player, "<light_purple>Pet targeting " + livingEntity.getType().name() + "!</light_purple>");
-            itemInHand.setAmount(itemInHand.getAmount() - 1); // Consume shard
+
+            // --- BUG FIX: Removed line below to prevent shard from being consumed ---
+            // itemInHand.setAmount(itemInHand.getAmount() - 1); // Consume shard
             return;
         }
     }

@@ -1,5 +1,4 @@
 package me.login;
-
 import me.login.discord.store.TicketModule;
 import me.login.discord.linking.*;
 import me.login.discord.moderation.DiscordModConfig;
@@ -11,11 +10,13 @@ import me.login.misc.dailyreward.DailyRewardModule;
 import me.login.misc.firesale.FiresaleModule;
 import me.login.misc.playtimerewards.PlaytimeRewardModule;
 import me.login.misc.tab.TabManager;
+import me.login.misc.tokens.TokenManager; // Import TokenManager
 import me.login.misc.tokens.TokenModule;
 import me.login.misc.creatorcode.CreatorCodeModule;
 import me.login.misc.rank.RankManager;
 import me.login.misc.rank.RankModule;
-import me.login.moderation.commands.AdminCommandsModule; // --- ADMINCMDS: ADDED ---
+import me.login.misc.dailyquests.QuestsModule;
+import me.login.moderation.commands.AdminCommandsModule;
 import me.login.ordersystem.OrderModule;
 import me.login.ordersystem.gui.OrderAlertMenu;
 import me.login.ordersystem.gui.OrderMenu;
@@ -44,7 +45,6 @@ import org.bukkit.scheduler.BukkitRunnable;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import me.login.leaderboards.LeaderboardModule;
-
 import java.io.File;
 import java.util.Map;
 import java.util.UUID;
@@ -61,11 +61,11 @@ import me.login.lifesteal.ItemManager;
 import me.login.lifesteal.LifestealManager;
 import me.login.lifesteal.DeadPlayerManager;
 import me.login.items.CustomArmorModule;
-
 import net.luckperms.api.LuckPerms;
-
 public class Login extends JavaPlugin implements Listener {
-    private HologramModule hologramModule; // <-- ADD THIS
+    private me.login.misc.hub.HubHeadModule hubHeadModule;
+    private QuestsModule questsModule;
+    private HologramModule hologramModule;
     private DiscordLinkDatabase discordLinkDatabase;
     private DiscordLinkingModule discordLinkingModule;
     private LoginSystem loginSystem;
@@ -73,11 +73,11 @@ public class Login extends JavaPlugin implements Listener {
     private LoginSystemLogger loginSystemLogger;
     private GenModule genModule;
     private OrderModule orderModule;
-    private CustomArmorModule customArmorModule; // Add this field
+    private CustomArmorModule customArmorModule;
     private DamageIndicator damageIndicator;
     private RTPLogger rtpLogger;
     private int defaultOrderLimit;
-    private RTPModule rtpModule; // <-- DECLARED AS FIELD
+    private RTPModule rtpModule;
     private ScoreboardManager scoreboardManager;
     private Economy vaultEconomy = null;
     private LeaderboardModule leaderboardModule;
@@ -95,45 +95,35 @@ public class Login extends JavaPlugin implements Listener {
     private DailyRewardDatabase dailyRewardDatabase;
     private PlaytimeRewardModule playtimeRewardModule;
     private TokenModule tokenModule;
+    private TokenManager tokenManager; // <-- FIELD ADDED
     private CreatorCodeModule creatorCodeModule;
     private RankModule rankModule;
     private TicketModule ticketModule;
     private FiresaleModule firesaleModule;
     private TabManager tabManager;
-    private AdminCommandsModule adminCommandsModule; // --- ADMINCMDS: ADDED ---
-    private PetsModule petsModule; // --- PETS: ADDED ---
-    private PetsLogger petsLogger; // --- PETS: ADDED ---
-
+    private AdminCommandsModule adminCommandsModule;
+    private PetsModule petsModule;
+    private PetsLogger petsLogger;
     private MiniMessage miniMessage;
     private String serverPrefix;
-
-    // --- ADDED for items.yml ---
     private File itemsFile;
     private FileConfiguration itemsConfig;
-    // --- END ADD ---
-
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        // --- MODIFIED: Load items.yml ---
         itemsFile = new File(getDataFolder(), "items.yml");
         if (!itemsFile.exists()) {
             saveResource("items.yml", false);
         }
         itemsConfig = YamlConfiguration.loadConfiguration(itemsFile);
-        // --- END MODIFIED ---
-
         this.miniMessage = MiniMessage.miniMessage();
         this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
-
         this.discordModConfig = new DiscordModConfig(this);
         this.defaultOrderLimit = getConfig().getInt("order-system.default-order-limit", 3);
-
         if (!setupEconomy()) {
             disableWithError("Vault dependency not found or no Economy plugin detected! Coinflip and Order systems require Vault.");
             return;
         }
-
         if (getServer().getPluginManager().getPlugin("LuckPerms") != null) {
             RegisteredServiceProvider<LuckPerms> provider = Bukkit.getServicesManager().getRegistration(LuckPerms.class);
             if (provider != null) {
@@ -144,45 +134,38 @@ public class Login extends JavaPlugin implements Listener {
             getLogger().warning("LuckPerms not found! /sethearts rank check will not work.");
             this.luckPermsApi = null;
         }
-
         this.loginDatabase = new LoginDatabase(this);
         loginDatabase.connect();
         if (loginDatabase.getConnection() == null) {
             disableWithError("Login DB failed.");
             return;
         }
-
         this.coinflipModule = new CoinflipModule(this);
         if (!coinflipModule.initDatabase()) {
             disableWithError("Coinflip DB failed.");
             return;
         }
-
         this.dailyRewardDatabase = new DailyRewardDatabase(this);
         dailyRewardDatabase.connect();
         dailyRewardDatabase.createTables();
-
         this.moderationDatabase = new ModerationDatabase(this);
-
         this.damageIndicator = new DamageIndicator(this);
         getServer().getPluginManager().registerEvents(damageIndicator, this);
-
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
-
         this.leaderboardModule = new LeaderboardModule(this);
         if (!this.leaderboardModule.init()) {
             getLogger().severe("Failed to initialize Leaderboard Module!");
         }
-
         this.lagClearModule = new LagClearModule(this);
         if (!this.lagClearModule.init()) {
             getLogger().severe("Failed to initialize LagClear Module!");
         }
 
+        // QuestsModule is initialized here, but ENABLED inside the runnable
+        this.questsModule = new QuestsModule(this, this.lagClearModule);
+
         getServer().getPluginManager().registerEvents(this, this);
-
         this.scoreboardManager = new ScoreboardManager(this);
-
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") == null) {
             getLogger().warning("PlaceholderAPI not found! Scoreboard placeholders will not work.");
         }
@@ -191,7 +174,8 @@ public class Login extends JavaPlugin implements Listener {
         }
         rtpLogger = new RTPLogger(this);
         try {
-            new RTPModule(this, rtpLogger).enable(); // <-- ADD THIS
+            this.rtpModule = new RTPModule(this, rtpLogger);
+            this.rtpModule.enable();
         } catch (Exception e) {
             getLogger().severe("Failed to enable RTP Module!");
             e.printStackTrace();
@@ -200,43 +184,39 @@ public class Login extends JavaPlugin implements Listener {
             if (rtpModule == null) {
                 getLogger().severe("RTP Module failed to load, Hologram Module will be disabled.");
             } else {
-                // This will now work because rtpModule is a field and has been initialized
                 hologramModule = new HologramModule(this, rtpModule);
                 hologramModule.enable();
             }
-            // --- END OF FIX ---
         } catch (Exception e) {
             getLogger().severe("Failed to enable Hologram Module!");
             e.printStackTrace();
         }
+
+        getLogger().info("Initializing Hub Heads...");
+        hubHeadModule = new me.login.misc.hub.HubHeadModule(this);
+        hubHeadModule.enable();
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!isEnabled() || Bukkit.isStopping()) {
                 getLogger().warning("Plugin disabled before Discord startup. Skipping bot init.");
                 return;
             }
-
             this.lagClearLogger = new LagClearLogger(this);
             getLogger().info("LagClear Logger initialization requested...");
-
             getLogger().info("Initializing CustomArmorModule...");
             customArmorModule = new CustomArmorModule(this);
             customArmorModule.enable();
-
             new BukkitRunnable() {
                 int attempts = 0;
                 final int maxAttempts = 10;
-
                 @Override
                 public void run() {
                     if (!isEnabled()) {
                         this.cancel();
                         return;
                     }
-
                     if (lagClearLogger != null && lagClearLogger.getJDA() != null && lagClearLogger.getJDA().getStatus() == JDA.Status.CONNECTED) {
                         getLogger().info("LagClear Logger JDA is now connected. Initializing JDA-dependent modules...");
-
                         getLogger().info("Initializing RankModule...");
                         if (luckPermsApi == null) {
                             getLogger().severe("LuckPerms API not found! RankModule will be disabled.");
@@ -248,7 +228,6 @@ public class Login extends JavaPlugin implements Listener {
                                 rankModule = null;
                             }
                         }
-
                         getLogger().info("Initializing DiscordLinkingModule...");
                         discordLinkingModule = new DiscordLinkingModule(Login.this);
                         RankManager rankManager = (rankModule != null) ? rankModule.getManager() : null;
@@ -259,94 +238,79 @@ public class Login extends JavaPlugin implements Listener {
                             return;
                         }
                         Login.this.discordLinkDatabase = discordLinkingModule.getDiscordLinkDatabase();
-
                         getLogger().info("Initializing LoginSystemLogger...");
                         loginSystemLogger = new LoginSystemLogger(discordLinkingModule.getDiscordCommandLogger());
-
                         getLogger().info("Initializing LoginSystem...");
                         loginSystem = new LoginSystem(Login.this, loginDatabase, discordLinkDatabase, loginSystemLogger);
                         getServer().getPluginManager().registerEvents(loginSystem, Login.this);
-
                         getLogger().info("Registering commands...");
                         registerCommands();
-
                         getLogger().info("Initializing LifestealLogger...");
                         lifestealLogger = new LifestealLogger(Login.this, lagClearLogger.getJDA());
-
                         getLogger().info("Initializing LifestealModule...");
                         lifestealModule = new LifestealModule(Login.this, luckPermsApi, lifestealLogger);
                         if (!lifestealModule.init()) {
                             getLogger().severe("Failed to initialize Lifesteal Module!");
                         }
-
                         getLogger().info("Initializing OrderModule...");
                         orderModule = new OrderModule(Login.this);
                         orderModule.enable();
-
                         getLogger().info("Initializing Coinflip system...");
                         coinflipModule.initLogicAndListeners();
-
                         getLogger().info("Initializing DailyRewardModule...");
                         dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
                         if (!dailyRewardModule.init()) {
                             getLogger().severe("Failed to initialize DailyReward Module!");
                         }
-
                         getLogger().info("Initializing PlaytimeRewardModule...");
                         playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
                         if (!playtimeRewardModule.init()) {
                             getLogger().severe("Failed to initialize PlaytimeReward Module!");
                         }
-
                         getLogger().info("Initializing TokenModule...");
                         tokenModule = new TokenModule(Login.this, luckPermsApi, dailyRewardDatabase);
                         if (!tokenModule.init()) {
                             getLogger().severe("Failed to initialize Token Module!");
                         }
+                        tokenManager = tokenModule.getTokenManager(); // <-- INITIALIZE FIELD
+
+                        getLogger().info("Initializing QuestsModule..."); // <-- ENABLE QUESTS MODULE
+                        questsModule.enable();
 
                         getLogger().info("Initializing GenModule...");
                         genModule = new GenModule(Login.this, lagClearLogger);
                         genModule.init();
-
                         getLogger().info("Initializing CreatorCodeModule...");
                         creatorCodeModule = new CreatorCodeModule(Login.this);
                         if (!creatorCodeModule.init(lagClearLogger)) {
                             getLogger().severe("Failed to initialize Creator Code Module!");
                         }
-
-                        // --- PETS: ADDED ---
+                        // --- PETS ---
                         getLogger().info("Initializing PetsLogger...");
                         petsLogger = new PetsLogger(Login.this);
-
                         getLogger().info("Initializing PetsModule...");
                         petsModule = new PetsModule(Login.this);
                         if (!petsModule.init(petsLogger)) {
                             getLogger().severe("Failed to initialize Pets Module!");
                         }
-                        // --- PETS: END ADD ---
-
+                        // --- PETS: END ---
                         getLogger().info("Initializing TicketModule...");
                         ticketModule = new TicketModule(Login.this, discordLinkingModule.getDiscordLinking(), rankManager);
                         ticketModule.init();
-
                         getLogger().info("Initializing FiresaleModule...");
                         firesaleModule = new FiresaleModule(Login.this);
                         firesaleModule.init();
-
                         getLogger().info("Initializing TabManager...");
                         tabManager = new TabManager(Login.this);
                         tabManager.startUpdater();
-
-                        // --- ADMINCMDS: ADDED ---
+                        // --- ADMINCMDS ---
                         getLogger().info("Initializing AdminCommandsModule...");
                         adminCommandsModule = new AdminCommandsModule(Login.this);
                         adminCommandsModule.enable();
-                        // --- ADMINCMDS: END ADD ---
-
+                        // --- ADMINCMDS: END ---
                         this.cancel();
                         return;
                     }
-
                     attempts++;
                     if (attempts >= maxAttempts) {
                         getLogger().severe("LagClear Logger JDA did not connect after 10 seconds.");
@@ -355,31 +319,25 @@ public class Login extends JavaPlugin implements Listener {
                     }
                 }
             }.runTaskTimer(Login.this, 20L, 20L);
-
         }, 20L);
-
         getLogger().info(getName() + " v" + getDescription().getVersion() + " Enabled Successfully!");
     }
-
-    // --- ADDED: Methods for items.yml ---
+    // --- Methods for items.yml ---
     public void reloadItems() {
         if (itemsFile == null) {
             itemsFile = new File(getDataFolder(), "items.yml");
         }
         itemsConfig = YamlConfiguration.loadConfiguration(itemsFile);
-
         if (petsModule != null && petsModule.getPetsConfig() != null) {
             petsModule.getPetsConfig().reloadItemsConfig();
         }
     }
-
     public FileConfiguration getItems() {
         if (itemsConfig == null) {
             reloadItems();
         }
         return itemsConfig;
     }
-
     private boolean setupEconomy() {
         if (getServer().getPluginManager().getPlugin("Vault") == null) {
             getLogger().severe("Vault plugin not found! Required for Orders and Coinflip.");
@@ -394,49 +352,39 @@ public class Login extends JavaPlugin implements Listener {
         getLogger().info("Hooked Vault Economy: " + vaultEconomy.getName());
         return vaultEconomy != null;
     }
-
     private void disableWithError(String message) {
         getLogger().severe(message + " Disabling plugin.");
         getServer().getPluginManager().disablePlugin(this);
     }
-
     private void registerCommands() {
         if (loginSystem == null || moderationDatabase == null) {
             getLogger().severe("Cannot register Bukkit commands - one or more core systems (Login, Mod) failed initialization!");
             return;
         }
-
         LoginSystemCmd loginCmd = new LoginSystemCmd(this, loginSystem, loginDatabase, discordLinkDatabase, loginSystemLogger);
         LoginSystemAdminCmd adminLoginCmd = new LoginSystemAdminCmd(this, loginSystem, loginDatabase, discordLinkDatabase, loginSystemLogger);
-
         setCommandExecutor("register", loginCmd);
         setCommandExecutor("login", loginCmd);
         setCommandExecutor("changepassword", loginCmd);
-
         setCommandExecutor("unregister", adminLoginCmd);
         setCommandExecutor("loginhistory", adminLoginCmd);
         setCommandExecutor("checkalt", adminLoginCmd);
         setCommandExecutor("adminchangepass", adminLoginCmd);
-
         MuteCommand muteExecutor = new MuteCommand(this, moderationDatabase);
         setCommandExecutor("mute", muteExecutor);
         setCommandExecutor("muteinfo", muteExecutor);
         setCommandExecutor("unmute", muteExecutor);
-
         BanCommand banExecutor = new BanCommand(this, moderationDatabase);
         setCommandExecutor("ban", banExecutor);
         setCommandExecutor("ipban", banExecutor);
         setCommandExecutor("baninfo", banExecutor);
         setCommandExecutor("unban", banExecutor);
         setCommandExecutor("unbanip", banExecutor);
-
         CheckInvCommand checkInvExecutor = new CheckInvCommand(this);
         setCommandExecutor("checkinv", checkInvExecutor);
         setCommandExecutor("admincheckinv", checkInvExecutor);
-
         setCommandExecutor("scoreboard", this);
     }
-
     private void setCommandExecutor(String commandName, org.bukkit.command.CommandExecutor executor) {
         org.bukkit.command.PluginCommand command = getCommand(commandName);
         if (command != null) {
@@ -445,7 +393,6 @@ public class Login extends JavaPlugin implements Listener {
             getLogger().severe("Failed register command '" + commandName + "'! In plugin.yml?");
         }
     }
-
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (command.getName().equalsIgnoreCase("scoreboard")) {
@@ -455,16 +402,13 @@ public class Login extends JavaPlugin implements Listener {
                     return true;
                 }
                 this.reloadConfig();
-                // --- ADDED: Reload items.yml on /sb reload ---
+                // --- Reload items.yml on /sb reload ---
                 this.reloadItems();
-                // --- END ADD ---
-
+                // --- END ---
                 this.serverPrefix = getConfig().getString("server-prefix", "<gray>[<gold>Server</gold>]<reset> ");
-
                 if (tabManager != null) {
                     tabManager.loadConfig();
                 }
-
                 if (scoreboardManager != null) {
                     scoreboardManager.loadConfig();
                     Bukkit.getOnlinePlayers().forEach(scoreboardManager::updateScoreboard);
@@ -477,12 +421,10 @@ public class Login extends JavaPlugin implements Listener {
         }
         return false;
     }
-
     @Override
     public void onDisable() {
         try {
             getLogger().info("Shutting down " + getName() + "...");
-
             if (scoreboardManager != null) {
                 if (Bukkit.getOnlinePlayers() != null && !Bukkit.getOnlinePlayers().isEmpty()) {
                     for (Player player : Bukkit.getOnlinePlayers()) {
@@ -496,7 +438,6 @@ public class Login extends JavaPlugin implements Listener {
                     }
                 }
             }
-
             if (leaderboardModule != null) {
                 leaderboardModule.shutdown();
             }
@@ -527,46 +468,46 @@ public class Login extends JavaPlugin implements Listener {
             if (ticketModule != null) {
                 ticketModule.shutdown();
             }
-
             if (petsModule != null) {
                 petsModule.shutdown();
             }
-
             if (firesaleModule != null) {
                 firesaleModule.disable();
             }
-
             if (tabManager != null) {
                 tabManager.stopUpdater();
             }
-
-            // --- ADMINCMDS: ADDED ---
+            // --- ADMINCMDS ---
             if (adminCommandsModule != null) {
                 adminCommandsModule.disable();
             }
-            // --- ADMINCMDS: END ADD ---
-
+            // --- ADMINCMDS: END ---
             if (orderModule != null) {
                 orderModule.disable();
             }
-
             if (discordLinkingModule != null) {
                 discordLinkingModule.shutdown();
             }
-            if (loginDatabase != null) loginDatabase.disconnect();
 
+            if (questsModule != null) { // <-- DISABLE QUESTS MODULE
+                questsModule.disable();
+            }
+
+            if (hubHeadModule != null) {
+                hubHeadModule.disable();
+            }
+
+            if (loginDatabase != null) loginDatabase.disconnect();
             if (coinflipModule != null && coinflipModule.getDatabase() != null) {
                 coinflipModule.getDatabase().disconnect();
             }
             if (moderationDatabase != null) moderationDatabase.closeConnection();
-
             if (lagClearLogger != null) {
                 lagClearLogger.shutdown();
             }
             if (hologramModule != null) {
-                hologramModule.disable(); // <-- ADD THIS
+                hologramModule.disable();
             }
-
             try {
                 Class<?> taskRunner = Class.forName("okhttp3.internal.concurrent.TaskRunner");
                 Object instance = taskRunner.getDeclaredField("INSTANCE").get(null);
@@ -574,28 +515,24 @@ public class Login extends JavaPlugin implements Listener {
                 getLogger().info("OkHttp TaskRunner shut down.");
             } catch (Throwable ignored) {
             }
-
             getLogger().info(getName() + " disabled cleanly.");
         } catch (Throwable e) {
             getLogger().severe("Error during onDisable: " + e.getMessage());
             e.printStackTrace();
         }
     }
-
     public OrderMenu getOrderMenu() {
         if (this.orderModule == null) {
             return null;
         }
         return this.orderModule.getOrderMenu();
     }
-
     public DiscordLinkDatabase getDatabase() {
         return discordLinkDatabase;
     }
     public LoginDatabase getLoginDatabase() {
         return loginDatabase;
     }
-
     public DiscordLinking getDiscordLinking() {
         return (discordLinkingModule != null) ? discordLinkingModule.getDiscordLinking() : null;
     }
@@ -605,15 +542,12 @@ public class Login extends JavaPlugin implements Listener {
     public LoginSystemLogger getLoginSystemLogger() {
         return loginSystemLogger;
     }
-
     public Login getPlugin() {
         return this;
     }
-
     public OrderAlertMenu getOrderAlertMenu() {
         return (orderModule != null) ? orderModule.getOrderAlertMenu() : null;
     }
-
     public int getDefaultOrderLimit() {
         return defaultOrderLimit;
     }
@@ -683,12 +617,20 @@ public class Login extends JavaPlugin implements Listener {
     public RankManager getRankManager() {
         return (rankModule != null) ? rankModule.getManager() : null;
     }
-
-    // --- PETS: ADDED ---
+    // --- PETS ---
     public PetsModule getPetsModule() {
         return petsModule;
     }
-    // --- PETS: END ADD ---
+    // --- PETS: END ---
+
+    // --- TOKEN MANAGER GETTER ---
+    public TokenManager getTokenManager() {
+        if (this.tokenManager == null && this.tokenModule != null) {
+            this.tokenManager = this.tokenModule.getTokenManager();
+        }
+        return this.tokenManager;
+    }
+    // --- END GETTER ---
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
@@ -696,7 +638,6 @@ public class Login extends JavaPlugin implements Listener {
             scoreboardManager.updateScoreboard(event.getPlayer());
         }
     }
-
     public void sendStaffLog(String message) {
         if (loginSystemLogger != null) {
             loginSystemLogger.log(message);
@@ -708,15 +649,12 @@ public class Login extends JavaPlugin implements Listener {
             getLogger().info("[StaffLog] " + message);
         }
     }
-
     public JDA getJda() {
         return (lagClearLogger != null) ? lagClearLogger.getJDA() : null;
     }
-
     public MiniMessage getComponentSerializer() {
         return miniMessage;
     }
-
     public String getServerPrefix() {
         return serverPrefix;
     }

@@ -19,19 +19,20 @@ public class PetsModule {
     private PetsLogger petsLogger;
     private PetCommand petCommand;
 
-    // --- NEW: Pet Item Manager ---
     private PetItemManager petItemManager;
 
     // Listeners
     private PetDataListener petDataListener;
     private PetGuiListener petGuiListener;
 
-    // --- NEW Listeners ---
     private PetInteractListener petInteractListener;
     private PetCombatListener petCombatListener;
     private PetProtectionListener petProtectionListener;
     private PetInventoryListener petInventoryListener;
     private PetPlacementListener petPlacementListener;
+
+    // --- NEW LISTENER ---
+    private PetHelmetGuiListener petHelmetGuiListener;
 
 
     public PetsModule(Login plugin) {
@@ -61,7 +62,7 @@ public class PetsModule {
             return false;
         }
 
-        // --- NEW: 4. Pet Item Manager (must be before PetManager) ---
+        // 4. Pet Item Manager
         this.petItemManager = new PetItemManager(plugin);
 
         // 5. Core Manager
@@ -71,12 +72,14 @@ public class PetsModule {
         this.petDataListener = new PetDataListener(petManager, petsDatabase);
         this.petGuiListener = new PetGuiListener(petManager, messageHandler);
 
-        // --- NEW Listeners Initialized ---
         this.petInventoryListener = new PetInventoryListener(plugin, petManager, petsConfig);
         this.petInteractListener = new PetInteractListener(petManager, messageHandler, petInventoryListener);
         this.petCombatListener = new PetCombatListener(petManager, petsConfig, messageHandler);
         this.petProtectionListener = new PetProtectionListener(petManager);
         this.petPlacementListener = new PetPlacementListener(plugin);
+
+        // --- NEW LISTENER INITIALIZED ---
+        this.petHelmetGuiListener = new PetHelmetGuiListener(petManager);
 
 
         // 7. Commands
@@ -85,15 +88,15 @@ public class PetsModule {
         // 8. Register
         plugin.getServer().getPluginManager().registerEvents(petDataListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petGuiListener, plugin);
-
-        // --- NEW Listeners Registered ---
         plugin.getServer().getPluginManager().registerEvents(petInteractListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petCombatListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petProtectionListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petInventoryListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petPlacementListener, plugin);
 
-        // Note: CaptureListener is removed, its logic is now in PetInteractListener
+        // --- NEW LISTENER REGISTERED ---
+        plugin.getServer().getPluginManager().registerEvents(petHelmetGuiListener, plugin);
+
 
         plugin.getCommand("pet").setExecutor(petCommand);
         plugin.getCommand("pet").setTabCompleter(petCommand);
@@ -129,7 +132,6 @@ public class PetsModule {
         return petsLogger;
     }
 
-    // --- NEW Getter ---
     public PetItemManager getPetItemManager() {
         return petItemManager;
     }

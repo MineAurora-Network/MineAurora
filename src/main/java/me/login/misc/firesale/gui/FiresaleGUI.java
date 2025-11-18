@@ -143,19 +143,20 @@ public class FiresaleGUI {
         }
         // --- END FIX ---
 
-        newLore.add(Component.text(""));
-        newLore.add(miniMessage.deserialize("<gray>--------------------"));
-        newLore.add(miniMessage.deserialize("<white>Price: <gold><price> Credits", Placeholder.component("price", Component.text(sale.getPrice()))));
-        newLore.add(miniMessage.deserialize("<white>Stock: <yellow><stock>", Placeholder.component("stock", Component.text(sale.getRemainingQuantity()))));
-        newLore.add(miniMessage.deserialize("<white>Time Left: <aqua><time>", Placeholder.component("time", Component.text(manager.formatDuration(sale.getTimeRemainingMillis())))));
-        newLore.add(Component.text(""));
-        newLore.add(miniMessage.deserialize("<green><bold>CLICK TO BUY</bold>"));
-        newLore.add(miniMessage.deserialize("<gray>--------------------"));
+        newLore.add(Component.text("").decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<gray>--------------------").decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<white>Price: <gold><price> Credits", Placeholder.component("price", Component.text(sale.getPrice()))).decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<white>Stock: <yellow><stock>", Placeholder.component("stock", Component.text(sale.getRemainingQuantity()))).decoration(TextDecoration.ITALIC, false));
+        // --- FIX: Corrected parenthesis error. .decoration() is now INSIDE the .add() call ---
+        newLore.add(miniMessage.deserialize("<white>Time Left: <aqua><time>", Placeholder.component("time", Component.text(manager.formatDuration(sale.getTimeRemainingMillis())))).decoration(TextDecoration.ITALIC, false));
+        newLore.add(Component.text("").decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<green><bold>CLICK TO BUY</bold>").decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<gray>--------------------").decoration(TextDecoration.ITALIC, false));
 
         // --- NEW FEATURE: Add preview lore if item has dye_hex NBT ---
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
         if (pdc.has(NBT_DYE_HEX_KEY, PersistentDataType.STRING)) {
-            newLore.add(Component.text(""));
+            newLore.add(Component.text("").decoration(TextDecoration.ITALIC, false));
             newLore.add(miniMessage.deserialize("<gray>Shift + Right-click to preview</gray>").decoration(TextDecoration.ITALIC, false));
         }
         // --- END NEW FEATURE ---
@@ -225,19 +226,19 @@ public class FiresaleGUI {
         String statusColor = sale.getStatus() == SaleStatus.COMPLETED ? "<green>" :
                 sale.getStatus() == SaleStatus.EXPIRED ? "<gray>" : "<red>";
 
-        newLore.add(Component.text(""));
-        newLore.add(miniMessage.deserialize("<gray>--------------------"));
-        newLore.add(miniMessage.deserialize("<white>Sale ID: <yellow>" + sale.getSaleId()));
-        newLore.add(miniMessage.deserialize(statusColor + "Status: " + sale.getStatus().toString()));
-        newLore.add(Component.text(""));
+        newLore.add(Component.text("").decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<gray>--------------------").decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<white>Sale ID: <yellow>" + sale.getSaleId()).decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize(statusColor + "Status: " + sale.getStatus().toString()).decoration(TextDecoration.ITALIC, false));
+        newLore.add(Component.text("").decoration(TextDecoration.ITALIC, false));
         newLore.add(miniMessage.deserialize("<white>Sold: <yellow><sold>/<total>",
                 Placeholder.component("sold", Component.text(sale.getTotalSold())),
-                Placeholder.component("total", Component.text(sale.getInitialQuantity()))));
-        newLore.add(miniMessage.deserialize("<white>Price: <gold>" + sale.getPrice() + " Credits"));
-        newLore.add(miniMessage.deserialize("<white>Created by: <aqua>" + sale.getCreatorName()));
-        newLore.add(miniMessage.deserialize("<white>Started: <gray>" + DATE_FORMATTER.format(sale.getStartTime())));
-        newLore.add(miniMessage.deserialize("<white>Ended: <gray>" + DATE_FORMATTER.format(sale.getEndTime())));
-        newLore.add(miniMessage.deserialize("<gray>--------------------"));
+                Placeholder.component("total", Component.text(sale.getInitialQuantity()))).decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<white>Price: <gold>" + sale.getPrice() + " Credits").decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<white>Created by: <aqua>" + sale.getCreatorName()).decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<white>Started: <gray>" + DATE_FORMATTER.format(sale.getStartTime())).decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<white>Ended: <gray>" + DATE_FORMATTER.format(sale.getEndTime())).decoration(TextDecoration.ITALIC, false));
+        newLore.add(miniMessage.deserialize("<gray>--------------------").decoration(TextDecoration.ITALIC, false));
 
         meta.lore(newLore);
         item.setItemMeta(meta);

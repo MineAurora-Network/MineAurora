@@ -10,7 +10,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent; // This is the event being used
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -60,7 +60,8 @@ public class PetGuiListener implements Listener {
             EntityType type = EntityType.valueOf(meta.getPersistentDataContainer().get(PetMenu.PET_TYPE_KEY, PersistentDataType.STRING));
             selectedPet.put(p.getUniqueId(), type);
             p.playSound(p.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 1, 1);
-            messageHandler.sendPlayerActionBar(p, "<green>Selected " + type.name() + ".</green>");
+            // --- FIXED: Added explicit message on selection ---
+            messageHandler.sendPlayerMessage(p, "<green>You selected " + type.name() + ".</green>");
             return;
         }
 
@@ -74,8 +75,13 @@ public class PetGuiListener implements Listener {
                 messageHandler.sendPlayerMessage(p, "<red>Select a pet first!</red>");
                 return;
             }
-            petManager.summonPet(p, type);
+
+            // --- BUG FIX: Close inventory BEFORE summoning ---
+            // This prevents the "Vanishing Menu" bug where the Helmet Menu (opened by summonPet)
+            // would be immediately closed by a subsequent p.closeInventory() call.
             p.closeInventory();
+
+            petManager.summonPet(p, type);
         }
 
         // Despawn
@@ -122,8 +128,6 @@ public class PetGuiListener implements Listener {
 
         event.setCancelled(true);
         EntityType petType = renamingPet.remove(p.getUniqueId());
-
-        // --- FIXED: Use event.getMessage() for AsyncPlayerChatEvent ---
         String newName = event.getMessage();
 
         if (newName.equalsIgnoreCase("cancel")) {
@@ -139,9 +143,7 @@ public class PetGuiListener implements Listener {
 
         Pet pet = petManager.getPet(p.getUniqueId(), petType);
         if (pet != null) {
-            // Run on main thread
             p.getServer().getScheduler().runTask(petManager.getPlugin(), () -> {
-                String oldName = pet.getDisplayName();
                 petManager.updatePetName(p.getUniqueId(), petType, newName);
                 messageHandler.sendPlayerMessage(p, "<green>Your " + pet.getDefaultName() + " has been renamed to " + newName + "!</green>");
             });

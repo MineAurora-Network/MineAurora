@@ -8,8 +8,14 @@ import net.citizensnpcs.api.npc.NPC;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Color;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
+import org.bukkit.World;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.time.ZoneId;
@@ -20,36 +26,62 @@ import java.util.List;
 public class FiresaleHologramUpdater extends BukkitRunnable {
 
     private final FiresaleManager firesaleManager;
-    @SuppressWarnings("unused")
     private final Login plugin;
     private final NPC npc;
-    private final MiniMessage miniMessage; // Added for component parsing
+    private final MiniMessage miniMessage;
     private String lastText = "";
     private final DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MMM dd HH:mm").withZone(ZoneId.systemDefault());
 
     // List to manage hologram lines
     private final List<TextDisplay> hologramLines = new ArrayList<>();
+    private final NamespacedKey HOLOGRAM_TAG_KEY;
+
     private static final double HOLOGRAM_LINE_HEIGHT = 0.27;
-    private static final double HOLOGRAM_BASE_Y_OFFSET = 2.3; // Initial height above NPC
+    private static final double HOLOGRAM_Y_ABOVE_HEAD = 3.0; // Height above head
 
     public FiresaleHologramUpdater(Login plugin, FiresaleManager firesaleManager, NPC npc, MiniMessage miniMessage) {
         this.plugin = plugin;
         this.firesaleManager = firesaleManager;
         this.npc = npc;
-        this.miniMessage = miniMessage; // Store MiniMessage instance
+        this.miniMessage = miniMessage;
+        this.HOLOGRAM_TAG_KEY = new NamespacedKey(plugin, "firesale_hologram");
     }
 
     @Override
     public void run() {
-        if (npc == null || !npc.isSpawned()) {
-            cleanup(); // NPC is gone, remove holograms
+        // 1. Validation Check
+        if (npc == null) {
+            fullReset();
             return;
+        }
+
+        // 2. Spawn Check
+        if (!npc.isSpawned()) {
+            if (!lastText.isEmpty()) {
+                plugin.getLogger().info("[Firesale] NPC " + npc.getId() + " is not spawned. Hiding hologram.");
+                fullReset();
+            }
+            return;
+        }
+
+        // --- LOCATION LOGIC ---
+        Location baseSpawnLoc;
+        Entity entity = npc.getEntity();
+
+        if (entity instanceof LivingEntity) {
+            // It has eyes (Player, Mob, etc.) - Use eye location + offset
+            baseSpawnLoc = ((LivingEntity) entity).getEyeLocation().clone().add(0, HOLOGRAM_Y_ABOVE_HEAD, 0);
+        } else if (entity != null) {
+            // Fallback
+            baseSpawnLoc = entity.getLocation().clone().add(0, HOLOGRAM_Y_ABOVE_HEAD + 1.5, 0);
+        } else {
+            // Last resort
+            baseSpawnLoc = npc.getStoredLocation().clone().add(0, 4.5, 0);
         }
 
         List<Firesale> sales = firesaleManager.getActiveSales();
         Firesale active = sales.isEmpty() ? null : sales.get(0);
 
-        // Use %nl% for newlines as requested
         StringBuilder newName = new StringBuilder();
 
         if (active == null) {
@@ -88,55 +120,111 @@ public class FiresaleHologramUpdater extends BukkitRunnable {
 
         String newText = newName.toString();
 
-        // Only update if the text has changed
+        // 3. Change Check
         if (newText.equals(lastText)) {
-            return;
+            return; // Text hasn't changed, do nothing
         }
 
+        // 4. Refresh Hologram
+        // CLEANUP FIRST: Passing 'true' for aggressive cleanup
+        removeOldDisplays(baseSpawnLoc.getWorld(), baseSpawnLoc, true);
+        spawnNewDisplays(newText, baseSpawnLoc);
+
         lastText = newText;
+    }
 
-        // Clear old hologram lines
-        cleanup();
+    private void spawnNewDisplays(String text, Location baseLoc) {
+        String[] lines = text.split("%nl%");
 
-        // Get base location above NPC
-        Location baseLoc = npc.getStoredLocation().clone().add(0, HOLOGRAM_BASE_Y_OFFSET, 0);
-        String[] lines = newText.split("%nl%");
-
-        // Iterate backwards so the first line (index 0) is at the top
         for (int i = lines.length - 1; i >= 0; i--) {
             if (lines[i].isEmpty()) continue;
 
-            // --- FIX: Create a final variable for the lambda ---
             final String lineText = lines[i];
-
-            // Calculate height for this line
             Location lineLoc = baseLoc.clone().add(0, (lines.length - 1 - i) * HOLOGRAM_LINE_HEIGHT, 0);
 
-            // Spawn the TextDisplay
-            TextDisplay td = baseLoc.getWorld().spawn(lineLoc, TextDisplay.class, (e) -> {
-                e.setGravity(false);
-                e.setInvulnerable(true);
-                // --- FIX: Use the final variable ---
-                e.text(miniMessage.deserialize(lineText));
-                e.setAlignment(TextDisplay.TextAlignment.CENTER);
-                e.setBillboard(Display.Billboard.CENTER); // Always face player
-                e.setBackgroundColor(Color.fromARGB(0, 0, 0, 0)); // Transparent background
-                e.setSeeThrough(true);
-                e.setShadowed(true);
-            });
+            try {
+                TextDisplay td = baseLoc.getWorld().spawn(lineLoc, TextDisplay.class, (e) -> {
+                    e.setGravity(false);
+                    e.setInvulnerable(true);
+                    e.text(miniMessage.deserialize(lineText));
+                    e.setAlignment(TextDisplay.TextAlignment.CENTER);
+                    e.setBillboard(Display.Billboard.CENTER);
+                    e.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
+                    e.setSeeThrough(true);
+                    e.setShadowed(true);
+                    // Add tag for cleanup
+                    e.getPersistentDataContainer().set(HOLOGRAM_TAG_KEY, PersistentDataType.BYTE, (byte) 1);
+                });
 
-            hologramLines.add(td);
+                hologramLines.add(td);
+            } catch (Exception e) {
+                plugin.getLogger().warning("[Firesale] Failed to spawn hologram line: " + e.getMessage());
+            }
         }
     }
-    public void cleanup() {
-        if (hologramLines.isEmpty()) return;
 
+    /**
+     * Removes old displays.
+     * @param aggressive If true, kills ANY TextDisplay near the location (fixes crash loop)
+     */
+    private void removeOldDisplays(World world, Location searchCenter, boolean aggressive) {
+        // 1. Remove from in-memory list
         for (TextDisplay td : hologramLines) {
             if (td != null && !td.isDead()) {
                 td.remove();
             }
         }
         hologramLines.clear();
-        lastText = ""; // Force update next cycle
+
+        // 2. Find and remove orphans in the world
+        if (world == null || searchCenter == null) return;
+
+        try {
+            // Search 10 blocks around
+            for (Entity entity : world.getNearbyEntities(searchCenter, 5, 5, 5)) {
+                if (entity instanceof TextDisplay) {
+                    boolean shouldRemove = false;
+
+                    // Check 1: Is it tagged? (Normal behavior)
+                    PersistentDataContainer pdc = entity.getPersistentDataContainer();
+                    if (pdc.has(HOLOGRAM_TAG_KEY, PersistentDataType.BYTE)) {
+                        shouldRemove = true;
+                    }
+
+                    // Check 2: Aggressive mode (Nuclear Option)
+                    // Kills ANY text display extremely close to the hologram spawn point
+                    // This deletes the "ghosts" causing your crash
+                    if (aggressive && !shouldRemove) {
+                        double distance = entity.getLocation().distance(searchCenter);
+                        // If it's within 2 blocks of where we want to be, it's probably a ghost
+                        if (distance < 2.0) {
+                            shouldRemove = true;
+                        }
+                    }
+
+                    if (shouldRemove && !entity.isDead()) {
+                        entity.remove();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("[Firesale] Error while removing old hologram displays: " + e.getMessage());
+        }
+    }
+
+    public void fullReset() {
+        Location loc = (npc != null) ? npc.getStoredLocation() : null;
+        if (loc != null && loc.getWorld() != null) {
+            // Aggressive cleanup on reset too
+            removeOldDisplays(loc.getWorld(), loc.clone().add(0, 4.0, 0), true);
+        } else {
+            hologramLines.forEach(Entity::remove);
+            hologramLines.clear();
+        }
+        lastText = "";
+    }
+
+    public void cleanup() {
+        fullReset();
     }
 }

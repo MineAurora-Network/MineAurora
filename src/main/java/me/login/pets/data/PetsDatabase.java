@@ -2,6 +2,7 @@ package me.login.pets.data;
 
 import me.login.Login;
 import org.bukkit.entity.EntityType;
+import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.io.IOException;
@@ -22,7 +23,6 @@ public class PetsDatabase {
     }
 
     public boolean connect() {
-        // Create the /plugins/Login/database directory
         File databaseDir = new File(plugin.getDataFolder(), "database");
         if (!databaseDir.exists()) {
             databaseDir.mkdirs();
@@ -72,13 +72,12 @@ public class PetsDatabase {
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(sql);
 
-            // Add new columns (safe to run multiple times)
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN level INTEGER DEFAULT 1;"); } catch (SQLException ignored) {}
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN xp DOUBLE DEFAULT 0;"); } catch (SQLException ignored) {}
-
-            // --- NEW: Add inventory columns ---
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN armor_contents TEXT;"); } catch (SQLException ignored) {}
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN weapon_content TEXT;"); } catch (SQLException ignored) {}
+            // --- NEW: Attribute Column ---
+            try { stmt.execute("ALTER TABLE player_pets ADD COLUMN attribute_content TEXT;"); } catch (SQLException ignored) {}
 
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Could not create pets table!", e);
@@ -97,12 +96,15 @@ public class PetsDatabase {
                 long cooldownEndTime = rs.getLong("cooldown_end_time");
                 int level = rs.getInt("level");
                 double xp = rs.getDouble("xp");
-
-                // --- NEW: Load inventory ---
                 String armor = rs.getString("armor_contents");
                 String weapon = rs.getString("weapon_content");
+                // --- NEW: Load Attribute ---
+                String attribute = rs.getString("attribute_content");
 
                 Pet pet = new Pet(playerUuid, petType, displayName, cooldownEndTime, level, xp, armor, weapon);
+                if (attribute != null && !attribute.isEmpty()) {
+                    pet.setAttributeContent(Pet.deserializeItem(attribute));
+                }
                 pets.add(pet);
             }
         } catch (SQLException | IllegalArgumentException e) {
@@ -111,6 +113,7 @@ public class PetsDatabase {
         return pets;
     }
 
+    // ... [Keep existing methods: addPet, removePet, updatePetName, setPetCooldown, updatePetStats] ...
     public boolean addPet(UUID playerUuid, EntityType petType) {
         String sql = "INSERT INTO player_pets(player_uuid, pet_type, level, xp) VALUES(?,?, 1, 0)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -173,16 +176,24 @@ public class PetsDatabase {
             plugin.getLogger().log(Level.SEVERE, "Error updating pet stats for " + playerUuid, e);
         }
     }
-    public void updatePetInventory(UUID playerUuid, EntityType petType, String armor, String weapon) {
-        String sql = "UPDATE player_pets SET armor_contents = ?, weapon_content = ? WHERE player_uuid = ? AND pet_type = ?";
+
+    // --- UPDATED Method to include Attribute ---
+    public void updatePetInventory(UUID playerUuid, EntityType petType, String armor, String weapon, String attribute) {
+        String sql = "UPDATE player_pets SET armor_contents = ?, weapon_content = ?, attribute_content = ? WHERE player_uuid = ? AND pet_type = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, armor);
             pstmt.setString(2, weapon);
-            pstmt.setString(3, playerUuid.toString());
-            pstmt.setString(4, petType.name());
+            pstmt.setString(3, attribute);
+            pstmt.setString(4, playerUuid.toString());
+            pstmt.setString(5, petType.name());
             pstmt.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Error updating pet inventory for " + playerUuid, e);
         }
+    }
+
+    // Keeping old method for compatibility if called elsewhere, but forwarding null
+    public void updatePetInventory(UUID playerUuid, EntityType petType, String armor, String weapon) {
+        updatePetInventory(playerUuid, petType, armor, weapon, "");
     }
 }

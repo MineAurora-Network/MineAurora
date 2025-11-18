@@ -22,8 +22,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.*;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
+import org.bukkit.event.player.PlayerRespawnEvent; // <-- ADDED
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.mindrot.jbcrypt.BCrypt;
@@ -76,7 +75,7 @@ public class LoginSystem implements Listener {
     private final Map<UUID, Long> loginLockouts = new HashMap<>();
     private final int MAX_LOGIN_ATTEMPTS = 3;
     private final long LOCKOUT_DURATION_MINUTES = 1;
-    private final long LOGIN_TIMEOUT_SECONDS = 60;
+    private final long LOGIN_TIMEOUT_SECONDS = 120; // <-- MODIFIED
 
     final Pattern passPattern = Pattern.compile("^[a-zA-Z0-9@#_.%&*]{4,20}$");
     final Component passwordRequirementsMsg = mm.deserialize("<yellow>Password must be 4-20 characters using letters, numbers, or symbols: @#_.%&*</yellow>");
@@ -111,8 +110,8 @@ public class LoginSystem implements Listener {
             plugin.getLogger().severe("Login world 'login' not found! Teleport feature disabled.");
             this.loginLocation = null;
         } else {
-            this.loginLocation = new Location(loginWorld, 0.5, 65, 0.5, 90, 0);
-            plugin.getLogger().info("Login location set to 'login' world at 0.5, 65, 0.5");
+            this.loginLocation = new Location(loginWorld, 0.5, 100, 0.5, 90, 0);
+            plugin.getLogger().info("Login location set to 'login' world at 0.5, 100, 0.5");
         }
 
         World hubWorld = plugin.getServer().getWorld("hub");
@@ -190,6 +189,9 @@ public class LoginSystem implements Listener {
                     p.sendTitle(legacyTitlePrefixString, "§fUse §e/login <pass> §fto login", 10, 100, 20);
                 } else {
                     sendPrefixedMessage(p, "<white>You are not registered use <green>/register <pass> <pass></green></white>");
+                    // --- ADDED VPN MESSAGE ---
+                    p.sendMessage(legacySerializer.deserialize("&cNote: If you are using vpn while registertring then please don't register, as later you might face challenges when u need help from our staff team. You can connect later using vpn but for registeration process don't use vpn.")); //
+                    // --- END ADD ---
                     p.sendTitle(legacyTitlePrefixString, "§fYou are not registered use §a/register <pass> <pass>", 10, 100, 20);
                 }
             });
@@ -212,17 +214,38 @@ public class LoginSystem implements Listener {
             stopBossbarTask(uuid);
             loginTimeLeft.remove(uuid);
         }
+
+        // --- ADDED: Show player to others on quit ---
+        // This prevents players from staying hidden if the server reloads / etc
+        Player p = event.getPlayer();
+        for (Player otherPlayer : Bukkit.getOnlinePlayers()) {
+            if (!otherPlayer.equals(p)) {
+                otherPlayer.showPlayer(plugin, p);
+            }
+        }
+        // --- END ADD ---
     }
 
     private void applyLoginRestrictions(Player player) {
-        player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, Integer.MAX_VALUE, 0, false, false, false));
-        player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false, false));
+        // --- MODIFIED: Hide players from each other ---
+        for (Player otherPlayer : Bukkit.getOnlinePlayers()) {
+            if (!otherPlayer.equals(player)) {
+                player.hidePlayer(plugin, otherPlayer);
+                otherPlayer.hidePlayer(plugin, player);
+            }
+        }
+        // --- END MODIFIED ---
     }
 
     private void removeLoginRestrictions(Player player) {
-        for (PotionEffect effect : player.getActivePotionEffects()) {
-            player.removePotionEffect(effect.getType());
+        // --- MODIFIED: Show players to each other ---
+        for (Player otherPlayer : Bukkit.getOnlinePlayers()) {
+            if (!otherPlayer.equals(player)) {
+                player.showPlayer(plugin, otherPlayer);
+                otherPlayer.showPlayer(plugin, player);
+            }
         }
+        // --- END MODIFIED ---
     }
 
     private void startKickTimer(Player player) {
@@ -301,13 +324,49 @@ public class LoginSystem implements Listener {
         if (isUnloggedIn(event.getPlayer().getUniqueId())) {
             if (event.getFrom().getBlockX() != event.getTo().getBlockX() || event.getFrom().getBlockZ() != event.getTo().getBlockZ()) {
                 if (loginLocation != null) {
-                    event.setTo(loginLocation);
+                    // This allows Y-axis movement (like falling/dying) but not X/Z
+                    Location newPos = event.getFrom();
+                    newPos.setY(event.getTo().getY()); // Allow Y change
+                    event.setTo(newPos);
                 } else {
                     event.setTo(event.getFrom());
                 }
             }
         }
     }
+
+    // --- ADDED: Handle respawn in login world ---
+    @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        Player p = event.getPlayer();
+        if (isUnloggedIn(p.getUniqueId())) {
+            World loginWorld = plugin.getServer().getWorld("login");
+            if (loginWorld != null && p.getWorld().getName().equals("login")) {
+                // If they died in the login world, respawn them at the new coords
+                Location respawnLoc = new Location(loginWorld, 0.5, 100, 0.5);
+                event.setRespawnLocation(respawnLoc);
+            } else if (loginLocation != null) {
+                // If they somehow died elsewhere (shouldn't happen), force to login spawn
+                event.setRespawnLocation(loginLocation);
+            }
+        }
+    }
+    // --- END ADD ---
+
+    // --- ADDED: Prevent teleporting away from login world ---
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        Player p = event.getPlayer();
+        if (isUnloggedIn(p.getUniqueId())) {
+            Location to = event.getTo();
+            // Allow teleports *to* or *within* the login world (e.g., respawn, /spawn)
+            if (to.getWorld() != null && !to.getWorld().getName().equals("login")) {
+                event.setCancelled(true);
+                sendPrefixedMessage(p, "<red>You must log in before changing worlds!</red>");
+            }
+        }
+    }
+    // --- END ADD ---
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerChat(AsyncPlayerChatEvent event) {
@@ -510,7 +569,7 @@ public class LoginSystem implements Listener {
 
         // Your code `meta.addPage(processedPage)` uses the Spigot API which needs '§' codes.
         // This converts the '&' string to a '§' string.
-        String processedPage = legacySectionSerializer.serialize(legacySerializer.deserialize(singlePageContent)); // <-- MODIFIED
+        String processedPage = legacySectionSerializer.serialize(legacySerializer.deserialize(singlePageContent)); // <-- MODLED
         meta.addPage(processedPage);
         book.setItemMeta(meta);
 

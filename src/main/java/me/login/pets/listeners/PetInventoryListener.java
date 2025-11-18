@@ -5,6 +5,7 @@ import me.login.pets.PetInventoryMenu;
 import me.login.pets.PetManager;
 import me.login.pets.PetsConfig;
 import me.login.pets.data.Pet;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -18,9 +19,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
-// --- FIXED: Added missing import ---
-import org.bukkit.Bukkit;
-
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -32,6 +30,7 @@ public class PetInventoryListener implements Listener {
     private final PetsConfig config;
 
     private final NamespacedKey armorTypeKey;
+    private final NamespacedKey attributeKey; // --- NEW Key ---
     private final Set<Material> allowedWeapons = new HashSet<>(Arrays.asList(
             Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD, Material.GOLDEN_SWORD, Material.DIAMOND_SWORD, Material.NETHERITE_SWORD,
             Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE
@@ -42,11 +41,9 @@ public class PetInventoryListener implements Listener {
         this.petManager = petManager;
         this.config = config;
         this.armorTypeKey = new NamespacedKey(plugin, "pet_armor_entity");
+        this.attributeKey = new NamespacedKey(plugin, "pet_attribute_id"); // Matches items.yml
     }
 
-    /**
-     * Helper method to open the pet inventory for a player
-     */
     public void openPetInventory(Player player, Pet pet, boolean isAdmin) {
         if (pet == null) return;
         new PetInventoryMenu(player, pet, isAdmin).open(player);
@@ -65,7 +62,7 @@ public class PetInventoryListener implements Listener {
 
         // Handle admin removal
         if (menu.isAdmin() && event.getClick() == ClickType.SHIFT_RIGHT) {
-            if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT) {
+            if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT || slot == PetInventoryMenu.ATTRIBUTE_SLOT) {
                 inv.setItem(slot, null);
                 event.setCancelled(true);
                 return;
@@ -74,7 +71,7 @@ public class PetInventoryListener implements Listener {
 
         // Allow taking items
         if (event.getClickedInventory() == inv) {
-            if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT) {
+            if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT || slot == PetInventoryMenu.ATTRIBUTE_SLOT) {
                 return;
             }
         }
@@ -82,22 +79,19 @@ public class PetInventoryListener implements Listener {
         // Allow placing items
         if (event.getClickedInventory() != null && event.getClickedInventory() != inv) {
             if (event.isShiftClick()) {
-                event.setCancelled(true); // Block shift-clicking into the GUI
+                event.setCancelled(true);
                 return;
             }
-            if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT) {
-                // Player is placing an item in
+            if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT || slot == PetInventoryMenu.ATTRIBUTE_SLOT) {
                 if (validateItem(menu.getPet(), event.getCurrentItem(), slot)) {
-                    return; // Allow the click
+                    return;
                 } else {
-                    event.setCancelled(true); // Invalid item
-                    // --- FIXED: Correct method call ---
+                    event.setCancelled(true);
                     petManager.getMessageHandler().sendPlayerActionBar(player, "<red>That item cannot go in this slot!</red>");
                 }
             }
         }
 
-        // Cancel all other clicks in the GUI
         if (event.getClickedInventory() == inv) {
             event.setCancelled(true);
         }
@@ -114,17 +108,19 @@ public class PetInventoryListener implements Listener {
         if (item == null || item.getType() == Material.AIR) return false;
 
         if (isArmorSlot(slot)) {
-            // Armor Slot
             if (!item.hasItemMeta()) return false;
             PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
             if (!pdc.has(armorTypeKey, PersistentDataType.STRING)) return false;
-
             String requiredType = pdc.get(armorTypeKey, PersistentDataType.STRING);
             return requiredType.equalsIgnoreCase(pet.getPetType().name());
 
         } else if (slot == PetInventoryMenu.WEAPON_SLOT) {
-            // Weapon Slot
             return allowedWeapons.contains(item.getType());
+
+        } else if (slot == PetInventoryMenu.ATTRIBUTE_SLOT) {
+            // Check for attribute NBT
+            if (!item.hasItemMeta()) return false;
+            return item.getItemMeta().getPersistentDataContainer().has(attributeKey, PersistentDataType.STRING);
         }
         return false;
     }
@@ -139,22 +135,20 @@ public class PetInventoryListener implements Listener {
         PetInventoryMenu menu = (PetInventoryMenu) inv.getHolder();
         Pet pet = menu.getPet();
 
-        // Save items from GUI to Pet object
         ItemStack[] armor = new ItemStack[4];
         for (int i = 0; i < PetInventoryMenu.ARMOR_SLOTS.length; i++) {
             armor[i] = inv.getItem(PetInventoryMenu.ARMOR_SLOTS[i]);
         }
         pet.setArmorContents(armor);
         pet.setWeaponContent(inv.getItem(PetInventoryMenu.WEAPON_SLOT));
+        // --- NEW: Save Attribute Item ---
+        pet.setAttributeContent(inv.getItem(PetInventoryMenu.ATTRIBUTE_SLOT));
 
-        // --- FIXED: Correct method call ---
         petManager.savePetInventory(pet);
 
-        // Refresh pet if active
         Player owner = Bukkit.getPlayer(pet.getOwnerUuid());
         if (owner != null && owner.isOnline() && petManager.hasActivePet(owner.getUniqueId())) {
             if (petManager.getActivePet(owner.getUniqueId()).getType() == pet.getPetType()) {
-                // Resummon to apply new stats
                 petManager.summonPet(owner, pet.getPetType());
             }
         }

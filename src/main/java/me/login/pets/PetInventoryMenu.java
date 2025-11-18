@@ -2,6 +2,7 @@ package me.login.pets;
 
 import me.login.pets.data.Pet;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -23,6 +24,7 @@ public class PetInventoryMenu implements InventoryHolder {
     // GUI Slots
     public static final int[] ARMOR_SLOTS = {10, 11, 12, 13};
     public static final int WEAPON_SLOT = 15;
+    public static final int ATTRIBUTE_SLOT = 16; // --- NEW SLOT ---
 
     public PetInventoryMenu(Player player, Pet pet, boolean isAdmin) {
         this.pet = pet;
@@ -39,7 +41,8 @@ public class PetInventoryMenu implements InventoryHolder {
         // 1. Create filler glass
         ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta meta = filler.getItemMeta();
-        meta.displayName(MiniMessage.miniMessage().deserialize(" "));
+        meta.displayName(MiniMessage.miniMessage().deserialize(" ")
+                .decoration(TextDecoration.ITALIC, false));
         filler.setItemMeta(meta);
 
         // 2. Fill inventory with glass
@@ -52,6 +55,7 @@ public class PetInventoryMenu implements InventoryHolder {
             inventory.setItem(slot, null);
         }
         inventory.setItem(WEAPON_SLOT, null);
+        inventory.setItem(ATTRIBUTE_SLOT, null); // Clear new slot
 
         // 4. Load saved items
         ItemStack[] armor = pet.getArmorContents();
@@ -65,27 +69,47 @@ public class PetInventoryMenu implements InventoryHolder {
         if (pet.getWeaponContent() != null) {
             inventory.setItem(WEAPON_SLOT, pet.getWeaponContent());
         }
+        // --- NEW: Load Attribute Item ---
+        if (pet.getAttributeContent() != null) {
+            inventory.setItem(ATTRIBUTE_SLOT, pet.getAttributeContent());
+        }
 
         // 5. Add helper items
         ItemStack armorHelper = new ItemStack(Material.ARMOR_STAND);
         ItemMeta armorMeta = armorHelper.getItemMeta();
-        armorMeta.displayName(MiniMessage.miniMessage().deserialize("<green>Armor Slots</green>"));
-        armorMeta.lore(Collections.singletonList(MiniMessage.miniMessage().deserialize("<gray>Place pet armor here.</gray>")));
+        armorMeta.displayName(MiniMessage.miniMessage().deserialize("<green>Armor Slots</green>")
+                .decoration(TextDecoration.ITALIC, false));
+        armorMeta.lore(Collections.singletonList(MiniMessage.miniMessage().deserialize("<gray>Place pet armor here.</gray>")
+                .decoration(TextDecoration.ITALIC, false)));
         armorHelper.setItemMeta(armorMeta);
         inventory.setItem(1, armorHelper);
 
         ItemStack weaponHelper = new ItemStack(Material.IRON_SWORD);
         ItemMeta weaponMeta = weaponHelper.getItemMeta();
-        weaponMeta.displayName(MiniMessage.miniMessage().deserialize("<green>Weapon Slot</green>"));
-        weaponMeta.lore(Collections.singletonList(MiniMessage.miniMessage().deserialize("<gray>Place a Sword or Axe here.</gray>")));
+        weaponMeta.displayName(MiniMessage.miniMessage().deserialize("<green>Weapon Slot</green>")
+                .decoration(TextDecoration.ITALIC, false));
+        weaponMeta.lore(Collections.singletonList(MiniMessage.miniMessage().deserialize("<gray>Place a Sword or Axe here.</gray>")
+                .decoration(TextDecoration.ITALIC, false)));
         weaponHelper.setItemMeta(weaponMeta);
         inventory.setItem(6, weaponHelper);
+
+        // --- NEW: Attribute Helper ---
+        ItemStack attrHelper = new ItemStack(Material.BEACON);
+        ItemMeta attrMeta = attrHelper.getItemMeta();
+        attrMeta.displayName(MiniMessage.miniMessage().deserialize("<light_purple>Attribute Slot</light_purple>")
+                .decoration(TextDecoration.ITALIC, false));
+        attrMeta.lore(Collections.singletonList(MiniMessage.miniMessage().deserialize("<gray>Place an Attribute Shard here.</gray>")
+                .decoration(TextDecoration.ITALIC, false)));
+        attrHelper.setItemMeta(attrMeta);
+        inventory.setItem(7, attrHelper); // Place above the attribute slot
 
         if (isAdmin) {
             ItemStack adminHelper = new ItemStack(Material.REDSTONE_BLOCK);
             ItemMeta adminMeta = adminHelper.getItemMeta();
-            adminMeta.displayName(MiniMessage.miniMessage().deserialize("<red><bold>ADMIN MODE</bold></red>"));
-            adminMeta.lore(Collections.singletonList(MiniMessage.miniMessage().deserialize("<yellow>Shift-click items to delete them.</yellow>")));
+            adminMeta.displayName(MiniMessage.miniMessage().deserialize("<red><bold>ADMIN MODE</bold></red>")
+                    .decoration(TextDecoration.ITALIC, false));
+            adminMeta.lore(Collections.singletonList(MiniMessage.miniMessage().deserialize("<yellow>Shift-click items to delete them.</yellow>")
+                    .decoration(TextDecoration.ITALIC, false)));
             adminHelper.setItemMeta(adminMeta);
             inventory.setItem(26, adminHelper);
         }

@@ -309,9 +309,8 @@ public class PetCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 3) {
             String sub = args[0].toLowerCase();
-            Player target = Bukkit.getPlayer(args[1]);
-            if (target == null) return List.of();
-            UUID targetUuid = target.getUniqueId();
+            // --- BUG FIX: Removed `Player target = Bukkit.getPlayer(args[1]);` check here.
+            // This allows items to show up even if the player name is incomplete or player is offline.
 
             switch (sub) {
                 case "give":
@@ -320,21 +319,27 @@ public class PetCommand implements CommandExecutor, TabCompleter {
                             .collect(Collectors.toList());
                 case "remove":
                 case "petinvcheck":
-                    return petManager.getPlayerData(targetUuid).stream()
+                    // For these, we do need a valid player target to check THEIR pets, but for tab complete generic logic is safer
+                    Player target = Bukkit.getPlayer(args[1]);
+                    if (target == null) return List.of();
+                    return petManager.getPlayerData(target.getUniqueId()).stream()
                             .map(pet -> pet.getPetType().name())
                             .filter(s -> s.toLowerCase().startsWith(args[2].toLowerCase()))
                             .collect(Collectors.toList());
                 case "add":
-                    List<String> ownedTypes = petManager.getPlayerData(targetUuid).stream()
+                    Player targetAdd = Bukkit.getPlayer(args[1]);
+                    if (targetAdd == null) return List.of();
+                    List<String> ownedTypes = petManager.getPlayerData(targetAdd.getUniqueId()).stream()
                             .map(pet -> pet.getPetType().name()).collect(Collectors.toList());
-                    // --- FIXED: Use correct method name ---
                     return config.getAllCapturablePetTypes().stream()
                             .filter(type -> !ownedTypes.contains(type.name()))
                             .map(Enum::name)
                             .filter(s -> s.toLowerCase().startsWith(args[2].toLowerCase()))
                             .collect(Collectors.toList());
                 case "revive":
-                    List<String> cooldowPets = petManager.getPlayerData(targetUuid).stream()
+                    Player targetRevive = Bukkit.getPlayer(args[1]);
+                    if (targetRevive == null) return List.of();
+                    List<String> cooldowPets = petManager.getPlayerData(targetRevive.getUniqueId()).stream()
                             .filter(Pet::isOnCooldown)
                             .map(pet -> pet.getPetType().name())
                             .collect(Collectors.toList());

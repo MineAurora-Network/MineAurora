@@ -184,7 +184,13 @@ commands:
     description: Manages player ranks.
     usage: /rank <set|remove|info>
     permission: login.rank.admin
-
+  quests:
+    description: Opens the daily quests menu.
+    aliases: [ quest, dailyquests ]
+  rotatinghead:
+    description: Spawn the floating discord/store heads
+    permission: mineaurora.admin
+    usage: /rotatinghead <discord/store>
   pets:
     description: "Opens the Pet menu and handles all pet commands."
     usage: "/pets <summon|despawn|check|add|remove|give|revive>"

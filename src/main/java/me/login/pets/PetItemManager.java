@@ -1,8 +1,9 @@
 package me.login.pets;
 
 import me.login.Login;
-import me.login.utility.TextureToHead; // Your provided utility class
+import me.login.utility.TextureToHead;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -30,7 +31,7 @@ public class PetItemManager {
 
     public void loadPetItems() {
         petItemCache.clear();
-        ConfigurationSection itemsConfig = plugin.getItems(); // Get items.yml
+        ConfigurationSection itemsConfig = plugin.getItems();
         if (itemsConfig == null) {
             plugin.getLogger().severe("Failed to load items.yml!");
             return;
@@ -39,8 +40,10 @@ public class PetItemManager {
         loadItemsFromSection(itemsConfig, "pet_fruits");
         loadItemsFromSection(itemsConfig, "pet_capture");
         loadItemsFromSection(itemsConfig, "utility_items");
-        // We will also load pet_armor from here
         loadItemsFromSection(itemsConfig, "pet_armor");
+        loadItemsFromSection(itemsConfig, "pet_attributes");
+
+        plugin.getLogger().info("[PetItemManager] Total items loaded: " + petItemCache.size());
     }
 
     private void loadItemsFromSection(ConfigurationSection itemsConfig, String sectionName) {
@@ -50,17 +53,20 @@ public class PetItemManager {
             return;
         }
 
+        int count = 0;
         for (String key : section.getKeys(false)) {
             ConfigurationSection itemConfig = section.getConfigurationSection(key);
             if (itemConfig != null) {
                 ItemStack item = buildItem(itemConfig);
                 if (item != null) {
                     petItemCache.put(key, item);
+                    count++;
                 } else {
                     plugin.getLogger().warning("Failed to build item: " + sectionName + "." + key);
                 }
             }
         }
+        plugin.getLogger().info("[PetItemManager] Loaded " + count + " items from section: " + sectionName);
     }
 
     private ItemStack buildItem(ConfigurationSection config) {
@@ -73,47 +79,37 @@ public class PetItemManager {
                 return null;
             }
 
-            // --- FIXED LOGIC ---
-            // 1. Create the ItemStack first.
             ItemStack item = new ItemStack(material);
-
-            // 2. Get the texture string.
             String texture = config.getString("texture");
 
-            // 3. Apply texture if it's a PLAYER_HEAD and texture exists
-            //    This now matches your FiresaleItemManager logic.
             if (material == Material.PLAYER_HEAD && texture != null && !texture.isEmpty()) {
                 item = TextureToHead.applyTexture(item, texture);
             }
-            // --- END OF FIX ---
 
             ItemMeta meta = item.getItemMeta();
             if (meta == null) return null;
 
-            // Set Name (No italics)
             String name = config.getString("name", "<red>Unknown Item");
-            meta.displayName(MiniMessage.miniMessage().deserialize(name));
+            meta.displayName(MiniMessage.miniMessage().deserialize(name)
+                    .decoration(TextDecoration.ITALIC, false));
 
-            // Set Lore (No italics)
             List<Component> lore = config.getStringList("lore").stream()
-                    .map(line -> MiniMessage.miniMessage().deserialize(line))
+                    .map(line -> MiniMessage.miniMessage().deserialize(line)
+                            .decoration(TextDecoration.ITALIC, false))
                     .collect(Collectors.toList());
             meta.lore(lore);
 
-            // Set NBT
             ConfigurationSection nbtConfig = config.getConfigurationSection("nbt");
             if (nbtConfig != null) {
                 PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
                 if (nbtConfig.contains("plugin_key") && nbtConfig.contains("value")) {
-                    // Single NBT (fruits, leads, utility)
                     NamespacedKey nbtKey = NamespacedKey.fromString(nbtConfig.getString("plugin_key"), plugin);
                     String nbtValue = nbtConfig.getString("value");
                     if (nbtKey != null) {
                         pdc.set(nbtKey, PersistentDataType.STRING, nbtValue);
                     }
                 } else {
-                    // Multiple NBT (pet armor)
                     for (String nbtKeyString : nbtConfig.getKeys(false)) {
                         String nbtValue = nbtConfig.getString(nbtKeyString);
                         NamespacedKey nbtKey = new NamespacedKey(plugin, nbtKeyString);

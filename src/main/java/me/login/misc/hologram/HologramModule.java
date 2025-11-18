@@ -10,6 +10,7 @@ public class HologramModule {
     private final RTPModule rtpModule;
     private HologramManager hologramManager;
     private HologramDatabase hologramDatabase;
+    private RTPHologramInteraction rtpInteraction; // Added field to store instance
 
     public HologramModule(Login plugin, RTPModule rtpModule) {
         this.plugin = plugin;
@@ -24,10 +25,13 @@ public class HologramModule {
         this.hologramManager = new HologramManager(this);
 
         // Init RTP interaction handler
-        RTPHologramInteraction rtpInteraction = new RTPHologramInteraction(this, rtpModule);
+        this.rtpInteraction = new RTPHologramInteraction(this, rtpModule);
 
         // Register listeners
         Bukkit.getPluginManager().registerEvents(new HologramListener(this, rtpInteraction), plugin);
+        // Register the new NetherPortalListener
+        Bukkit.getPluginManager().registerEvents(new NetherPortalListener(rtpModule, this.rtpInteraction), plugin);
+
 
         // Register command
         HologramCommand hologramCommand = new HologramCommand(this);
@@ -58,5 +62,10 @@ public class HologramModule {
 
     public HologramDatabase getDatabase() {
         return hologramDatabase;
+    }
+
+    // Added getter for other listeners to access
+    public RTPHologramInteraction getRtpInteraction() {
+        return rtpInteraction;
     }
 }

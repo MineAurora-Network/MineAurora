@@ -5,6 +5,8 @@ import me.login.pets.PetManager;
 import me.login.pets.PetsConfig;
 import me.login.pets.data.Pet;
 import net.kyori.adventure.text.Component;
+// --- BUG FIX: Added missing import ---
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -117,25 +119,35 @@ public class PetMenu implements InventoryHolder {
         ItemMeta meta = item.getItemMeta();
 
         if (meta != null) {
+            // --- BUG FIX: Removed italics ---
             meta.displayName(
                     MiniMessage.miniMessage().deserialize("<light_purple><bold>" + pet.getDisplayName() + "</bold></light_purple>")
+                            .decoration(TextDecoration.ITALIC, false)
             );
 
             List<Component> loreLines = new ArrayList<>();
-            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Type: <white>" + pet.getDefaultName() + "</white></gray>"));
-            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Rarity: <white>" + petsConfig.getPetTier(pet.getPetType()) + "</white></gray>"));
-            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Level: <gold>" + pet.getLevel() + "</gold></gray>"));
-            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>XP: <yellow>" + (int)pet.getXp() + " / " + (int)petsConfig.getXpRequired(pet.getLevel()) + "</yellow></gray>"));
+            // --- BUG FIX: Removed italics from all lore lines ---
+            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Type: <white>" + pet.getDefaultName() + "</white></gray>")
+                    .decoration(TextDecoration.ITALIC, false));
+            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Rarity: <white>" + petsConfig.getPetTier(pet.getPetType()) + "</white></gray>")
+                    .decoration(TextDecoration.ITALIC, false));
+            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>Level: <gold>" + pet.getLevel() + "</gold></gray>")
+                    .decoration(TextDecoration.ITALIC, false));
+            loreLines.add(MiniMessage.miniMessage().deserialize("<gray>XP: <yellow>" + (int)pet.getXp() + " / " + (int)petsConfig.getXpRequired(pet.getLevel()) + "</yellow></gray>")
+                    .decoration(TextDecoration.ITALIC, false));
             loreLines.add(Component.empty());
 
             if (pet.isOnCooldown()) {
-                loreLines.add(MiniMessage.miniMessage().deserialize("<red>On Cooldown: " + pet.getRemainingCooldownSeconds() + "s</red>"));
+                loreLines.add(MiniMessage.miniMessage().deserialize("<red>On Cooldown: " + pet.getRemainingCooldownSeconds() + "s</red>")
+                        .decoration(TextDecoration.ITALIC, false));
             } else {
-                loreLines.add(MiniMessage.miniMessage().deserialize("<green>Ready to Summon!</green>"));
+                loreLines.add(MiniMessage.miniMessage().deserialize("<green>Ready to Summon!</green>")
+                        .decoration(TextDecoration.ITALIC, false));
             }
-            loreLines.add(MiniMessage.miniMessage().deserialize("<yellow>Click to select this pet.</yellow>"));
+            loreLines.add(MiniMessage.miniMessage().deserialize("<yellow>Click to select this pet.</yellow>")
+                    .decoration(TextDecoration.ITALIC, false));
 
-            meta.lore(loreLines.stream().map(c -> c).collect(Collectors.toList()));
+            meta.lore(loreLines); // No stream needed, already a List<Component>
 
             PersistentDataContainer data = meta.getPersistentDataContainer();
             data.set(GuiUtils.getGuiItemKey(plugin), PersistentDataType.BYTE, (byte) 1);

@@ -168,12 +168,14 @@ public class FiresaleManager {
         scheduleSaleTasks(savedSale);
 
         logger.logSaleCreated(creator, savedSale);
+
+        // --- FIX: Added line breaks (%nl%) as requested ---
         return serverPrefix.append(miniMessage.deserialize(
-                "<green>Firesale created! ID: <yellow><sale_id></yellow>. Item: <aqua><item_name></aqua>. Starts in: <white><starts></white>.",
+                "<green>Firesale created!%nl%  ID: <yellow><sale_id></yellow>%nl%  Item: <aqua><item_name></aqua>%nl%  Starts in: <white><starts></white>.",
                 Placeholder.component("sale_id", Component.text(savedSale.getSaleId())),
                 Placeholder.component("item_name", Component.text(itemManager.getItemName(item))),
                 Placeholder.component("starts", Component.text(formatDuration(startMillis)))
-        ));
+        ).replaceText(config -> config.match("%nl%").replacement(Component.newline())));
     }
 
     public Component removeSale(Player admin, int saleId) {

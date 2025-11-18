@@ -330,3 +330,7 @@ discord:
 generator:
   log-channel-id: 1425308102915391588
   admin-log-channel-id: 1425301611391094845
+
+# ---- Daily Quests Settings ----
+quests-npc-id: -1
+quests-log-channel-id: "19284756748...."

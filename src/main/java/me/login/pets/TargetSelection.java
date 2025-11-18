@@ -26,6 +26,14 @@ public class TargetSelection {
     public void handlePetAILogic(Player player, LivingEntity pet) {
         if (pet instanceof Mob) {
             Mob mob = (Mob) pet;
+
+            // --- BUG FIX: Forcefully clear target if it's the owner ---
+            // This runs every 20 ticks to ensure the pet NEVER targets its owner
+            if (mob.getTarget() != null && mob.getTarget().getUniqueId().equals(player.getUniqueId())) {
+                mob.setTarget(null);
+                PetDebug.debugOwner(player, PetDebug.Cat.AI, pet.getType().name() + " cleared target (was owner).");
+            }
+
             double distSq = pet.getLocation().distanceSquared(player.getLocation());
 
             if (distSq > 400) { // 20 blocks
@@ -50,17 +58,25 @@ public class TargetSelection {
      */
     public void handlePetAggression(Player owner, Entity target) {
         if (!petManager.hasActivePet(owner.getUniqueId()) || !(target instanceof LivingEntity)) return;
-        LivingEntity pet = petManager.getActivePet(owner.getUniqueId());
-        if (pet instanceof Mob) {
-            Mob mob = (Mob) pet;
-            if (mob.getTarget() != null && mob.getTarget().isValid() && !mob.getTarget().isDead()) {
-                PetDebug.debugOwner(owner, PetDebug.Cat.TARGET, pet.getType().name() + " already has target, not switching.");
-                return;
-            }
 
-            PetDebug.debugOwner(owner, PetDebug.Cat.TARGET, pet.getType().name() + " aggression triggered. New target: " + target.getName());
-            mob.setTarget((LivingEntity) target);
+        LivingEntity pet = petManager.getActivePet(owner.getUniqueId());
+        if (!(pet instanceof Mob)) return;
+
+        Mob mob = (Mob) pet;
+
+        // --- BUG FIX: Prevent pet from ever targeting its owner ---
+        if (target.getUniqueId().equals(owner.getUniqueId())) {
+            mob.setTarget(null); // Explicitly remove target
+            return;
         }
+
+        if (mob.getTarget() != null && mob.getTarget().isValid() && !mob.getTarget().isDead()) {
+            PetDebug.debugOwner(owner, PetDebug.Cat.TARGET, pet.getType().name() + " already has target, not switching.");
+            return;
+        }
+
+        PetDebug.debugOwner(owner, PetDebug.Cat.TARGET, pet.getType().name() + " aggression triggered. New target: " + target.getName());
+        mob.setTarget((LivingEntity) target);
     }
 
     /**
@@ -71,11 +87,19 @@ public class TargetSelection {
      */
     public void setPetTarget(Player owner, Entity target) {
         if (!petManager.hasActivePet(owner.getUniqueId()) || !(target instanceof LivingEntity)) return;
-        LivingEntity pet = petManager.getActivePet(owner.getUniqueId());
 
-        if (pet instanceof Mob) {
-            PetDebug.debugOwner(owner, PetDebug.Cat.TARGET, pet.getType().name() + " manually setting target to " + target.getName());
-            ((Mob) pet).setTarget((LivingEntity) target);
+        LivingEntity pet = petManager.getActivePet(owner.getUniqueId());
+        if (!(pet instanceof Mob)) return;
+
+        Mob mob = (Mob) pet;
+
+        // --- BUG FIX: Also add owner check here for safety ---
+        if (target.getUniqueId().equals(owner.getUniqueId())) {
+            mob.setTarget(null); // Explicitly remove target
+            return;
         }
+
+        PetDebug.debugOwner(owner, PetDebug.Cat.TARGET, pet.getType().name() + " manually setting target to " + target.getName());
+        mob.setTarget((LivingEntity) target);
     }
 }

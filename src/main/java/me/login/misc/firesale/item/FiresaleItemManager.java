@@ -123,6 +123,7 @@ public class FiresaleItemManager {
                     // -----------------------------------------------------
 
                     meta.lore(lore);
+                    // --- FIX: Removed the non-existent HIDE_ITALIC flag ---
                     meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
                     item.setItemMeta(meta);
                 }
