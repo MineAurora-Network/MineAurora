@@ -6,18 +6,26 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class PetPlacementListener implements Listener {
 
-    private final NamespacedKey fruitKey;
+    private final List<NamespacedKey> forbiddenKeys;
 
     public PetPlacementListener(Login plugin) {
-        // --- BUG FIX: Hard-coded namespace to match item creation ---
-        // The old key (new NamespacedKey(plugin, "pet_fruit_id"))
-        // might not resolve to "mineaurora" if the plugin name in plugin.yml is different.
-        // This is safer and matches PetManager and PetInteractListener.
-        this.fruitKey = new NamespacedKey("mineaurora", "pet_fruit_id");
+        // Register all keys that identify items that should NOT be placed
+        this.forbiddenKeys = Arrays.asList(
+                new NamespacedKey("mineaurora", "pet_fruit_id"),
+                new NamespacedKey("mineaurora", "pet_fruit"),
+                new NamespacedKey("mineaurora", "pet_utility_id"), // Amethyst Shard
+                new NamespacedKey("mineaurora", "pet_attribute_id"), // Attribute Shards
+                new NamespacedKey("mineaurora", "entity_armor_type"), // Pet Armor
+                new NamespacedKey("mineaurora", "custom_tier") // Generic Pet Armor
+        );
     }
 
     @EventHandler
@@ -27,10 +35,13 @@ public class PetPlacementListener implements Listener {
             return;
         }
 
-        if (item.getItemMeta().getPersistentDataContainer().has(fruitKey, PersistentDataType.STRING)) {
-            event.setCancelled(true);
-            // Optionally send a message
-            // event.getPlayer().sendActionBar(MiniMessage.miniMessage().deserialize("<red>You cannot place this item!</red>"));
+        PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
+
+        for (NamespacedKey key : forbiddenKeys) {
+            if (pdc.has(key, PersistentDataType.STRING)) {
+                event.setCancelled(true);
+                return;
+            }
         }
     }
 }

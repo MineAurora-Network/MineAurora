@@ -23,9 +23,11 @@ public class PetItemManager {
 
     private final Login plugin;
     private final Map<String, ItemStack> petItemCache = new HashMap<>();
+    private final NamespacedKey fruitXpKey;
 
     public PetItemManager(Login plugin) {
         this.plugin = plugin;
+        this.fruitXpKey = new NamespacedKey("mineaurora", "fruit_xp_amount");
         loadPetItems();
     }
 
@@ -48,25 +50,17 @@ public class PetItemManager {
 
     private void loadItemsFromSection(ConfigurationSection itemsConfig, String sectionName) {
         ConfigurationSection section = itemsConfig.getConfigurationSection(sectionName);
-        if (section == null) {
-            plugin.getLogger().warning("'" + sectionName + "' section not found in items.yml.");
-            return;
-        }
+        if (section == null) return;
 
-        int count = 0;
         for (String key : section.getKeys(false)) {
             ConfigurationSection itemConfig = section.getConfigurationSection(key);
             if (itemConfig != null) {
                 ItemStack item = buildItem(itemConfig);
                 if (item != null) {
                     petItemCache.put(key, item);
-                    count++;
-                } else {
-                    plugin.getLogger().warning("Failed to build item: " + sectionName + "." + key);
                 }
             }
         }
-        plugin.getLogger().info("[PetItemManager] Loaded " + count + " items from section: " + sectionName);
     }
 
     private ItemStack buildItem(ConfigurationSection config) {
@@ -74,10 +68,7 @@ public class PetItemManager {
             String materialName = config.getString("material", "PAPER").toUpperCase();
             Material material = Material.matchMaterial(materialName);
 
-            if (material == null) {
-                plugin.getLogger().warning("Invalid material '" + materialName + "' for item: " + config.getCurrentPath());
-                return null;
-            }
+            if (material == null) return null;
 
             ItemStack item = new ItemStack(material);
             String texture = config.getString("texture");
@@ -99,10 +90,18 @@ public class PetItemManager {
                     .collect(Collectors.toList());
             meta.lore(lore);
 
+            PersistentDataContainer pdc = meta.getPersistentDataContainer();
+
+            // --- NEW: Handle xp_give specially ---
+            // If items.yml has "xp_give: 50", we save it to NBT so PetManager knows this fruit gives XP.
+            if (config.contains("xp_give")) {
+                double xpAmount = config.getDouble("xp_give");
+                pdc.set(fruitXpKey, PersistentDataType.DOUBLE, xpAmount);
+            }
+
+            // Handle generic NBT section
             ConfigurationSection nbtConfig = config.getConfigurationSection("nbt");
             if (nbtConfig != null) {
-                PersistentDataContainer pdc = meta.getPersistentDataContainer();
-
                 if (nbtConfig.contains("plugin_key") && nbtConfig.contains("value")) {
                     NamespacedKey nbtKey = NamespacedKey.fromString(nbtConfig.getString("plugin_key"), plugin);
                     String nbtValue = nbtConfig.getString("value");
@@ -112,8 +111,14 @@ public class PetItemManager {
                 } else {
                     for (String nbtKeyString : nbtConfig.getKeys(false)) {
                         String nbtValue = nbtConfig.getString(nbtKeyString);
-                        NamespacedKey nbtKey = new NamespacedKey(plugin, nbtKeyString);
-                        pdc.set(nbtKey, PersistentDataType.STRING, nbtValue);
+                        // Check if it already has namespace
+                        NamespacedKey nbtKey;
+                        if (nbtKeyString.contains(":")) {
+                            nbtKey = NamespacedKey.fromString(nbtKeyString);
+                        } else {
+                            nbtKey = new NamespacedKey(plugin, nbtKeyString);
+                        }
+                        if (nbtKey != null) pdc.set(nbtKey, PersistentDataType.STRING, nbtValue);
                     }
                 }
             }
@@ -123,7 +128,6 @@ public class PetItemManager {
 
         } catch (Exception e) {
             plugin.getLogger().severe("Error building item from config: " + config.getCurrentPath());
-            e.printStackTrace();
             return null;
         }
     }

@@ -19,19 +19,31 @@ public class Pet {
     private int level;
     private double xp;
 
+    private double hunger;
+    private double health; // --- NEW: Health Field ---
+
+    private final double maxHunger = 20.0;
+
     private ItemStack[] armorContents;
     private ItemStack weaponContent;
     private ItemStack attributeContent;
 
-    public Pet(UUID ownerUuid, EntityType petType, String displayName, long cooldownEndTime, int level, double xp, String armorBase64, String weaponBase64) {
+    public Pet(UUID ownerUuid, EntityType petType, String displayName, long cooldownEndTime, int level, double xp, double hunger, double health, String armorBase64, String weaponBase64) {
         this.ownerUuid = ownerUuid;
         this.petType = petType;
         this.displayName = (displayName != null && !displayName.isEmpty()) ? displayName : getDefaultName();
         this.cooldownEndTime = cooldownEndTime;
         this.level = level;
         this.xp = xp;
+        this.hunger = Math.max(0, Math.min(hunger, maxHunger));
+        this.health = health; // 0 means full/default if not set yet
         this.armorContents = deserializeItems(armorBase64);
         this.weaponContent = deserializeItem(weaponBase64);
+    }
+
+    // Constructor for loading old data (defaults health to 20)
+    public Pet(UUID ownerUuid, EntityType petType, String displayName, long cooldownEndTime, int level, double xp, String armorBase64, String weaponBase64) {
+        this(ownerUuid, petType, displayName, cooldownEndTime, level, xp, 20.0, 20.0, armorBase64, weaponBase64);
     }
 
     public String getDefaultName() {
@@ -49,7 +61,6 @@ public class Pet {
         return System.currentTimeMillis() < cooldownEndTime;
     }
 
-    // --- FIXED: Added missing getter for Listener ---
     public long getCooldownEndTime() {
         return cooldownEndTime;
     }
@@ -67,6 +78,16 @@ public class Pet {
     public double getXp() { return xp; }
     public void setXp(double xp) { this.xp = xp; }
 
+    // --- Hunger & Health ---
+    public double getHunger() { return hunger; }
+    public void setHunger(double hunger) {
+        this.hunger = Math.max(0, Math.min(hunger, maxHunger));
+    }
+    public double getMaxHunger() { return maxHunger; }
+
+    public double getHealth() { return health; }
+    public void setHealth(double health) { this.health = health; }
+
     // Inventory
     public ItemStack[] getArmorContents() { return armorContents; }
     public void setArmorContents(ItemStack[] armorContents) { this.armorContents = armorContents; }
@@ -79,17 +100,9 @@ public class Pet {
 
     // --- Serialization Helpers ---
 
-    public String serializeArmor() {
-        return serializeItems(armorContents);
-    }
-
-    public String serializeWeapon() {
-        return serializeItem(weaponContent);
-    }
-
-    public String serializeAttribute() {
-        return serializeItem(attributeContent);
-    }
+    public String serializeArmor() { return serializeItems(armorContents); }
+    public String serializeWeapon() { return serializeItem(weaponContent); }
+    public String serializeAttribute() { return serializeItem(attributeContent); }
 
     public static String serializeItems(ItemStack[] items) {
         if (items == null) return "";

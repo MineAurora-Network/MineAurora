@@ -3,12 +3,8 @@ package me.login.pets;
 import me.login.Login;
 import me.login.pets.data.PetsDatabase;
 import me.login.pets.gui.PetGuiListener;
-import me.login.pets.listeners.*; // Import all listeners
+import me.login.pets.listeners.*;
 
-/**
- * Main module class for the Pet system.
- * Initializes all managers, listeners, and commands.
- */
 public class PetsModule {
 
     private final Login plugin;
@@ -18,22 +14,16 @@ public class PetsModule {
     private PetMessageHandler messageHandler;
     private PetsLogger petsLogger;
     private PetCommand petCommand;
-
     private PetItemManager petItemManager;
 
     // Listeners
     private PetDataListener petDataListener;
     private PetGuiListener petGuiListener;
-
     private PetInteractListener petInteractListener;
     private PetCombatListener petCombatListener;
     private PetProtectionListener petProtectionListener;
     private PetInventoryListener petInventoryListener;
     private PetPlacementListener petPlacementListener;
-
-    // --- NEW LISTENER ---
-    private PetHelmetGuiListener petHelmetGuiListener;
-
 
     public PetsModule(Login plugin) {
         this.plugin = plugin;
@@ -42,50 +32,35 @@ public class PetsModule {
     public boolean init(PetsLogger sharedLogger) {
         plugin.getLogger().info("Initializing Pets Module...");
 
-        // 1. Config
         this.petsConfig = new PetsConfig(plugin);
         petsConfig.loadConfig();
 
-        // 2. Messaging & Logging
         this.messageHandler = new PetMessageHandler(plugin, petsConfig);
-        this.petsLogger = sharedLogger; // Use the shared logger from Login
+        this.petsLogger = sharedLogger;
         if (this.petsLogger == null) {
-            plugin.getLogger().warning("PetsModule received a null logger! Creating a fallback.");
-            this.petsLogger = new PetsLogger(plugin); // Fallback if something went wrong
+            this.petsLogger = new PetsLogger(plugin);
         }
         petsLogger.loadConfig();
 
-        // 3. Database
         this.petsDatabase = new PetsDatabase(plugin);
         if (!petsDatabase.connect()) {
             plugin.getLogger().severe("Failed to connect to Pets database!");
             return false;
         }
 
-        // 4. Pet Item Manager
         this.petItemManager = new PetItemManager(plugin);
-
-        // 5. Core Manager
         this.petManager = new PetManager(plugin, petsDatabase, petsConfig, messageHandler, petsLogger);
 
-        // 6. Listeners
         this.petDataListener = new PetDataListener(petManager, petsDatabase);
         this.petGuiListener = new PetGuiListener(petManager, messageHandler);
-
         this.petInventoryListener = new PetInventoryListener(plugin, petManager, petsConfig);
         this.petInteractListener = new PetInteractListener(petManager, messageHandler, petInventoryListener);
         this.petCombatListener = new PetCombatListener(petManager, petsConfig, messageHandler);
         this.petProtectionListener = new PetProtectionListener(petManager);
         this.petPlacementListener = new PetPlacementListener(plugin);
 
-        // --- NEW LISTENER INITIALIZED ---
-        this.petHelmetGuiListener = new PetHelmetGuiListener(petManager);
-
-
-        // 7. Commands
         this.petCommand = new PetCommand(plugin, petManager, messageHandler, petsLogger, petsConfig, petItemManager, petInventoryListener);
 
-        // 8. Register
         plugin.getServer().getPluginManager().registerEvents(petDataListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petGuiListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petInteractListener, plugin);
@@ -94,9 +69,7 @@ public class PetsModule {
         plugin.getServer().getPluginManager().registerEvents(petInventoryListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(petPlacementListener, plugin);
 
-        // --- NEW LISTENER REGISTERED ---
-        plugin.getServer().getPluginManager().registerEvents(petHelmetGuiListener, plugin);
-
+        // --- REMOVED: petHelmetGuiListener ---
 
         plugin.getCommand("pet").setExecutor(petCommand);
         plugin.getCommand("pet").setTabCompleter(petCommand);
@@ -115,24 +88,9 @@ public class PetsModule {
         }
     }
 
-    // Getters for other modules if needed
-    public PetManager getPetManager() {
-        return petManager;
-    }
-
-    public PetsConfig getPetsConfig() {
-        return petsConfig;
-    }
-
-    public PetMessageHandler getMessageHandler() {
-        return messageHandler;
-    }
-
-    public PetsLogger getPetsLogger() {
-        return petsLogger;
-    }
-
-    public PetItemManager getPetItemManager() {
-        return petItemManager;
-    }
+    public PetManager getPetManager() { return petManager; }
+    public PetsConfig getPetsConfig() { return petsConfig; }
+    public PetMessageHandler getMessageHandler() { return messageHandler; }
+    public PetsLogger getPetsLogger() { return petsLogger; }
+    public PetItemManager getPetItemManager() { return petItemManager; }
 }

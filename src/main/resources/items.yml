@@ -1066,9 +1066,9 @@ pet_attributes:
     nbt:
       plugin_key: mineaurora:pet_attribute_id
       value: healer_shard
+
 # ----------------------------------------------------------------
 # PET FRUITS (XP FOOD)
-# Must match: config.yml → pet_leveling.fruit-xp keys
 # ----------------------------------------------------------------
 pet_fruits:
   apple:
@@ -1083,70 +1083,67 @@ pet_fruits:
       value: "apple"
   inferno_fruit:
     material: "PLAYER_HEAD"
-    textture: "http://textures.minecraft.net/texture/37faca995aa2bfa391f1c9ddcb20118fdc331bf5c8a5172bb4c7eb038e3d2b2c"
-    name: ""
+    texture: "http://textures.minecraft.net/texture/37faca995aa2bfa391f1c9ddcb20118fdc331bf5c8a5172bb4c7eb038e3d2b2c"
+    name: "<red>Inferno Fruit</red>"
     lore:
-      - ""
+      - "<gray>Restores Hunger</gray>"
     xp_give:
     nbt:
-      plugin_key: "mineaurota:pet_fruit"
+      plugin_key: "mineaurora:pet_fruit"
       value: "inferno_fruit"
   coconut_fruit:
     material: "PLAYER_HEAD"
-    textture: "http://textures.minecraft.net/texture/6a974bcd9ea2d14b434e8ce93322673365445643ff78e08ef8d51930017f001b"
+    texture: "http://textures.minecraft.net/texture/6a974bcd9ea2d14b434e8ce93322673365445643ff78e08ef8d51930017f001b"
     name: "<white>Coconut</white>"
     lore:
       - "<gray>+100 Pet XP"
     xp_give: 100
     nbt:
-      plugin_key: "mineaurota:pet_fruit"
+      plugin_key: "mineaurora:pet_fruit"
       value: "cocunut"
   dragon_fruit:
     material: "PLAYER_HEAD"
-    textture: "http://textures.minecraft.net/texture/915ec4f4297ea93ba9f7a7b397dd478fbd121185dedd846ef8c67c7487fd1130"
-    name: ""
+    texture: "http://textures.minecraft.net/texture/915ec4f4297ea93ba9f7a7b397dd478fbd121185dedd846ef8c67c7487fd1130"
+    name: "<light_purple>Dragon Fruit</light_purple>"
     lore:
-      - ""
+      - "<gray>Restores Hunger</gray>"
     xp_give:
     nbt:
-      plugin_key: "mineaurota:pet_fruit"
+      plugin_key: "mineaurora:pet_fruit"
       value: "dragon_fruit"
   fruit_cake:
     material: "PLAYER_HEAD"
-    textture: "http://textures.minecraft.net/texture/294ed0edd9bff1c0d8bd34e11257448b715194fab9f61b7ab461d9f77c7f484"
-    name: ""
+    texture: "http://textures.minecraft.net/texture/294ed0edd9bff1c0d8bd34e11257448b715194fab9f61b7ab461d9f77c7f484"
+    name: "<gold>Fruit Cake</gold>"
     lore:
-      - ""
+      - "<gray>Restores Hunger</gray>"
     xp_give:
     nbt:
-      plugin_key: "mineaurota:pet_fruit"
+      plugin_key: "mineaurora:pet_fruit"
       value: "fruit_cake"
   magical_fruit:
     material: "PLAYER_HEAD"
-    textture: "http://textures.minecraft.net/texture/91d002d550b3b3b51a8c2130651fe985b62a00fce693ded30efe1d5a9eecffe4"
-    name: ""
+    texture: "http://textures.minecraft.net/texture/91d002d550b3b3b51a8c2130651fe985b62a00fce693ded30efe1d5a9eecffe4"
+    name: "<aqua>Magical Fruit</aqua>"
     lore:
-      - ""
+      - "<gray>Restores Hunger</gray>"
     xp_give:
     nbt:
-      plugin_key: "mineaurota:pet_fruit"
+      plugin_key: "mineaurora:pet_fruit"
       value: "magical_fruit"
   aliean_fruit:
     material: "PLAYER_HEAD"
-    textture: "http://textures.minecraft.net/texture/7586f53cfed412f3562eed2545050c34210a569d34140255d368521acc1c6909"
-    name: ""
+    texture: "http://textures.minecraft.net/texture/7586f53cfed412f3562eed2545050c34210a569d34140255d368521acc1c6909"
+    name: "<green>Alien Fruit</green>"
     lore:
-      - ""
+      - "<gray>Restores Hunger</gray>"
     xp_give:
     nbt:
-      plugin_key: "mineaurota:pet_fruit"
+      plugin_key: "mineaurora:pet_fruit"
       value: "aliean_fruit"
-
-
 
 # ----------------------------------------------------------------
 # PET CAPTURE ITEMS (Leads)
-# Names must match: config.yml → pet_capture.chances.x
 # ----------------------------------------------------------------
 pet_capture:
   tier1_lead:
@@ -1157,7 +1154,6 @@ pet_capture:
     nbt:
       plugin_key: "mineaurora:pet_lead_1"
       value: "tier1_lead"
-
   tier2_lead:
     material: LEAD
     name: "<green>Sturdy Capture Lead</green>"
@@ -1166,7 +1162,6 @@ pet_capture:
     nbt:
       plugin_key: "mineaurora:pet_lead_2"
       value: "tier2_lead"
-
   tier3_lead:
     material: LEAD
     name: "<blue>Strong Capture Lead</blue>"
@@ -1175,7 +1170,6 @@ pet_capture:
     nbt:
       plugin_key: "mineaurora:pet_lead_3"
       value: "tier3_lead"
-
   tier4_lead:
     material: LEAD
     name: "<pink>Epic Capture Lead</pink>"

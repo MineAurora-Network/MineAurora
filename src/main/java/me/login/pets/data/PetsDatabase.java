@@ -2,8 +2,6 @@ package me.login.pets.data;
 
 import me.login.Login;
 import org.bukkit.entity.EntityType;
-import org.bukkit.inventory.ItemStack;
-
 import java.io.File;
 import java.io.IOException;
 import java.sql.*;
@@ -15,18 +13,15 @@ import java.util.logging.Level;
 public class PetsDatabase {
     private final Login plugin;
     private Connection connection;
+
     public PetsDatabase(Login plugin) {
         this.plugin = plugin;
     }
-    public Login getPlugin() {
-        return plugin;
-    }
+    public Login getPlugin() { return plugin; }
 
     public boolean connect() {
         File databaseDir = new File(plugin.getDataFolder(), "database");
-        if (!databaseDir.exists()) {
-            databaseDir.mkdirs();
-        }
+        if (!databaseDir.exists()) databaseDir.mkdirs();
         File dataFile = new File(databaseDir, "pets.db");
         if (!dataFile.exists()) {
             try {
@@ -50,9 +45,7 @@ public class PetsDatabase {
 
     public void disconnect() {
         try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
-            }
+            if (connection != null && !connection.isClosed()) connection.close();
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Error while disconnecting from pets database!", e);
         }
@@ -67,17 +60,23 @@ public class PetsDatabase {
                 + "cooldown_end_time BIGINT DEFAULT 0,"
                 + "level INTEGER DEFAULT 1,"
                 + "xp DOUBLE DEFAULT 0,"
+                + "hunger DOUBLE DEFAULT 20.0,"
+                + "health DOUBLE DEFAULT 20.0," // --- NEW: Health Column ---
                 + "UNIQUE(player_uuid, pet_type)"
                 + ");";
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(sql);
 
+            // Migration: Add columns if they don't exist
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN level INTEGER DEFAULT 1;"); } catch (SQLException ignored) {}
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN xp DOUBLE DEFAULT 0;"); } catch (SQLException ignored) {}
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN armor_contents TEXT;"); } catch (SQLException ignored) {}
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN weapon_content TEXT;"); } catch (SQLException ignored) {}
-            // --- NEW: Attribute Column ---
             try { stmt.execute("ALTER TABLE player_pets ADD COLUMN attribute_content TEXT;"); } catch (SQLException ignored) {}
+            try { stmt.execute("ALTER TABLE player_pets ADD COLUMN hunger DOUBLE DEFAULT 20.0;"); } catch (SQLException ignored) {}
+
+            // --- NEW ---
+            try { stmt.execute("ALTER TABLE player_pets ADD COLUMN health DOUBLE DEFAULT 20.0;"); } catch (SQLException ignored) {}
 
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Could not create pets table!", e);
@@ -96,12 +95,16 @@ public class PetsDatabase {
                 long cooldownEndTime = rs.getLong("cooldown_end_time");
                 int level = rs.getInt("level");
                 double xp = rs.getDouble("xp");
+                double hunger = rs.getDouble("hunger");
+
+                // --- NEW: Load Health ---
+                double health = rs.getDouble("health");
+
                 String armor = rs.getString("armor_contents");
                 String weapon = rs.getString("weapon_content");
-                // --- NEW: Load Attribute ---
                 String attribute = rs.getString("attribute_content");
 
-                Pet pet = new Pet(playerUuid, petType, displayName, cooldownEndTime, level, xp, armor, weapon);
+                Pet pet = new Pet(playerUuid, petType, displayName, cooldownEndTime, level, xp, hunger, health, armor, weapon);
                 if (attribute != null && !attribute.isEmpty()) {
                     pet.setAttributeContent(Pet.deserializeItem(attribute));
                 }
@@ -113,9 +116,9 @@ public class PetsDatabase {
         return pets;
     }
 
-    // ... [Keep existing methods: addPet, removePet, updatePetName, setPetCooldown, updatePetStats] ...
     public boolean addPet(UUID playerUuid, EntityType petType) {
-        String sql = "INSERT INTO player_pets(player_uuid, pet_type, level, xp) VALUES(?,?, 1, 0)";
+        // Default health/hunger 20.0
+        String sql = "INSERT INTO player_pets(player_uuid, pet_type, level, xp, hunger, health) VALUES(?,?, 1, 0, 20.0, 20.0)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setString(1, playerUuid.toString());
             pstmt.setString(2, petType.name());
@@ -164,20 +167,22 @@ public class PetsDatabase {
         }
     }
 
-    public void updatePetStats(UUID playerUuid, EntityType petType, int level, double xp) {
-        String sql = "UPDATE player_pets SET level = ?, xp = ? WHERE player_uuid = ? AND pet_type = ?";
+    // --- UPDATED: Save Health & Hunger ---
+    public void updatePetStats(UUID playerUuid, EntityType petType, int level, double xp, double hunger, double health) {
+        String sql = "UPDATE player_pets SET level = ?, xp = ?, hunger = ?, health = ? WHERE player_uuid = ? AND pet_type = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
             pstmt.setInt(1, level);
             pstmt.setDouble(2, xp);
-            pstmt.setString(3, playerUuid.toString());
-            pstmt.setString(4, petType.name());
+            pstmt.setDouble(3, hunger);
+            pstmt.setDouble(4, health);
+            pstmt.setString(5, playerUuid.toString());
+            pstmt.setString(6, petType.name());
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Error updating pet stats for " + playerUuid, e);
+            plugin.getLogger().log(Level.SEVERE, "Error updating pet stats (full) for " + playerUuid, e);
         }
     }
 
-    // --- UPDATED Method to include Attribute ---
     public void updatePetInventory(UUID playerUuid, EntityType petType, String armor, String weapon, String attribute) {
         String sql = "UPDATE player_pets SET armor_contents = ?, weapon_content = ?, attribute_content = ? WHERE player_uuid = ? AND pet_type = ?";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -190,10 +195,5 @@ public class PetsDatabase {
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Error updating pet inventory for " + playerUuid, e);
         }
-    }
-
-    // Keeping old method for compatibility if called elsewhere, but forwarding null
-    public void updatePetInventory(UUID playerUuid, EntityType petType, String armor, String weapon) {
-        updatePetInventory(playerUuid, petType, armor, weapon, "");
     }
 }

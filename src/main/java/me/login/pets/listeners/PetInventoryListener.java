@@ -16,6 +16,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -29,8 +30,10 @@ public class PetInventoryListener implements Listener {
     private final PetManager petManager;
     private final PetsConfig config;
 
-    private final NamespacedKey armorTypeKey;
-    private final NamespacedKey attributeKey; // --- NEW Key ---
+    private final NamespacedKey armorTypeKey; // entity_armor_type
+    private final NamespacedKey customTierKey; // custom_tier (e.g. obsidian)
+    private final NamespacedKey attributeKey; // pet_attribute_id
+
     private final Set<Material> allowedWeapons = new HashSet<>(Arrays.asList(
             Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD, Material.GOLDEN_SWORD, Material.DIAMOND_SWORD, Material.NETHERITE_SWORD,
             Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, Material.GOLDEN_AXE, Material.DIAMOND_AXE, Material.NETHERITE_AXE
@@ -40,8 +43,9 @@ public class PetInventoryListener implements Listener {
         this.plugin = plugin;
         this.petManager = petManager;
         this.config = config;
-        this.armorTypeKey = new NamespacedKey(plugin, "pet_armor_entity");
-        this.attributeKey = new NamespacedKey(plugin, "pet_attribute_id"); // Matches items.yml
+        this.armorTypeKey = new NamespacedKey(plugin, "entity_armor_type"); // Assuming default namespace, adjust if strictly 'mineaurora'
+        this.customTierKey = new NamespacedKey(plugin, "custom_tier");
+        this.attributeKey = new NamespacedKey(plugin, "pet_attribute_id");
     }
 
     public void openPetInventory(Player player, Pet pet, boolean isAdmin) {
@@ -60,7 +64,6 @@ public class PetInventoryListener implements Listener {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getSlot();
 
-        // Handle admin removal
         if (menu.isAdmin() && event.getClick() == ClickType.SHIFT_RIGHT) {
             if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT || slot == PetInventoryMenu.ATTRIBUTE_SLOT) {
                 inv.setItem(slot, null);
@@ -69,14 +72,12 @@ public class PetInventoryListener implements Listener {
             }
         }
 
-        // Allow taking items
         if (event.getClickedInventory() == inv) {
             if (isArmorSlot(slot) || slot == PetInventoryMenu.WEAPON_SLOT || slot == PetInventoryMenu.ATTRIBUTE_SLOT) {
                 return;
             }
         }
 
-        // Allow placing items
         if (event.getClickedInventory() != null && event.getClickedInventory() != inv) {
             if (event.isShiftClick()) {
                 event.setCancelled(true);
@@ -106,21 +107,44 @@ public class PetInventoryListener implements Listener {
 
     private boolean validateItem(Pet pet, ItemStack item, int slot) {
         if (item == null || item.getType() == Material.AIR) return false;
+        if (!item.hasItemMeta()) return false;
 
+        PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
+
+        // --- Slot 10, 11, 12, 13: Armor ---
         if (isArmorSlot(slot)) {
-            if (!item.hasItemMeta()) return false;
-            PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
-            if (!pdc.has(armorTypeKey, PersistentDataType.STRING)) return false;
-            String requiredType = pdc.get(armorTypeKey, PersistentDataType.STRING);
-            return requiredType.equalsIgnoreCase(pet.getPetType().name());
+            // Check 1: Has "entity_armor_type" matching pet type (e.g. "zombie")
+            // Check 2: Has "custom_tier" (e.g. "obsidian") - implies generic pet armor
 
+            // Note: Based on items.yml, keys seem to not use plugin namespace in YAML?
+            // Usually PDC requires a NamespacedKey.
+            // If your ItemManager saves them with 'mineaurora' namespace, use 'mineaurora'.
+            // I will check 'mineaurora' keys as seen in other files.
+
+            NamespacedKey typeKey = new NamespacedKey("mineaurora", "entity_armor_type");
+            NamespacedKey tierKey = new NamespacedKey("mineaurora", "custom_tier");
+
+            if (pdc.has(typeKey, PersistentDataType.STRING)) {
+                String type = pdc.get(typeKey, PersistentDataType.STRING);
+                return type != null && type.equalsIgnoreCase(pet.getPetType().name());
+            }
+
+            if (pdc.has(tierKey, PersistentDataType.STRING)) {
+                // Valid generic armor (obsidian etc.)
+                return true;
+            }
+
+            // Strict: Only allow items from pet_armor section
+            return false;
+
+            // --- Slot 15: Weapon ---
         } else if (slot == PetInventoryMenu.WEAPON_SLOT) {
             return allowedWeapons.contains(item.getType());
 
+            // --- Slot 16: Attribute ---
         } else if (slot == PetInventoryMenu.ATTRIBUTE_SLOT) {
-            // Check for attribute NBT
-            if (!item.hasItemMeta()) return false;
-            return item.getItemMeta().getPersistentDataContainer().has(attributeKey, PersistentDataType.STRING);
+            NamespacedKey attrKey = new NamespacedKey("mineaurora", "pet_attribute_id");
+            return pdc.has(attrKey, PersistentDataType.STRING);
         }
         return false;
     }
@@ -141,7 +165,6 @@ public class PetInventoryListener implements Listener {
         }
         pet.setArmorContents(armor);
         pet.setWeaponContent(inv.getItem(PetInventoryMenu.WEAPON_SLOT));
-        // --- NEW: Save Attribute Item ---
         pet.setAttributeContent(inv.getItem(PetInventoryMenu.ATTRIBUTE_SLOT));
 
         petManager.savePetInventory(pet);

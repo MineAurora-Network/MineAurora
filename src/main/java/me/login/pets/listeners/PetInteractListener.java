@@ -1,6 +1,5 @@
 package me.login.pets.listeners;
 
-// --- FIXED: Removed bad import ---
 import me.login.pets.PetManager;
 import me.login.pets.PetMessageHandler;
 import org.bukkit.Material;
@@ -33,44 +32,41 @@ public class PetInteractListener implements Listener {
 
     @EventHandler
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) {
-            return; // Only fire for main hand
-        }
+        if (event.getHand() != EquipmentSlot.HAND) return;
 
         Player player = event.getPlayer();
         Entity clickedEntity = event.getRightClicked();
         ItemStack itemInHand = player.getInventory().getItemInMainHand();
 
-        if (!(clickedEntity instanceof LivingEntity)) {
-            return;
-        }
+        if (!(clickedEntity instanceof LivingEntity)) return;
         LivingEntity livingEntity = (LivingEntity) clickedEntity;
 
-        // --- 1. Handle Pet Interactions (clicking *on* a pet) ---
+        // --- 1. Handle Pet Interactions ---
         if (petManager.isPet(livingEntity)) {
             UUID ownerUuid = petManager.getPetOwner(livingEntity);
-            if (ownerUuid == null || !ownerUuid.equals(player.getUniqueId())) {
-                return; // Not the owner, do nothing (PetProtectionListener handles damage)
-            }
+            if (ownerUuid == null || !ownerUuid.equals(player.getUniqueId())) return;
 
-            // It's the owner clicking their own pet
             event.setCancelled(true);
 
-            // 1a. Open Pet Inventory (Shift + Right-Click + Empty Hand)
+            // Inventory
             if (player.isSneaking() && (itemInHand == null || itemInHand.getType() == Material.AIR)) {
                 inventoryListener.openPetInventory(player, petManager.getPet(ownerUuid, livingEntity.getType()), false);
                 return;
             }
 
-            // 1b. Feed Pet (Right-Click with Fruit)
+            // Feed Pet (Any pet fruit)
             if (itemInHand != null && itemInHand.hasItemMeta()) {
-                if (itemInHand.getItemMeta().getPersistentDataContainer().has(new NamespacedKey("mineaurora", "pet_fruit_id"), PersistentDataType.STRING)) {
-                    petManager.feedPet(player, itemInHand); // feedPet handles cooldowns and messages
+                NamespacedKey fruitKey = new NamespacedKey("mineaurora", "pet_fruit_id");
+                NamespacedKey fruitKeyAlt = new NamespacedKey("mineaurora", "pet_fruit");
+                PersistentDataContainer pdc = itemInHand.getItemMeta().getPersistentDataContainer();
+
+                if (pdc.has(fruitKey, PersistentDataType.STRING) || pdc.has(fruitKeyAlt, PersistentDataType.STRING)) {
+                    petManager.feedPet(player, itemInHand);
                     return;
                 }
             }
 
-            // 1c. Pet Particles (Right-Click with Empty Hand, not sneaking)
+            // Pet Particles
             if (!player.isSneaking() && (itemInHand == null || itemInHand.getType() == Material.AIR)) {
                 petManager.showPetParticles(player, livingEntity);
                 return;
@@ -78,18 +74,15 @@ public class PetInteractListener implements Listener {
             return;
         }
 
-        // --- 2. Handle Non-Pet Interactions (clicking a *wild* mob) ---
-
-        if (itemInHand == null || itemInHand.getType() == Material.AIR || !itemInHand.hasItemMeta()) {
-            return;
-        }
+        // --- 2. Handle Non-Pet Interactions ---
+        if (itemInHand == null || itemInHand.getType() == Material.AIR || !itemInHand.hasItemMeta()) return;
         ItemMeta meta = itemInHand.getItemMeta();
         PersistentDataContainer data = meta.getPersistentDataContainer();
 
-        // 2a. Handle Capture Lead (Replaces CaptureListener)
+        // Capture
         String captureItemName = getCaptureItemName(data);
         if (captureItemName != null) {
-            event.setCancelled(true); // Prevent lead from attaching
+            event.setCancelled(true);
             boolean itemUsed = petManager.attemptCapture(player, livingEntity, captureItemName);
             if (itemUsed) {
                 itemInHand.setAmount(itemInHand.getAmount() - 1);
@@ -97,28 +90,23 @@ public class PetInteractListener implements Listener {
             return;
         }
 
-        // 2b. Handle Amethyst Shard (Targeting)
+        // Targeting Shard
         NamespacedKey shardKey = new NamespacedKey("mineaurora", "pet_utility_id");
-        if (data.has(shardKey, PersistentDataType.STRING) && data.get(shardKey, PersistentDataType.STRING).equals("amethyst_shard")) {
+        if (data.has(shardKey, PersistentDataType.STRING) && "amethyst_shard".equals(data.get(shardKey, PersistentDataType.STRING))) {
             event.setCancelled(true);
             LivingEntity activePet = petManager.getActivePet(player.getUniqueId());
             if (activePet == null) {
                 messageHandler.sendPlayerMessage(player, "<red>You do not have an active pet to command!</red>");
                 return;
             }
-
-            // --- FIXED: Call method with (Player, Entity) ---
             petManager.getTargetSelection().setPetTarget(player, livingEntity);
             messageHandler.sendPlayerActionBar(player, "<light_purple>Pet targeting " + livingEntity.getType().name() + "!</light_purple>");
-
-            // --- BUG FIX: Removed line below to prevent shard from being consumed ---
-            // itemInHand.setAmount(itemInHand.getAmount() - 1); // Consume shard
+            itemInHand.setAmount(itemInHand.getAmount() - 1); // Consume shard
             return;
         }
     }
 
     private String getCaptureItemName(PersistentDataContainer data) {
-        // This logic is from the old CaptureListener
         for (org.bukkit.NamespacedKey key : data.getKeys()) {
             if (key.getNamespace().equals("mineaurora") && key.getKey().startsWith("pet_lead_")) {
                 return data.get(key, PersistentDataType.STRING);

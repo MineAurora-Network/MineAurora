@@ -17,7 +17,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PetCommand implements CommandExecutor, TabCompleter {
@@ -51,22 +51,22 @@ public class PetCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             Player player = (Player) sender;
-            new PetMenu(player, petManager, PetMenu.PetMenuSort.RARITY).open();
+            // --- FIX: Pass 'player' to open() ---
+            new PetMenu(player, petManager, PetMenu.PetMenuSort.RARITY).open(player);
             return true;
         }
 
-        // --- Admin Command Handling ---
         String sub = args[0].toLowerCase();
         if (!sender.hasPermission(permAdmin)) {
             if (!(sender instanceof Player)) {
                 messageHandler.sendSenderMessage(sender, "<red>You do not have permission.</red>");
                 return true;
             }
-            new PetMenu((Player) sender, petManager, PetMenu.PetMenuSort.RARITY).open();
+            // --- FIX: Pass 'sender' cast to Player to open() ---
+            new PetMenu((Player) sender, petManager, PetMenu.PetMenuSort.RARITY).open((Player) sender);
             return true;
         }
 
-        // Sender has admin perms
         switch (sub) {
             case "reload":
                 config.loadConfig();
@@ -91,6 +91,10 @@ public class PetCommand implements CommandExecutor, TabCompleter {
                 handleAdd(sender, args);
                 break;
 
+            case "addallpets":
+                handleAddAllPets(sender, args);
+                break;
+
             case "revive":
                 handleRevive(sender, args);
                 break;
@@ -112,12 +116,37 @@ public class PetCommand implements CommandExecutor, TabCompleter {
         messageHandler.sendSenderMessage(sender, "<yellow>/pet give <player> <item> [amount]</yellow> - Give pet items.");
         messageHandler.sendSenderMessage(sender, "<yellow>/pet remove <player> <pet_type></yellow> - Remove a pet.");
         messageHandler.sendSenderMessage(sender, "<yellow>/pet add <player> <pet_type></yellow> - Add a pet.");
+        messageHandler.sendSenderMessage(sender, "<yellow>/pet addallpets <player></yellow> - Give ALL pets to a player.");
         messageHandler.sendSenderMessage(sender, "<yellow>/pet revive <player> <pet_type | all></yellow> - Revive pet(s).");
         messageHandler.sendSenderMessage(sender, "<yellow>/pet petinvcheck <player> <pet_type></yellow> - Open a pet's inventory.");
         messageHandler.sendSenderMessage(sender, "<yellow>/pet reload</yellow> - Reload config.");
     }
 
-    // --- Command Handlers ---
+    private void handleAddAllPets(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            messageHandler.sendSenderMessage(sender, "<red>Usage: /pet addallpets <player></red>");
+            return;
+        }
+        Player target = Bukkit.getPlayer(args[1]);
+        if (target == null) {
+            messageHandler.sendSenderMessage(sender, "<red>Player not found.</red>");
+            return;
+        }
+
+        int count = 0;
+        Set<EntityType> allTypes = config.getAllCapturablePetTypes();
+
+        for (EntityType type : allTypes) {
+            if (!petManager.hasPet(target.getUniqueId(), type)) {
+                if (petManager.addPet(target.getUniqueId(), type)) {
+                    count++;
+                }
+            }
+        }
+
+        messageHandler.sendSenderMessage(sender, "<green>Successfully added " + count + " new pets to " + target.getName() + "!</green>");
+        logger.log(sender.getName() + " ran addallpets for " + target.getName());
+    }
 
     private void handleCheck(CommandSender sender, String[] args) {
         if (args.length < 2) {
@@ -136,7 +165,10 @@ public class PetCommand implements CommandExecutor, TabCompleter {
         }
         messageHandler.sendSenderMessage(sender, "<gold>" + target.getName() + "'s Pets:</gold>");
         for (Pet pet : pets) {
-            messageHandler.sendSenderMessage(sender, "<gray>- <white>" + pet.getPetType() + "</white> [Lvl " + pet.getLevel() + "]</gray>");
+            String status = pet.isOnCooldown() ? "<red>[Cooldown]</red>" : "<green>[Ready]</green>";
+            messageHandler.sendSenderMessage(sender,
+                    "<gray>- <white>" + pet.getPetType() + "</white> [Lvl " + pet.getLevel() + "] " +
+                            "<yellow>[Hunger: " + String.format("%.1f", pet.getHunger()) + "]</yellow> " + status + "</gray>");
         }
     }
 
@@ -283,35 +315,27 @@ public class PetCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // Open the inventory in admin mode
         inventoryListener.openPetInventory((Player) sender, pet, true);
     }
 
 
-    // --- Tab Completion ---
-
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (!sender.hasPermission(permAdmin)) {
-            return List.of(); // No tab complete for non-admins
+            return List.of();
         }
 
         if (args.length == 1) {
-            return Arrays.asList("check", "give", "remove", "add", "revive", "petinvcheck", "reload")
+            return Arrays.asList("check", "give", "remove", "add", "addallpets", "revive", "petinvcheck", "reload")
                     .stream().filter(s -> s.startsWith(args[0].toLowerCase())).collect(Collectors.toList());
         }
 
         if (args.length == 2) {
-            if (Arrays.asList("check", "give", "remove", "add", "revive", "petinvcheck").contains(args[0].toLowerCase())) {
-                return null; // Suggest online players
-            }
+            return null;
         }
 
         if (args.length == 3) {
             String sub = args[0].toLowerCase();
-            // --- BUG FIX: Removed `Player target = Bukkit.getPlayer(args[1]);` check here.
-            // This allows items to show up even if the player name is incomplete or player is offline.
-
             switch (sub) {
                 case "give":
                     return itemManager.getItemKeys().stream()
@@ -319,7 +343,6 @@ public class PetCommand implements CommandExecutor, TabCompleter {
                             .collect(Collectors.toList());
                 case "remove":
                 case "petinvcheck":
-                    // For these, we do need a valid player target to check THEIR pets, but for tab complete generic logic is safer
                     Player target = Bukkit.getPlayer(args[1]);
                     if (target == null) return List.of();
                     return petManager.getPlayerData(target.getUniqueId()).stream()
@@ -349,7 +372,6 @@ public class PetCommand implements CommandExecutor, TabCompleter {
                             .collect(Collectors.toList());
             }
         }
-
         return List.of();
     }
 }

@@ -2,30 +2,23 @@ package me.login.pets.gui;
 
 import me.login.pets.PetManager;
 import me.login.pets.PetMessageHandler;
-import me.login.pets.PetsConfig;
 import me.login.pets.data.Pet;
 import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
 public class PetGuiListener implements Listener {
 
     private final PetManager petManager;
     private final PetMessageHandler messageHandler;
-    private final Map<UUID, EntityType> selectedPet = new HashMap<>();
-    private final Map<UUID, EntityType> renamingPet = new HashMap<>();
 
     public PetGuiListener(PetManager petManager, PetMessageHandler messageHandler) {
         this.petManager = petManager;
@@ -35,118 +28,45 @@ public class PetGuiListener implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         Inventory inv = event.getInventory();
-        if (inv.getHolder() == null || !(inv.getHolder() instanceof PetMenu)) {
-            return;
-        }
+        if (!(inv.getHolder() instanceof PetMenu)) return;
 
         event.setCancelled(true);
-        if (event.getClickedInventory() != inv) {
-            return;
-        }
+        if (!(event.getWhoClicked() instanceof Player)) return;
+        Player player = (Player) event.getWhoClicked();
+        ItemStack clickedItem = event.getCurrentItem();
 
-        Player p = (Player) event.getWhoClicked();
-        ItemStack item = event.getCurrentItem();
-        if (item == null || item.getType() == Material.AIR) {
-            return;
-        }
+        if (clickedItem == null || clickedItem.getType() == Material.AIR || !clickedItem.hasItemMeta()) return;
 
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return;
-        }
+        ItemMeta meta = clickedItem.getItemMeta();
 
-        // Check if it's a pet item
+        // 1. Pet Click
         if (meta.getPersistentDataContainer().has(PetMenu.PET_TYPE_KEY, PersistentDataType.STRING)) {
-            EntityType type = EntityType.valueOf(meta.getPersistentDataContainer().get(PetMenu.PET_TYPE_KEY, PersistentDataType.STRING));
-            selectedPet.put(p.getUniqueId(), type);
-            p.playSound(p.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 1, 1);
-            // --- FIXED: Added explicit message on selection ---
-            messageHandler.sendPlayerMessage(p, "<green>You selected " + type.name() + ".</green>");
+            String typeStr = meta.getPersistentDataContainer().get(PetMenu.PET_TYPE_KEY, PersistentDataType.STRING);
+            try {
+                EntityType type = EntityType.valueOf(typeStr);
+                if (event.getClick() == ClickType.SHIFT_RIGHT) {
+                    Pet pet = petManager.getPet(player.getUniqueId(), type);
+                    if (pet != null) new me.login.pets.PetInventoryMenu(player, pet, false).open(player);
+                } else {
+                    petManager.summonPet(player, type);
+                    player.closeInventory();
+                }
+            } catch (IllegalArgumentException ignored) {}
             return;
         }
 
-        // Check navigation buttons (by slot)
-        int slot = event.getSlot();
-
-        // Summon
-        if (slot == 48) {
-            EntityType type = selectedPet.get(p.getUniqueId());
-            if (type == null) {
-                messageHandler.sendPlayerMessage(p, "<red>Select a pet first!</red>");
-                return;
-            }
-
-            // --- BUG FIX: Close inventory BEFORE summoning ---
-            // This prevents the "Vanishing Menu" bug where the Helmet Menu (opened by summonPet)
-            // would be immediately closed by a subsequent p.closeInventory() call.
-            p.closeInventory();
-
-            petManager.summonPet(p, type);
+        // 2. Buttons
+        if (clickedItem.getType() == Material.BARRIER) { // Despawn
+            petManager.despawnPet(player.getUniqueId(), true);
+            player.closeInventory();
         }
-
-        // Despawn
-        else if (slot == 49) {
-            petManager.despawnPet(p.getUniqueId(), true);
-            p.closeInventory();
+        else if (clickedItem.getType() == Material.COMPARATOR) { // Sort
+            PetMenu menu = (PetMenu) inv.getHolder();
+            PetMenu.PetMenuSort next = (menu.getSortMode() == PetMenu.PetMenuSort.RARITY) ? PetMenu.PetMenuSort.LEVEL : PetMenu.PetMenuSort.RARITY;
+            new PetMenu(player, petManager, next).open(player);
         }
-
-        // Rename
-        else if (slot == 50) {
-            EntityType type = selectedPet.get(p.getUniqueId());
-            if (type == null) {
-                messageHandler.sendPlayerMessage(p, "<red>Select a pet first!</red>");
-                return;
-            }
-            if (!p.hasPermission(petManager.getPetsConfig().getRenamePermission())) {
-                messageHandler.sendPlayerMessage(p, "<red>You do not have permission to rename pets.</red>");
-                return;
-            }
-            renamingPet.put(p.getUniqueId(), type);
-            p.closeInventory();
-            messageHandler.sendPlayerMessage(p, "<yellow>Enter the new name for your pet in chat. Type 'cancel' to cancel.</yellow>");
-        }
-
-        // Toggle Sort
-        else if (slot == 51) {
-            PetMenu.PetMenuSort currentSort = ((PetMenu) inv.getHolder()).getSortMode();
-            PetMenu.PetMenuSort nextSort = (currentSort == PetMenu.PetMenuSort.RARITY) ? PetMenu.PetMenuSort.RANDOM : PetMenu.PetMenuSort.RARITY;
-            new PetMenu(p, petManager, nextSort).open();
-        }
-
-        // Close
-        else if (slot == 53) {
-            p.closeInventory();
-        }
-    }
-
-    @EventHandler
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
-        Player p = event.getPlayer();
-        if (!renamingPet.containsKey(p.getUniqueId())) {
-            return;
-        }
-
-        event.setCancelled(true);
-        EntityType petType = renamingPet.remove(p.getUniqueId());
-        String newName = event.getMessage();
-
-        if (newName.equalsIgnoreCase("cancel")) {
-            messageHandler.sendPlayerMessage(p, "<red>Rename cancelled.</red>");
-            return;
-        }
-
-        PetsConfig config = petManager.getPetsConfig();
-        if (newName.length() > config.getMaxNameLength()) {
-            messageHandler.sendPlayerMessage(p, "<red>Name is too long! Max " + config.getMaxNameLength() + " chars.</red>");
-            return;
-        }
-
-        Pet pet = petManager.getPet(p.getUniqueId(), petType);
-        if (pet != null) {
-            p.getServer().getScheduler().runTask(petManager.getPlugin(), () -> {
-                petManager.updatePetName(p.getUniqueId(), petType, newName);
-                messageHandler.sendPlayerMessage(p, "<green>Your " + pet.getDefaultName() + " has been renamed to " + newName + "!</green>");
-            });
+        else if (clickedItem.getType() == Material.RED_BED) { // Close
+            player.closeInventory();
         }
     }
 }

@@ -7,6 +7,7 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -14,7 +15,7 @@ public class TextureToHead {
 
     /**
      * Applies a custom texture from a Minecraft texture URL to a player head.
-     * Works on modern Paper (1.17–1.21).
+     * Uses a stable UUID based on the URL so the client caches the texture immediately.
      *
      * @param item The ItemStack (must be PLAYER_HEAD)
      * @param textureUrl The full texture URL (e.g., "http://textures.minecraft.net/texture/...")
@@ -38,8 +39,12 @@ public class TextureToHead {
         String encodedData = Base64.getEncoder().encodeToString(json.getBytes());
 
         try {
-            // Paper API: create a PlayerProfile and assign texture property
-            PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), "CustomHead");
+            // --- OPTIMIZATION FIX ---
+            // Generate a consistent UUID from the texture URL.
+            // This allows the Minecraft client to CACHE the skin.
+            UUID uuid = UUID.nameUUIDFromBytes(textureUrl.getBytes(StandardCharsets.UTF_8));
+
+            PlayerProfile profile = Bukkit.createProfile(uuid, "CustomHead");
             profile.setProperty(new ProfileProperty("textures", encodedData));
 
             // Apply the profile directly to the skull meta
