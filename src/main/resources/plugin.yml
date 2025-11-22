@@ -44,27 +44,38 @@ commands:
     permission: login.admin.worldmanager
     usage: /worldmanager <lock|unlock> <worldname>
 
-  register:
-    description: Register your account
-    usage: /register <password> <confirmPassword>
   login:
-    description: Login to your account
+    description: Login to the server
     usage: /login <password>
+  register:
+    description: Register to the server
+    usage: /register <password> <confirm>
   changepassword:
-    description: Change your account password
-    usage: /changepassword <oldPassword> <newPassword>
+    description: Change your password
+    usage: /changepassword <old> <new>
   unregister:
-    description: Unregister a player (Admin)
-    usage: /unregister <player>
+    description: Admin unregister command
+    permission: logincore.admin
   loginhistory:
-    description: Check a player's login history (Admin)
-    usage: /loginhistory <player>
+    description: Check login history
+    permission: logincore.loginhistory
   checkalt:
-    description: Check for alternative accounts by IP (Admin)
-    usage: /checkalt <player>
+    description: Check alt accounts
+    permission: logincore.checkalt
   adminchangepass:
-    description: Force change a player's password and DM them (Admin)
-    usage: /adminchangepass <player>
+    description: Change player password
+    permission: logincore.adminchangepass
+  loginparkour:
+    description: Setup parkour points (checkpoint, finalpoint, startingpoint)
+    permission: logincore.admin
+    usage: /loginparkour <checkpoint|finalpoint|startingpoint>
+  logindisplaykill:
+    description: Remove all parkour displays
+    permission: logincore.admin
+  rotatinghead:
+    description: Spawn rotating hub heads
+    permission: mineaurora.admin
+    usage: /rotatinghead <discord|store>
 
   scoreboard:
     description: Reloads the scoreboard configuration.
@@ -187,10 +198,6 @@ commands:
   quests:
     description: Opens the daily quests menu.
     aliases: [ quest, dailyquests ]
-  rotatinghead:
-    description: Spawn the floating discord/store heads
-    permission: mineaurora.admin
-    usage: /rotatinghead <discord/store>
   pets:
     description: "Opens the Pet menu and handles all pet commands."
     usage: "/pets <summon|despawn|check|add|remove|give|revive>"
@@ -213,19 +220,33 @@ commands:
     description: Sell all generator drops in inventory.
     usage: /sellgendrop
     aliases: [sellgen]
+  credits:
+    description: Manage player credits
+    usage: /credits <add/remove/check>
+    aliases: [ credit ]
+  dungeon:
+    description: Main command for MineAurora Dungeons
+    usage: /dungeon <subcommand>
+    aliases: [ dungeons, dng ]
 
 permissions:
+  dungeon.admin:
+    description: Allows full access to dungeon setup and management commands
+    default: op
   logincore.admin:
-    description: Allows use of /unregister
+    description: Admin permission for login system
     default: op
   logincore.loginhistory:
-    description: Allows use of /loginhistory
+    description: Check login history
     default: op
   logincore.checkalt:
-    description: Allows use of /checkalt
+    description: Check alts
     default: op
   logincore.adminchangepass:
-    description: Allows use of /adminchangepass
+    description: Change user passwords
+    default: op
+  mineaurora.admin:
+    description: Admin permission for hub features
     default: op
   mineaurora.rtp:
     description: Allows using the /rtp command.

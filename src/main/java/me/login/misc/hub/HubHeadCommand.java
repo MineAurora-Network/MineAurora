@@ -28,7 +28,6 @@ public class HubHeadCommand implements CommandExecutor {
         String type = args[0].toLowerCase();
         if (type.equals("discord")) {
             if (module.getDiscordLoc() != null) {
-                // --- FIX: Added title argument ---
                 module.spawnHead(HubHeadModule.HEAD_DISCORD, module.getDiscordLoc(), module.getDiscordHeadUrl(), "<blue><bold>Discord</bold></blue>");
                 sender.sendMessage("§aSpawned/Respawned Discord floating head.");
             } else {
@@ -36,7 +35,6 @@ public class HubHeadCommand implements CommandExecutor {
             }
         } else if (type.equals("store")) {
             if (module.getStoreLoc() != null) {
-                // --- FIX: Added title argument ---
                 module.spawnHead(HubHeadModule.HEAD_STORE, module.getStoreLoc(), module.getStoreHeadUrl(), "<gold><bold>Store</bold></gold>");
                 sender.sendMessage("§aSpawned/Respawned Store floating head.");
             } else {

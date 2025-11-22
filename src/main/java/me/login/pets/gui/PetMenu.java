@@ -10,7 +10,6 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -25,7 +24,7 @@ public class PetMenu implements InventoryHolder {
 
     public enum PetMenuSort {
         RARITY,
-        LEVEL // Changed from RANDOM to LEVEL for better UX
+        LEVEL
     }
 
     private final Inventory inventory;
@@ -59,7 +58,6 @@ public class PetMenu implements InventoryHolder {
 
     private void sortPets() {
         if (sortMode == PetMenuSort.RARITY) {
-            // Assuming tier order exists, if not fall back to Name
             try {
                 List<String> tierOrder = petsConfig.getTierOrder();
                 if (tierOrder != null && !tierOrder.isEmpty()) {
@@ -70,23 +68,19 @@ public class PetMenu implements InventoryHolder {
                     return;
                 }
             } catch (Exception ignored) {}
-            // Fallback sort
             pets.sort(Comparator.comparing(Pet::getDefaultName));
         } else {
-            // Sort by Level High -> Low
             pets.sort(Comparator.comparingInt(Pet::getLevel).reversed());
         }
     }
 
     private void initializeItems() {
-        // 1. Add Pets
         for (int i = 0; i < pets.size(); i++) {
             if (i >= 45) break;
             Pet pet = pets.get(i);
             inventory.setItem(i, createPetItem(pet));
         }
 
-        // 2. Fill Glass
         ItemStack filler = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta fillMeta = filler.getItemMeta();
         fillMeta.displayName(Component.empty());
@@ -96,8 +90,6 @@ public class PetMenu implements InventoryHolder {
             inventory.setItem(i, filler);
         }
 
-        // 3. Add Buttons
-        // Slot 48: Summon Info (Visual only, actual summon is clicking pet)
         ItemStack infoItem = new ItemStack(Material.LEAD);
         ItemMeta infoMeta = infoItem.getItemMeta();
         infoMeta.displayName(MiniMessage.miniMessage().deserialize("<green><bold>Summon Pet</bold>").decoration(TextDecoration.ITALIC, false));
@@ -106,7 +98,6 @@ public class PetMenu implements InventoryHolder {
         infoItem.setItemMeta(infoMeta);
         inventory.setItem(48, infoItem);
 
-        // Slot 49: Despawn
         ItemStack despawnItem = new ItemStack(Material.BARRIER);
         ItemMeta despawnMeta = despawnItem.getItemMeta();
         despawnMeta.displayName(MiniMessage.miniMessage().deserialize("<red><bold>Despawn Active Pet</bold>").decoration(TextDecoration.ITALIC, false));
@@ -114,7 +105,6 @@ public class PetMenu implements InventoryHolder {
         despawnItem.setItemMeta(despawnMeta);
         inventory.setItem(49, despawnItem);
 
-        // Slot 50: Rename
         ItemStack renameItem = new ItemStack(Material.NAME_TAG);
         ItemMeta renameMeta = renameItem.getItemMeta();
         renameMeta.displayName(MiniMessage.miniMessage().deserialize("<yellow><bold>Rename Pet</bold>").decoration(TextDecoration.ITALIC, false));
@@ -123,7 +113,6 @@ public class PetMenu implements InventoryHolder {
         renameItem.setItemMeta(renameMeta);
         inventory.setItem(50, renameItem);
 
-        // Slot 51: Sort
         ItemStack sortItem = new ItemStack(Material.COMPARATOR);
         ItemMeta sortMeta = sortItem.getItemMeta();
         sortMeta.displayName(MiniMessage.miniMessage().deserialize("<aqua><bold>Sort: " + sortMode.name() + "</bold>").decoration(TextDecoration.ITALIC, false));
@@ -131,7 +120,6 @@ public class PetMenu implements InventoryHolder {
         sortItem.setItemMeta(sortMeta);
         inventory.setItem(51, sortItem);
 
-        // Slot 53: Close
         ItemStack closeItem = new ItemStack(Material.RED_BED);
         ItemMeta closeMeta = closeItem.getItemMeta();
         closeMeta.displayName(MiniMessage.miniMessage().deserialize("<red><bold>Close Menu</bold>").decoration(TextDecoration.ITALIC, false));
@@ -152,13 +140,13 @@ public class PetMenu implements InventoryHolder {
 
             List<Component> lore = new ArrayList<>();
             lore.add(MiniMessage.miniMessage().deserialize("<gray>Type: <white>" + pet.getDefaultName()).decoration(TextDecoration.ITALIC, false));
-            // Stats Bars
             lore.add(Component.empty());
             lore.add(MiniMessage.miniMessage().deserialize("<gray>Health: " + getProgressBar(pet.getHealth(), 20, 10, "|", "<red>", "<gray>") + " <white>(" + (int)pet.getHealth() + "/20)").decoration(TextDecoration.ITALIC, false));
             lore.add(MiniMessage.miniMessage().deserialize("<gray>Hunger: " + getProgressBar(pet.getHunger(), 20, 10, "|", "<gold>", "<gray>") + " <white>(" + (int)pet.getHunger() + "/20)").decoration(TextDecoration.ITALIC, false));
 
             double maxXp = petsConfig.getXpRequired(pet.getLevel());
-            lore.add(MiniMessage.miniMessage().deserialize("<gray>XP:     " + getProgressBar(pet.getXp(), maxXp, 10, "|", "<green>", "<gray>")).decoration(TextDecoration.ITALIC, false));
+            // FIX: Added numeric XP display
+            lore.add(MiniMessage.miniMessage().deserialize("<gray>XP:     " + getProgressBar(pet.getXp(), maxXp, 10, "|", "<green>", "<gray>") + " <white>(" + (int)pet.getXp() + "/" + (int)maxXp + ")").decoration(TextDecoration.ITALIC, false));
             lore.add(MiniMessage.miniMessage().deserialize("<gray>Level: <gold>" + pet.getLevel()).decoration(TextDecoration.ITALIC, false));
 
             lore.add(Component.empty());

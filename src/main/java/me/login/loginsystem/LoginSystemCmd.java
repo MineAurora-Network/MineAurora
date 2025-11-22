@@ -15,64 +15,90 @@ import java.util.UUID;
 
 public class LoginSystemCmd implements CommandExecutor {
 
+    private final Login plugin;
     private final LoginSystem loginSystem;
+    private final LoginDatabase loginDb;
+    private final DiscordLinkDatabase discordLinkDb;
+    private final LoginSystemLogger logger;
+    private final ParkourManager parkourManager; // Added
+
     private final Component serverPrefix;
     private final MiniMessage mm = MiniMessage.miniMessage();
 
-    public LoginSystemCmd(Login plugin, LoginSystem loginSystem, LoginDatabase loginDb, DiscordLinkDatabase discordLinkDb, LoginSystemLogger logger) {
+    public LoginSystemCmd(Login plugin, LoginSystem loginSystem, LoginDatabase loginDb, DiscordLinkDatabase discordLinkDb, LoginSystemLogger logger, ParkourManager parkourManager) {
+        this.plugin = plugin;
         this.loginSystem = loginSystem;
+        this.loginDb = loginDb;
+        this.discordLinkDb = discordLinkDb;
+        this.logger = logger;
+        this.parkourManager = parkourManager; // Inject
         this.serverPrefix = loginSystem.getServerPrefix();
     }
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String label, @NotNull String[] args) {
-        String cmdName = cmd.getName().toLowerCase();
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(Component.text("Only players can use this command.", NamedTextColor.RED));
+            return true;
+        }
+        Player player = (Player) sender;
+        UUID uuid = player.getUniqueId();
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("These commands can only be used by players.", NamedTextColor.RED));
+        if (cmd.getName().equalsIgnoreCase("login")) {
+            if (args.length == 1) {
+                loginSystem.handleLogin(player, args[0], player.getAddress().getAddress().getHostAddress());
+            } else {
+                player.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /login <password></red>")));
+            }
             return true;
         }
 
-        UUID uuid = player.getUniqueId();
-        String ip = player.getAddress() != null ? player.getAddress().getAddress().getHostAddress() : "UNKNOWN";
-
-        switch (cmdName) {
-            case "register":
-                if (!loginSystem.isUnloggedIn(uuid)) {
-                    player.sendMessage(serverPrefix.append(mm.deserialize("<red>You are already logged in.</red>")));
-                    return true;
-                }
-                if (args.length != 2) {
-                    player.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /register <password> <confirm-password></red>")));
-                    return true;
-                }
-                loginSystem.handleRegister(player, args[0], args[1], ip);
-                return true;
-
-            case "login":
-                if (!loginSystem.isUnloggedIn(uuid)) {
-                    player.sendMessage(serverPrefix.append(mm.deserialize("<red>You are already logged in.</red>")));
-                    return true;
-                }
-                if (args.length != 1) {
-                    player.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /login <password></red>")));
-                    return true;
-                }
-                loginSystem.handleLogin(player, args[0], ip);
-                return true;
-
-            case "changepassword":
-                if (loginSystem.isUnloggedIn(uuid)) {
-                    player.sendMessage(serverPrefix.append(mm.deserialize("<red>You must be logged in to use this command.</red>")));
-                    return true;
-                }
-                if (args.length != 2) {
-                    player.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /changepassword <old-password> <new-password></red>")));
-                    return true;
-                }
-                loginSystem.handleChangePassword(player, args[0], args[1]);
-                return true;
+        if (cmd.getName().equalsIgnoreCase("register")) {
+            if (args.length == 2) {
+                loginSystem.handleRegister(player, args[0], args[1], player.getAddress().getAddress().getHostAddress());
+            } else {
+                player.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /register <password> <confirm></red>")));
+            }
+            return true;
         }
+
+        if (cmd.getName().equalsIgnoreCase("changepassword")) {
+            if (loginSystem.isUnloggedIn(uuid)) {
+                player.sendMessage(serverPrefix.append(mm.deserialize("<red>You must be logged in to use this command.</red>")));
+                return true;
+            }
+            if (args.length == 2) {
+                loginSystem.handleChangePassword(player, args[0], args[1]);
+            } else {
+                player.sendMessage(serverPrefix.append(mm.deserialize("<red>Usage: /changepassword <old> <new></red>")));
+            }
+            return true;
+        }
+
+        if (cmd.getName().equalsIgnoreCase("loginparkour")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+                return true;
+            }
+            if (args.length > 0) {
+                parkourManager.handleSetupCommand(player, args[0]);
+                return true;
+            }
+            player.sendMessage(Component.text("Usage: /loginparkour <checkpoint|finalpoint|startingpoint>", NamedTextColor.RED));
+            return true;
+        }
+
+        if (cmd.getName().equalsIgnoreCase("logindisplaykill")) {
+            if (!player.isOp()) {
+                player.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+                return true;
+            }
+            parkourManager.killAllDisplays(player);
+            return true;
+        }
+
         return false;
     }
+
+    public static class AdminTask { }
 }

@@ -1,7 +1,7 @@
 package me.login.pets;
 
 import me.login.Login;
-import me.login.utility.TextureToHead; // --- FIXED: Added import ---
+import me.login.utility.TextureToHead;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -27,13 +27,18 @@ public class PetsConfig {
     private int maxNameLength;
     private boolean debugMode;
 
+    private int fruitNpcId;
+
     // Leveling
     private double baseXpReq;
     private double xpMultiplier;
     private double damageMultiplierPerLevel;
     private double healthMultiplierPerLevel;
     private int maxLevel;
+
     private Map<String, Double> fruitXpMap = new HashMap<>();
+    private Map<String, Double> fruitPriceMap = new HashMap<>();
+
     private Map<EntityType, Double> killXpMap = new HashMap<>();
     private double creeperExplosionDamage;
 
@@ -64,8 +69,8 @@ public class PetsConfig {
         renamePermission = config.getString("pet_capture.rename-permission", "mineaurora.pets.rename");
         maxNameLength = config.getInt("pet_capture.max-name-length", 20);
         debugMode = config.getBoolean("pet_capture.pet_debug_mode", false);
+        fruitNpcId = config.getInt("pets-fruit-npc-id", -1);
 
-        // Leveling Settings
         baseXpReq = config.getDouble("pet_leveling.base-xp-req", 100.0);
         xpMultiplier = config.getDouble("pet_leveling.xp-multiplier", 1.5);
         damageMultiplierPerLevel = config.getDouble("pet_leveling.damage-multiplier", 0.5);
@@ -89,17 +94,28 @@ public class PetsConfig {
     private void loadFruitItems() {
         fruitItems.clear();
         fruitXpMap.clear();
+        fruitPriceMap.clear();
         if (itemsConfig == null) return;
 
         ConfigurationSection fruitSection = itemsConfig.getConfigurationSection("pet_fruits");
         if (fruitSection == null) return;
+
+        // --- NEW: Load Prices from 'fruit_price' section ---
+        ConfigurationSection priceSection = itemsConfig.getConfigurationSection("fruit_price");
 
         for (String fruitName : fruitSection.getKeys(false)) {
             String path = "pet_fruits." + fruitName;
             ItemStack item = loadItemFromConfig(path, fruitName, fruitKey);
             if (item != null) {
                 fruitItems.put(fruitName, item);
-                fruitXpMap.put(fruitName, itemsConfig.getDouble(path + ".xp_give", 50.0));
+                fruitXpMap.put(fruitName, itemsConfig.getDouble(path + ".xp_give", 0.0));
+
+                // Check price section first
+                double price = 0.0;
+                if (priceSection != null && priceSection.contains(fruitName)) {
+                    price = priceSection.getDouble(fruitName);
+                }
+                fruitPriceMap.put(fruitName, price);
             }
         }
     }
@@ -145,7 +161,6 @@ public class PetsConfig {
 
             ItemStack item;
             if (mat.equalsIgnoreCase("PLAYER_HEAD") && itemsConfig.contains(path + ".texture")) {
-                // --- FIXED: Use applyTexture, not getHead ---
                 item = new ItemStack(Material.PLAYER_HEAD);
                 item = TextureToHead.applyTexture(item, itemsConfig.getString(path + ".texture"));
             } else {
@@ -292,6 +307,10 @@ public class PetsConfig {
     public double getFruitXp(String fruitName) {
         return fruitXpMap.getOrDefault(fruitName, 0.0);
     }
+    public double getFruitPrice(String fruitName) {
+        return fruitPriceMap.getOrDefault(fruitName, 0.0);
+    }
+
     public ItemStack getCaptureItem(String itemName) {
         return captureItems.get(itemName) != null ? captureItems.get(itemName).clone() : null;
     }
@@ -319,4 +338,5 @@ public class PetsConfig {
     public List<String> getTierOrder() { return tierOrder; }
     public String getPetTier(EntityType type) { return petTiers.getOrDefault(type, "unknown"); }
     public boolean isDebugMode() { return debugMode; }
+    public int getFruitNpcId() { return fruitNpcId; }
 }

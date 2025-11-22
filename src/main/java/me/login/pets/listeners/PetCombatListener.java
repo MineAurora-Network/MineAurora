@@ -29,7 +29,7 @@ public class PetCombatListener implements Listener {
         this.petManager = petManager;
         this.config = config;
         this.messageHandler = messageHandler;
-        this.attributeKey = new NamespacedKey(petManager.getPlugin(), "pet_attribute_id");
+        this.attributeKey = new NamespacedKey("mineaurora", "pet_attribute_id");
     }
 
     @EventHandler
@@ -48,11 +48,10 @@ public class PetCombatListener implements Listener {
     public void onEntityDeath(EntityDeathEvent event) {
         LivingEntity killed = event.getEntity();
 
-        // --- NEW: Owner Death Logic ---
+        // Owner Death Logic
         if (killed instanceof Player) {
             Player player = (Player) killed;
             if (petManager.hasActivePet(player.getUniqueId())) {
-                // Despawn pet immediately, NO cooldown
                 petManager.despawnPet(player.getUniqueId(), false);
             }
         }
@@ -62,10 +61,13 @@ public class PetCombatListener implements Listener {
             EntityDamageByEntityEvent damageEvent = (EntityDamageByEntityEvent) killed.getLastDamageCause();
             Entity damager = damageEvent.getDamager();
 
+            if (damager instanceof Projectile && ((Projectile) damager).getShooter() instanceof Entity) {
+                damager = (Entity) ((Projectile) damager).getShooter();
+            }
+
             Player owner = null;
             Pet pet = null;
 
-            // 1. Pet killed it
             if (petManager.isPet(damager)) {
                 UUID ownerUuid = petManager.getPetOwner(damager);
                 if (ownerUuid != null) {
@@ -73,7 +75,6 @@ public class PetCombatListener implements Listener {
                     pet = petManager.getPet(ownerUuid, damager.getType());
                 }
             }
-            // 2. Owner killed it
             else if (damager instanceof Player) {
                 Player playerDamager = (Player) damager;
                 if (petManager.hasActivePet(playerDamager.getUniqueId())) {
@@ -99,7 +100,6 @@ public class PetCombatListener implements Listener {
             }
         }
 
-        // Pet Death Logic
         if (petManager.isPet(killed)) {
             UUID ownerUuid = petManager.getPetOwner(killed);
             if (ownerUuid != null) {
@@ -109,6 +109,18 @@ public class PetCombatListener implements Listener {
                 event.getDrops().clear();
                 event.setDroppedExp(0);
             }
+        }
+    }
+
+    // --- FIX: Blaze Rain Damage Prevention ---
+    @EventHandler
+    public void onPetEnvironmentDamage(EntityDamageEvent event) {
+        if (!petManager.isPet(event.getEntity())) return;
+        if (event.getEntity().getType() != EntityType.BLAZE) return;
+
+        // Cancel damage from Water/Rain
+        if (event.getCause() == EntityDamageEvent.DamageCause.DROWNING) {
+            event.setCancelled(true);
         }
     }
 
@@ -145,7 +157,6 @@ public class PetCombatListener implements Listener {
 
     @EventHandler
     public void onPetDamage(EntityDamageByEntityEvent event) {
-        // WorldGuard Cancellation Check
         if (event.isCancelled()) {
             if (petManager.isPet(event.getDamager())) {
                 LivingEntity pet = (LivingEntity) event.getDamager();
@@ -159,6 +170,10 @@ public class PetCombatListener implements Listener {
         Entity victim = event.getEntity();
         Entity damager = event.getDamager();
 
+        if (damager instanceof Projectile && ((Projectile) damager).getShooter() instanceof Entity) {
+            damager = (Entity) ((Projectile) damager).getShooter();
+        }
+
         if (petManager.isPet(damager) && victim instanceof LivingEntity) {
             UUID ownerUuid = petManager.getPetOwner(damager);
             if (ownerUuid != null) {
@@ -169,10 +184,11 @@ public class PetCombatListener implements Listener {
 
                 if (pet != null) {
                     String attr = getAttributeId(pet.getAttributeContent());
+                    // FIX: Updated duration to 3s (60 ticks)
                     if ("posion_shard".equals(attr)) {
-                        target.addPotionEffect(new PotionEffect(PotionEffectType.POISON, 100, 0));
+                        target.addPotionEffect(new PotionEffect(PotionEffectType.POISON, 60, 0));
                     } else if ("weakness_shard".equals(attr)) {
-                        target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 100, 2));
+                        target.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 60, 2)); // Amplifier 2 = Weakness III
                     }
                 }
 
@@ -236,6 +252,10 @@ public class PetCombatListener implements Listener {
         if (event.isCancelled()) return;
         Entity damager = event.getDamager();
         Entity victim = event.getEntity();
+
+        if (damager instanceof Projectile && ((Projectile) damager).getShooter() instanceof Entity) {
+            damager = (Entity) ((Projectile) damager).getShooter();
+        }
 
         if (victim instanceof Player) {
             Player owner = (Player) victim;

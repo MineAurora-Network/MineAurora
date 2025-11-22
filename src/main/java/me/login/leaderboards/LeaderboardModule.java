@@ -7,68 +7,53 @@ public class LeaderboardModule {
 
     private final Login plugin;
     private LeaderboardDisplayManager leaderboardManager;
+    private LeaderboardGUI leaderboardGUI; // Store GUI instance
     private BukkitTask leaderboardUpdateTask;
+    private static boolean showOps = true;
 
     public LeaderboardModule(Login plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Initializes the leaderboard module, manager, commands, listeners, and tasks.
-     */
     public boolean init() {
         plugin.getLogger().info("Initializing LeaderboardModule...");
 
-        // 1. Initialize the manager (which loads/creates leaderboards.yml)
         this.leaderboardManager = new LeaderboardDisplayManager(plugin);
+        this.leaderboardGUI = new LeaderboardGUI(plugin); // Initialize GUI here
 
-        // 2. Register commands
         registerCommands();
-
-        // 3. Register listeners
         registerListeners();
-
-        // 4. Start the update task
         startUpdateTask();
 
         plugin.getLogger().info("LeaderboardModule enabled successfully.");
         return true;
     }
 
-    /**
-     * Shuts down the leaderboard module and cancels tasks.
-     */
     public void shutdown() {
         if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
             this.leaderboardUpdateTask.cancel();
         }
+        if (leaderboardManager != null) {
+            leaderboardManager.removeAll();
+        }
         plugin.getLogger().info("LeaderboardModule disabled.");
     }
 
-    /**
-     * Handles the logic for reloading the leaderboards.
-     */
     public void reload() {
-        // Reload main config (for formats)
         plugin.reloadConfig();
 
-        // Reload leaderboards.yml and update all displays
         if (leaderboardManager != null) {
             leaderboardManager.reloadConfigAndUpdateAll();
         }
 
-        // Cancel and restart the task to apply new refresh-seconds
         if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
             this.leaderboardUpdateTask.cancel();
         }
         startUpdateTask();
     }
 
-    /**
-     * Registers the /leaderboard and /killleaderboard commands.
-     */
     private void registerCommands() {
-        // Note: We pass 'this' (the module) to the command for reloading
+        // Pass the module instance for reload/toggleop functionality
         LeaderboardCommand leaderboardCmd = new LeaderboardCommand(plugin, this, this.leaderboardManager);
         plugin.getCommand("leaderboard").setExecutor(leaderboardCmd);
         plugin.getCommand("leaderboard").setTabCompleter(leaderboardCmd);
@@ -78,25 +63,36 @@ public class LeaderboardModule {
         plugin.getCommand("killleaderboard").setTabCompleter(killLeaderboardCmd);
     }
 
-    /**
-     * Registers the entity protection listener.
-     */
     private void registerListeners() {
+        // Register Protection Listener
         plugin.getServer().getPluginManager().registerEvents(new LeaderboardProtectionListener(this.leaderboardManager), plugin);
+
+        // Register GUI Listener (The GUI class itself implements Listener)
+        plugin.getServer().getPluginManager().registerEvents(this.leaderboardGUI, plugin);
+
+        // Register NPC Listener (Check if Citizens is enabled first to be safe, or just register if hard dependency)
+        if (plugin.getServer().getPluginManager().isPluginEnabled("Citizens")) {
+            plugin.getServer().getPluginManager().registerEvents(new LeaderboardNPCListener(plugin, this.leaderboardGUI), plugin);
+        } else {
+            plugin.getLogger().warning("Citizens not found! Leaderboard NPC will not work.");
+        }
     }
 
-    /**
-     * Starts the repeating task to update leaderboard displays.
-     */
     private void startUpdateTask() {
-        long delay = 20L * 10; // 10 seconds
+        long delay = 20L * 10;
         long refreshTicks = 20L * plugin.getConfig().getLong("leaderboards.refresh-seconds", 60);
         this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(plugin, delay, refreshTicks);
     }
 
-    // --- Public Getter ---
-
     public LeaderboardDisplayManager getLeaderboardManager() {
         return leaderboardManager;
+    }
+
+    public static boolean isShowOps() {
+        return showOps;
+    }
+
+    public static void setShowOps(boolean show) {
+        showOps = show;
     }
 }

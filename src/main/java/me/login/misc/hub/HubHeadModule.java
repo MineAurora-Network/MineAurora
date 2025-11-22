@@ -20,6 +20,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -68,7 +69,9 @@ public class HubHeadModule implements Listener {
     public void enable() {
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         plugin.getCommand("rotatinghead").setExecutor(new HubHeadCommand(this));
-        forceCleanupAll();
+
+        // Run initial cleanup delayed to ensure chunks loaded
+        Bukkit.getScheduler().runTaskLater(plugin, this::forceCleanupAll, 20L);
 
         new BukkitRunnable() {
             double angle = 0;
@@ -82,7 +85,7 @@ public class HubHeadModule implements Listener {
                 animateHead(HEAD_DISCORD, discordLoc, angle);
                 animateHead(HEAD_STORE, storeLoc, angle);
             }
-        }.runTaskTimer(plugin, 20L, 1L);
+        }.runTaskTimer(plugin, 40L, 1L);
 
         new BukkitRunnable() {
             @Override
@@ -204,14 +207,8 @@ public class HubHeadModule implements Listener {
 
         if (head == null || !head.isValid() || origin == null) return;
 
-        // --- MATH: 118 to 119 (0 to +1 block) ---
-        // Sine: -1 to 1
-        // Sine + 1: 0 to 2
-        // (Sine + 1) * 0.5: 0 to 1
         double yOffset = (Math.sin(angle) + 1) * 0.5;
-
         Location newHeadLoc = origin.clone().add(0, yOffset, 0);
-
         float newYaw = (head.getLocation().getYaw() + 4f) % 360;
         newHeadLoc.setYaw(newYaw);
 
@@ -237,7 +234,7 @@ public class HubHeadModule implements Listener {
     public void onCommand(PlayerCommandPreprocessEvent event) {
         Player p = event.getPlayer();
         if (p.getWorld().getName().equals("hub")) {
-            if (p.hasPermission("mineaurora.admin")) return;
+            if (p.isOp()) return;
             String cmd = event.getMessage().split(" ")[0].toLowerCase();
             if (!cmd.equals("/mvtp")) {
                 event.setCancelled(true);
@@ -248,25 +245,27 @@ public class HubHeadModule implements Listener {
 
     @EventHandler
     public void onMove(PlayerMoveEvent event) {
-        if (event.getFrom().getBlockX() == event.getTo().getBlockX() &&
-                event.getFrom().getBlockY() == event.getTo().getBlockY() &&
-                event.getFrom().getBlockZ() == event.getTo().getBlockZ()) return;
-
         Player p = event.getPlayer();
         if (!p.getWorld().getName().equals("hub")) return;
 
         Location loc = p.getLocation();
         Block blockBelow = loc.getBlock().getRelative(BlockFace.DOWN);
 
+        // Generalized Magenta Glazed Terracotta Launch
         if (blockBelow.getType() == Material.MAGENTA_GLAZED_TERRACOTTA) {
-            if (blockBelow.getX() == 174 && blockBelow.getY() == 118 && blockBelow.getZ() == -5) {
-                Vector direction = p.getLocation().getDirection();
-                direction.setY(1.2);
-                direction.multiply(3.5);
-                p.setVelocity(direction);
-                p.playSound(p.getLocation(), Sound.ENTITY_BAT_TAKEOFF, 1f, 1f);
-                p.getWorld().spawnParticle(Particle.CLOUD, p.getLocation(), 10, 0.5, 0.5, 0.5, 0.1);
-            }
+            Vector direction = p.getLocation().getDirection().normalize();
+            direction.multiply(3.8);
+            direction.setY(0.8); // Lift
+            p.setVelocity(direction);
+            p.playSound(p.getLocation(), Sound.ENTITY_BAT_TAKEOFF, 1f, 1f);
+            p.getWorld().spawnParticle(Particle.CLOUD, p.getLocation(), 10, 0.5, 0.5, 0.5, 0.1);
+        }
+    }
+
+    @EventHandler
+    public void onRespawn(PlayerRespawnEvent event) {
+        if (event.getPlayer().getWorld().getName().equalsIgnoreCase("hub")) {
+            event.setRespawnLocation(new Location(Bukkit.getWorld("hub"), 178.5, 118, -5.5));
         }
     }
 

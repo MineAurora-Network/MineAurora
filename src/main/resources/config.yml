@@ -45,6 +45,11 @@ worlds:
   nether: "world_nether"
   end: "world_the_end"
 
+# Dungeon Settings
+dungeon-npc-id: 5
+dungeon-admin-log-channel-id: 1441682714557284473
+dungeon-game-log-channel-id: 1441682690620264542
+
 firesale:
   fire-npc-id: 16
   log-channel-id: "1437618511684833290"

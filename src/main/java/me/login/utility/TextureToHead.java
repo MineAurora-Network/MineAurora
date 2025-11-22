@@ -14,10 +14,21 @@ import java.util.UUID;
 public class TextureToHead {
 
     /**
+     * Creates a new PLAYER_HEAD ItemStack with the given texture URL applied.
+     *
+     * @param textureUrl The full texture URL.
+     * @return The textured head ItemStack.
+     */
+    public static ItemStack getHead(String textureUrl) {
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        return applyTexture(head, textureUrl);
+    }
+
+    /**
      * Applies a custom texture from a Minecraft texture URL to a player head.
      * Uses a stable UUID based on the URL so the client caches the texture immediately.
      *
-     * @param item The ItemStack (must be PLAYER_HEAD)
+     * @param item       The ItemStack (must be PLAYER_HEAD)
      * @param textureUrl The full texture URL (e.g., "http://textures.minecraft.net/texture/...")
      * @return The modified ItemStack with the new texture.
      */

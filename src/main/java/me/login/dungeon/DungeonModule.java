@@ -1,0 +1,54 @@
+package me.login.dungeon;
+
+import me.login.Login;
+import me.login.dungeon.commands.AdminCommands;
+import me.login.dungeon.commands.DungeonTabCompleter;
+import me.login.dungeon.data.Database;
+import me.login.dungeon.game.GameManager;
+import me.login.dungeon.listeners.DungeonListener;
+import me.login.dungeon.manager.DungeonManager;
+import me.login.dungeon.manager.DungeonRewardManager;
+import me.login.dungeon.utils.DungeonLogger;
+import org.bukkit.Bukkit;
+
+public class DungeonModule {
+
+    private final Login plugin;
+    private final Database database;
+    private final DungeonManager dungeonManager;
+    private final GameManager gameManager;
+    private final DungeonRewardManager rewardManager;
+    private final DungeonLogger logger;
+
+    public DungeonModule(Login plugin) {
+        this.plugin = plugin;
+
+        // 1. Utils & Data
+        this.database = new Database(plugin);
+        this.logger = new DungeonLogger(plugin);
+        this.rewardManager = new DungeonRewardManager(plugin, database);
+
+        // 2. Managers
+        this.dungeonManager = new DungeonManager(plugin, database);
+        this.gameManager = new GameManager(plugin, dungeonManager);
+
+        // 3. Register Commands
+        // Pass rewardManager to AdminCommands so /dungeon rngmeter works
+        if (plugin.getCommand("dungeon") != null) {
+            plugin.getCommand("dungeon").setExecutor(new AdminCommands(plugin, dungeonManager, gameManager, rewardManager));
+            plugin.getCommand("dungeon").setTabCompleter(new DungeonTabCompleter(dungeonManager));
+        }
+
+        // 4. Register Listeners
+        Bukkit.getPluginManager().registerEvents(new DungeonListener(plugin, dungeonManager, gameManager, rewardManager, logger), plugin);
+
+        plugin.getLogger().info("Dungeon Module loaded successfully!");
+    }
+
+    public void disable() {
+        if (this.database != null) {
+            this.database.close();
+        }
+        this.dungeonManager.saveAll();
+    }
+}

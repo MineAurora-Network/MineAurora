@@ -1,4 +1,3 @@
-// src/main/java/me/login/leaderboards/LeaderboardUpdateTask.java
 package me.login.leaderboards;
 
 import org.bukkit.scheduler.BukkitRunnable;

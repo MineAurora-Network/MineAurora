@@ -33,6 +33,7 @@ public class PetManager {
     private final PetsConfig config;
     private final PetMessageHandler messageHandler;
     private final PetsLogger logger;
+    private final PetFruitShop fruitShop;
 
     private final Cache<UUID, List<Pet>> playerDataCache;
     private final Map<UUID, UUID> activePets;
@@ -57,11 +58,12 @@ public class PetManager {
         this.config = config;
         this.messageHandler = messageHandler;
         this.logger = logger;
+        this.fruitShop = new PetFruitShop(plugin, config, messageHandler);
         this.activePets = new ConcurrentHashMap<>();
         this.followTasks = new ConcurrentHashMap<>();
         this.playerDataCache = CacheBuilder.newBuilder().expireAfterAccess(30, TimeUnit.MINUTES).build();
         PET_OWNER_KEY = new NamespacedKey(plugin, "pet-owner-uuid");
-        this.attributeKey = new NamespacedKey(plugin, "pet_attribute_id");
+        this.attributeKey = new NamespacedKey("mineaurora", "pet_attribute_id");
         this.fruitXpKey = new NamespacedKey("mineaurora", "fruit_xp_amount");
 
         this.targetSelection = new TargetSelection(this, config, logger);
@@ -112,11 +114,10 @@ public class PetManager {
         List<Pet> pets = playerDataCache.getIfPresent(playerUuid);
         if (pets != null) {
             for (Pet pet : pets) {
-                // Capture current health if active
                 if (activePets.containsKey(playerUuid) && activePets.get(playerUuid) != null) {
-                    LivingEntity entity = (LivingEntity) Bukkit.getEntity(activePets.get(playerUuid));
-                    if (entity != null && entity.getType() == pet.getPetType()) {
-                        pet.setHealth(entity.getHealth());
+                    Entity entity = Bukkit.getEntity(activePets.get(playerUuid));
+                    if (entity instanceof LivingEntity && entity.getType() == pet.getPetType()) {
+                        pet.setHealth(((LivingEntity) entity).getHealth());
                     }
                 }
                 savePetInventory(pet);
@@ -250,48 +251,24 @@ public class PetManager {
         }
 
         despawnPet(player.getUniqueId(), false);
-
-        Location spawnLoc = player.getLocation().clone().add(player.getLocation().getDirection().setY(0).normalize().multiply(-3));
-
-        // --- NEW: Consumer Spawn to Apply Tags BEFORE Spawn Event ---
-        // This allows PetProtectionListener to see the tag and Uncancel the event if WorldGuard blocks it.
-        try {
-            Class<? extends Entity> entityClass = (Class<? extends Entity>) petType.getEntityClass();
-            if (entityClass == null) return;
-
-            player.getWorld().spawn(spawnLoc, entityClass, CreatureSpawnEvent.SpawnReason.CUSTOM, entity -> {
-                LivingEntity pet = (LivingEntity) entity;
-                pet.getPersistentDataContainer().set(PET_OWNER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
-
-                // Apply other initial stats here to be safe
-                if (pet instanceof Ageable) ((Ageable) pet).setAdult();
-                if (pet instanceof Zombie) ((Zombie) pet).setBaby(false);
-
-                // Initialize health logic here if needed, but usually better after spawn to ensure attributes are ready
-            });
-        } catch (Exception e) {
-            // Fallback for older versions or errors
-            LivingEntity pet = (LivingEntity) player.getWorld().spawnEntity(spawnLoc, petType, CreatureSpawnEvent.SpawnReason.CUSTOM);
-            pet.getPersistentDataContainer().set(PET_OWNER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
+        for (Entity e : player.getWorld().getEntities()) {
+            if (isPet(e) && player.getUniqueId().equals(getPetOwner(e))) {
+                e.remove();
+            }
         }
 
-        // We need to fetch the entity again or wait?
-        // Actually, we can just find it via ActivePets map, but we haven't put it in map yet!
-        // Issue: spawn() returns the entity, but the consumer runs inside.
-        // Correct pattern:
+        Location spawnLoc = player.getLocation().clone().add(player.getLocation().getDirection().setY(0).normalize().multiply(-2));
+        if (spawnLoc.getBlock().getType().isSolid()) spawnLoc = player.getLocation();
 
-        // Let's do the spawn and capture the reference properly.
         LivingEntity pet = (LivingEntity) player.getWorld().spawn(spawnLoc, (Class<? extends Entity>) petType.getEntityClass(), CreatureSpawnEvent.SpawnReason.CUSTOM, entity -> {
             entity.getPersistentDataContainer().set(PET_OWNER_KEY, PersistentDataType.STRING, player.getUniqueId().toString());
         });
 
         if (pet == null || !pet.isValid()) {
-            // Spawn failed (blocked even with our bypass attempt?)
             messageHandler.sendPlayerMessage(player, "<red>Failed to summon pet here.</red>");
             return;
         }
 
-        // --- Continue Setup ---
         if (pet instanceof Ageable) ((Ageable) pet).setAdult();
         if (pet instanceof Zombie) ((Zombie) pet).setBaby(false);
         if (isSunSensitive(petType)) pet.addPotionEffect(new PotionEffect(PotionEffectType.FIRE_RESISTANCE, Integer.MAX_VALUE, 0, false, false));
@@ -303,8 +280,9 @@ public class PetManager {
         if (pet instanceof Slime) ((Slime) pet).setSize(2);
 
         if (petData.getArmorContents() != null) pet.getEquipment().setArmorContents(petData.getArmorContents());
+        if (petData.getWeaponContent() != null) pet.getEquipment().setItemInMainHand(petData.getWeaponContent());
 
-        // Stats Calc
+        // Stats
         double baseHealth = 20.0;
         if (pet.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
             baseHealth = pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getDefaultValue();
@@ -312,13 +290,18 @@ public class PetManager {
 
         double healthBonus = config.getHealthBonus(petData.getLevel());
         double damageBonus = config.getDamage(petType, petData.getLevel());
+
         String attributeId = getAttributeId(petData.getAttributeContent());
         double healthMultiplier = 1.0;
         double damageMultiplier = 1.0;
 
         if ("health_shard".equals(attributeId)) healthMultiplier = 1.25;
         if ("damage_shard".equals(attributeId)) damageMultiplier = 1.25;
-        if ("speed_shard".equals(attributeId)) pet.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 3, false, false));
+
+        // FIX: Speed Shard - Increase to 100% (Speed V/Amplifier 4), No Particles
+        if ("speed_shard".equals(attributeId)) {
+            pet.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 4, false, false));
+        }
 
         for (ItemStack armorPiece : petData.getArmorContents()) {
             if (armorPiece != null && armorPiece.hasItemMeta()) {
@@ -363,6 +346,8 @@ public class PetManager {
 
     private void startFollowTask(Player player, LivingEntity pet) {
         BukkitRunnable task = new BukkitRunnable() {
+            int tickCounter = 0;
+
             @Override
             public void run() {
                 if (pet == null || !pet.isValid() || player == null || !player.isOnline()) {
@@ -373,23 +358,40 @@ public class PetManager {
                 Pet data = getPet(player.getUniqueId(), pet.getType());
                 if (data == null) return;
 
-                double currentHunger = data.getHunger();
-                if (currentHunger > 0) {
-                    currentHunger -= 0.02;
-                    data.setHunger(currentHunger);
-                    if (currentHunger < 2.0 && currentHunger > 1.9) {
-                        messageHandler.sendPlayerMessage(player, "<red><bold>WARNING!</bold> Your pet is starving! Feed it soon or it will die!</red>");
+                tickCounter++;
+
+                // FIX: Passive Hunger Drain - 0.1 every 5s (100 ticks)
+                if (tickCounter % 100 == 0) {
+                    double currentHunger = data.getHunger();
+                    if (currentHunger > 0) {
+                        currentHunger = Math.max(0, currentHunger - 0.1);
+                        data.setHunger(currentHunger);
+                        if (currentHunger < 2.0 && currentHunger > 1.9) {
+                            messageHandler.sendPlayerMessage(player, "<red><bold>WARNING!</bold> Your pet is starving! Feed it soon or it will die!</red>");
+                        }
+                    } else {
+                        this.cancel();
+                        messageHandler.sendPlayerMessage(player, "<dark_red>Your pet died of starvation!</dark_red>");
+                        onPetDeath(player.getUniqueId(), pet.getType(), "Starvation");
+                        return;
                     }
-                } else {
-                    this.cancel();
-                    messageHandler.sendPlayerMessage(player, "<dark_red>Your pet died of starvation!</dark_red>");
-                    onPetDeath(player.getUniqueId(), pet.getType(), "Starvation");
-                    return;
                 }
 
-                if (currentHunger >= 15.0 && pet.getHealth() < pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue()) {
-                    double newHealth = Math.min(pet.getHealth() + 2.0, pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue());
-                    pet.setHealth(newHealth);
+                // FIX: Healing - Check every 1s (20 ticks)
+                // Ratio: 0.7 hunger for ~0.28 health. Drains 0.2 hunger per sec if healing.
+                if (tickCounter % 20 == 0) {
+                    if (pet.getHealth() < pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue()) {
+                        // Only heal if enough hunger
+                        if (data.getHunger() >= 0.2) {
+                            // 0.2 hunger used
+                            double hungerCost = 0.2;
+                            // Health gained based on 70% ratio (approx 1HP = 0.7 hunger => 0.2 hunger = 0.285 HP)
+                            double healthGain = hungerCost / 0.7;
+
+                            pet.setHealth(Math.min(pet.getHealth() + healthGain, pet.getAttribute(Attribute.GENERIC_MAX_HEALTH).getValue()));
+                            data.setHunger(Math.max(0, data.getHunger() - hungerCost));
+                        }
+                    }
                 }
 
                 if (lastCombatActionBar.containsKey(player.getUniqueId())) {
@@ -406,9 +408,12 @@ public class PetManager {
                 targetSelection.handlePetAILogic(player, pet);
             }
         };
-        task.runTaskTimer(plugin, 0L, 20L);
+        task.runTaskTimer(plugin, 0L, 1L);
         followTasks.put(player.getUniqueId(), task);
     }
+
+    // ... (Rest of the methods remain unchanged: onPetDeath, addXp, feedPet, despawnPet, etc.)
+    // Just ensuring imports match and context is maintained.
 
     public void onPetDeath(UUID uuid, EntityType type, String killerName) {
         if (killerName != null) {
@@ -421,7 +426,7 @@ public class PetManager {
         Pet p = getPet(uuid, type);
         if (p != null) {
             p.setCooldownEndTime(cd);
-            p.setHealth(0.0); // Mark as dead for next summon
+            p.setHealth(0.0);
         }
 
         killActivePet(uuid);
@@ -499,7 +504,8 @@ public class PetManager {
             Entity e = Bukkit.getEntity(petId);
             if (e instanceof Mob) ((Mob) e).setTarget(null);
             if (e != null) e.remove();
-            if (msg) messageHandler.sendPlayerMessage(Bukkit.getPlayer(playerUuid), "<yellow>Pet despawned.</yellow>");
+            if (msg && Bukkit.getPlayer(playerUuid) != null)
+                messageHandler.sendPlayerMessage(Bukkit.getPlayer(playerUuid), "<yellow>Pet despawned.</yellow>");
         }
     }
 
@@ -571,6 +577,7 @@ public class PetManager {
 
     public PetMessageHandler getMessageHandler() { return messageHandler; }
     public PetsConfig getPetsConfig() { return config; }
+    public PetFruitShop getFruitShop() { return fruitShop; }
 
     private String getAttributeId(ItemStack item) {
         if (item == null || !item.hasItemMeta()) return null;

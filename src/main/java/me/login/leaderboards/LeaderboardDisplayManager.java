@@ -2,16 +2,14 @@ package me.login.leaderboards;
 
 import me.clip.placeholderapi.PlaceholderAPI;
 import me.login.Login;
-import net.kyori.adventure.audience.Audience; // IMPORT
+import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
-// import org.bukkit.ChatColor; // REMOVED
+import org.bukkit.Chunk;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Statistic;
-import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -20,58 +18,44 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream; // IMPORT
-import java.nio.file.Files; // IMPORT
-import java.text.NumberFormat;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class LeaderboardDisplayManager {
 
     private final Login plugin;
-    // Store UUID -> LeaderboardInfo mapping (in memory)
+    private final StatsFetcher fetcher;
     private final Map<UUID, LeaderboardInfo> activeLeaderboards = new HashMap<>();
-
-    private File leaderboardsFile; // The leaderboards.yml file object
-    private FileConfiguration leaderboardsConfig; // The leaderboards.yml config object
-
+    private File leaderboardsFile;
+    private FileConfiguration leaderboardsConfig;
     private final boolean papiEnabled;
-    private final NumberFormat currencyFormatter;
     private final MiniMessage miniMessage;
 
     public LeaderboardDisplayManager(Login plugin) {
         this.plugin = plugin;
+        this.fetcher = new StatsFetcher(plugin);
         this.papiEnabled = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
-        this.currencyFormatter = NumberFormat.getCurrencyInstance(Locale.US);
-        this.miniMessage = MiniMessage.miniMessage(); // Default parser
-        loadLeaderboards(); // Load data FROM leaderboards.yml into memory
+        this.miniMessage = MiniMessage.miniMessage();
+        loadLeaderboards();
     }
 
     public void reloadConfigAndUpdateAll() {
-        loadLeaderboards(); // Reload data FROM leaderboards.yml
-        plugin.reloadConfig(); // Reload main config.yml (for formatting)
-        plugin.getLogger().info("Reloading all " + activeLeaderboards.size() + " leaderboards...");
-        updateAllDisplays(); // Force update entities
+        loadLeaderboards();
+        updateAllDisplays();
     }
 
     public void createLeaderboard(Location location, String type, Player creator) {
         location.setPitch(0);
-
-        // --- KYORI CHANGE ---
-        Audience creatorAudience = (Audience) creator;
-
         TextDisplay textDisplay = spawnNewDisplay(location, type);
         if (textDisplay == null) {
-            // --- KYORI CHANGE ---
-            creatorAudience.sendMessage(miniMessage.deserialize("<red>Failed to spawn leaderboard entity.</red>"));
+            ((Audience) creator).sendMessage(miniMessage.deserialize("<red>Failed to spawn entity.</red>"));
             return;
         }
 
-        // Create the temporary in-memory object
         LeaderboardInfo info = new LeaderboardInfo(
                 type.toLowerCase(),
                 location.getWorld().getName(),
@@ -79,22 +63,21 @@ public class LeaderboardDisplayManager {
                 location.getY(),
                 location.getZ()
         );
-        // Store it in the map
         activeLeaderboards.put(textDisplay.getUniqueId(), info);
-
-        // Save the data FROM the info object TO leaderboards.yml
         saveLeaderboards();
 
-        // --- KYORI CHANGE ---
-        creatorAudience.sendMessage(miniMessage.deserialize("<green>Leaderboard created! It will update on the next cycle.</green>"));
-        updateDisplay(textDisplay.getUniqueId()); // Run initial update
+        ((Audience) creator).sendMessage(miniMessage.deserialize("<green>Leaderboard created.</green>"));
+        updateDisplay(textDisplay.getUniqueId());
     }
 
     private TextDisplay spawnNewDisplay(Location location, String type) {
-        if (location == null || location.getWorld() == null) {
-            plugin.getLogger().warning("Cannot spawn leaderboard: Location or World is invalid.");
-            return null;
-        }
+        if (location == null || location.getWorld() == null) return null;
+
+        // Force Chunk Load
+        Chunk chunk = location.getChunk();
+        if (!chunk.isLoaded()) chunk.load();
+        chunk.setForceLoaded(true);
+
         TextDisplay textDisplay = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
         textDisplay.setCustomName("leaderboard");
         textDisplay.setCustomNameVisible(false);
@@ -103,239 +86,200 @@ public class LeaderboardDisplayManager {
         textDisplay.setViewRange(30);
         textDisplay.setBackgroundColor(Color.fromARGB(0, 0, 0, 0));
         textDisplay.setShadowed(true);
-        textDisplay.setInvulnerable(true); // Make it resistant to damage
+        textDisplay.setInvulnerable(true);
         return textDisplay;
     }
 
     public void updateAllDisplays() {
-        if (activeLeaderboards.isEmpty()) {
-            return;
-        }
+        if (activeLeaderboards.isEmpty()) return;
         new HashSet<>(activeLeaderboards.keySet()).forEach(this::updateDisplay);
     }
 
     private void updateDisplay(UUID uuid) {
-        // Get the in-memory info object for this UUID
         LeaderboardInfo info = activeLeaderboards.get(uuid);
         if (info == null) {
-            plugin.getLogger().warning("Attempted to update leaderboard with unknown UUID: " + uuid);
             activeLeaderboards.remove(uuid);
-            saveLeaderboards(); // Clean up YML
+            saveLeaderboards();
             return;
         }
-        String type = info.type(); // Get type from the info object
+        String type = info.type();
+        Location loc = info.getLocation();
 
-        // --- CHUNK-LOADING CHECK ---
-        Location leaderboardLoc = info.getLocation();
+        if (loc == null) return; // World not loaded
 
-        if (leaderboardLoc == null) {
-            // This can happen if the world is just not loaded at all
-            plugin.getLogger().warning("Cannot update leaderboard " + type + ": World '" + info.worldName() + "' is not loaded.");
-            return; // Skip update cycle, will try again later
+        // Ensure chunk is force loaded
+        if (!loc.getChunk().isForceLoaded()) {
+            loc.getChunk().load();
+            loc.getChunk().setForceLoaded(true);
         }
 
-        if (!leaderboardLoc.isWorldLoaded() || !leaderboardLoc.getChunk().isLoaded()) {
-            // The chunk is not loaded. This is NORMAL.
-            // Do not try to get the entity, and DO NOT respawn it.
-            // Just skip this update cycle. It will try again in 60s.
-            return;
-        }
-        // --- END CHUNK-LOADING CHECK ---
-
-
-        Entity currentEntity = Bukkit.getEntity(uuid);
+        Entity entity = Bukkit.getEntity(uuid);
         TextDisplay textDisplay;
 
-        // --- Respawn Logic ---
-        if (currentEntity == null || !currentEntity.isValid() || !(currentEntity instanceof TextDisplay)) {
-            plugin.getLogger().info("Leaderboard " + type + " (UUID: " + uuid + ") not found or invalid. Respawning...");
-
-            // Use the info object to get the location FROM the YML data
-            // We already have the location from our check above
-            Location respawnLoc = leaderboardLoc;
-
-            TextDisplay newDisplay = spawnNewDisplay(respawnLoc, type);
-            if (newDisplay == null) {
-                plugin.getLogger().severe("Failed to respawn leaderboard " + type + " at " + respawnLoc);
-                return; // Skip update cycle
-            }
-
-            // Update the map: remove old UUID, add new UUID with the SAME info object
+        if (entity == null || !entity.isValid() || !(entity instanceof TextDisplay)) {
+            plugin.getLogger().info("Respawning leaderboard " + type);
+            textDisplay = spawnNewDisplay(loc, type);
+            if (textDisplay == null) return;
             activeLeaderboards.remove(uuid);
-            activeLeaderboards.put(newDisplay.getUniqueId(), info);
-            saveLeaderboards(); // Save the new UUID mapping TO leaderboards.yml
-            plugin.getLogger().info("Respawned leaderboard " + type + " with new UUID: " + newDisplay.getUniqueId());
-            textDisplay = newDisplay; // Use the new display for the rest of the update
+            activeLeaderboards.put(textDisplay.getUniqueId(), info);
+            saveLeaderboards();
         } else {
-            textDisplay = (TextDisplay) currentEntity; // Entity exists, use it
+            textDisplay = (TextDisplay) entity;
         }
-        // --- End Respawn Logic ---
 
-        // --- Update Text Logic ---
-        // (Reads formats from config.yml, gets data, sets text on textDisplay)
-        String titleFormat = plugin.getConfig().getString("leaderboards." + type + ".title", "<red>Missing Title");
-        String lineFormat = plugin.getConfig().getString("leaderboards." + type + ".line-format", "<gray>#%rank% <white>%player% | <red>%value%");
-        String emptyLineFormat = plugin.getConfig().getString("leaderboards." + type + ".empty-line-format", "<gray>#%rank% <white>N/A | N/A");
-        String footerFormat = plugin.getConfig().getString("leaderboards." + type + ".footer", "<gray>Refreshes every 60s");
-        StringBuilder leaderboardText = new StringBuilder();
-        leaderboardText.append(titleFormat).append("%nl%");
-        switch (type) {
-            case "kills": case "deaths": case "playtime":
-                Statistic statType = getStatistic(type); Map<String, Integer> topStats = StatsFetcher.getTopStats(statType, 10); List<Map.Entry<String, Integer>> statEntries = new ArrayList<>(topStats.entrySet()); for (int i = 0; i < 10; i++) { String line; int rank = i + 1; if (i < statEntries.size()) { Map.Entry<String, Integer> entry = statEntries.get(i); String value; if (type.equals("playtime")) { double hours = (double) entry.getValue() / 20.0 / 3600.0; long wholeHours = (long) Math.floor(hours); value = String.valueOf(wholeHours); } else { value = String.valueOf(entry.getValue()); } line = lineFormat.replace("%rank%", String.valueOf(rank)).replace("%player%", entry.getKey()).replace("%value%", value); } else { line = emptyLineFormat.replace("%rank%", String.valueOf(rank)); } leaderboardText.append(line).append("%nl%"); }
-                break;
-            case "balance":
-                Economy econ = plugin.getVaultEconomy(); if (econ == null) { leaderboardText.append("<red>Error: Vault Economy not found."); break; } Map<String, Double> topBalances = StatsFetcher.getTopBalances(econ, 10); List<Map.Entry<String, Double>> balanceEntries = new ArrayList<>(topBalances.entrySet()); for (int i = 0; i < 10; i++) { String line; int rank = i + 1; if (i < balanceEntries.size()) { Map.Entry<String, Double> entry = balanceEntries.get(i); String formattedBalance = currencyFormatter.format(entry.getValue()); line = lineFormat.replace("%rank%", String.valueOf(rank)).replace("%player%", entry.getKey()).replace("%value%", formattedBalance); } else { line = emptyLineFormat.replace("%rank%", String.valueOf(rank)); } leaderboardText.append(line).append("%nl%"); }
-                break;
-            case "credits": case "lifesteal":
-                String varPattern = type.equals("credits") ? "credits.%uuid%" : "lifesteal_level_%uuid%"; Map<String, Double> topSkriptVars = StatsFetcher.getTopSkriptVar(varPattern, 10); List<Map.Entry<String, Double>> skriptEntries = new ArrayList<>(topSkriptVars.entrySet()); for (int i = 0; i < 10; i++) { String line; int rank = i + 1; if (i < skriptEntries.size()) { Map.Entry<String, Double> entry = skriptEntries.get(i); String value; if (type.equals("credits")) { value = currencyFormatter.format(entry.getValue()); } else { value = String.valueOf(entry.getValue().longValue()); } line = lineFormat.replace("%rank%", String.valueOf(rank)).replace("%player%", entry.getKey()).replace("%value%", value); } else { line = emptyLineFormat.replace("%rank%", String.valueOf(rank)); } leaderboardText.append(line).append("%nl%"); }
-                break;
-            default:
-                leaderboardText.append("<red>Invalid Type: ").append(type);
-                break;
-        }
-        String refreshTime = String.valueOf(plugin.getConfig().getLong("leaderboards.refresh-seconds", 60));
-        leaderboardText.append(footerFormat.replace("%refresh-seconds%", refreshTime));
-        String finalString = leaderboardText.toString();
-        if (papiEnabled) {
-            finalString = PlaceholderAPI.setPlaceholders(null, finalString);
-        }
-        finalString = finalString.replace("%nl%", "<newline>");
-        Component component = miniMessage.deserialize(finalString);
-        textDisplay.text(component);
-        // --- End Update Text Logic ---
+        updateText(textDisplay, type);
     }
 
-    private Statistic getStatistic(String type) {
-        switch (type) { case "kills": return Statistic.PLAYER_KILLS; case "deaths": return Statistic.DEATHS; case "playtime": return Statistic.PLAY_ONE_MINUTE; default: return Statistic.DEATHS; }
+    private void updateText(TextDisplay display, String type) {
+        // Handle "token" vs "tokens" mismatch by normalizing
+        String configKey = type.equals("tokens") ? "token" : type;
+
+        String titleFormat = plugin.getConfig().getString("leaderboards." + configKey + ".title", "<red>Title Missing (" + type + ")");
+        String lineFormat = plugin.getConfig().getString("leaderboards." + configKey + ".line-format", "<white>%rank% %player% %value%");
+        String emptyLineFormat = plugin.getConfig().getString("leaderboards." + configKey + ".empty-line-format", "<gray>Empty");
+        String footerFormat = plugin.getConfig().getString("leaderboards." + configKey + ".footer", "");
+
+        StringBuilder text = new StringBuilder();
+        text.append(titleFormat).append("%nl%");
+
+        Map<String, Double> stats;
+        switch (type.toLowerCase()) {
+            case "kills": stats = fetcher.getTopStats(Statistic.PLAYER_KILLS, 10); break;
+            case "deaths": stats = fetcher.getTopStats(Statistic.DEATHS, 10); break;
+            case "playtime": stats = fetcher.getTopStats(Statistic.PLAY_ONE_MINUTE, 10); break;
+            case "balance": stats = fetcher.getTopBalances(10); break;
+            case "credits": stats = fetcher.getTopCredits(10); break;
+            case "token": case "tokens": stats = fetcher.getTopTokens(10); break;
+            case "parkour": stats = fetcher.getTopParkour(10); break;
+            case "lifesteal": stats = fetcher.getTopSkriptVar("lifesteal_level_%uuid%", 10); break;
+            default: stats = new HashMap<>();
+        }
+
+        List<Map.Entry<String, Double>> entries = new ArrayList<>(stats.entrySet());
+
+        for (int i = 0; i < 10; i++) {
+            String line;
+            int rank = i + 1;
+            if (i < entries.size()) {
+                Map.Entry<String, Double> entry = entries.get(i);
+                String value;
+
+                // Standard full format (e.g. 1,500)
+                String fullValue = LeaderboardFormatter.formatNoDecimal(entry.getValue());
+                // Suffix format (e.g. 1.5k)
+                String smallValue = LeaderboardFormatter.formatSuffix(entry.getValue());
+
+                if (type.equals("playtime")) {
+                    long hours = (long) (entry.getValue() / 20 / 3600);
+                    value = String.valueOf(hours);
+                } else if (type.equals("balance") || type.equals("credits")) {
+                    // Use short format as default %value% for these economy types
+                    value = smallValue;
+                } else {
+                    value = fullValue;
+                }
+
+                line = lineFormat
+                        .replace("%rank%", String.valueOf(rank))
+                        .replace("%player%", entry.getKey())
+                        .replace("%value%", value)
+                        .replace("%small_balance%", smallValue)
+                        .replace("%full_balance%", fullValue);
+            } else {
+                line = emptyLineFormat.replace("%rank%", String.valueOf(rank));
+            }
+            text.append(line).append("%nl%");
+        }
+
+        String refresh = String.valueOf(plugin.getConfig().getLong("leaderboards.refresh-seconds", 60));
+        text.append(footerFormat.replace("%refresh-seconds%", refresh));
+
+        String finalStr = text.toString();
+        if (papiEnabled) finalStr = PlaceholderAPI.setPlaceholders(null, finalStr);
+
+        display.text(miniMessage.deserialize(finalStr.replace("%nl%", "<newline>")));
     }
 
-    public int removeLeaderboardsByType(String typeToRemove) {
-        int removedCount = 0;
+    public int removeLeaderboardsByType(String type) {
+        int count = 0;
         List<UUID> toRemove = new ArrayList<>();
-        for (Map.Entry<UUID, LeaderboardInfo> entry : new HashMap<>(activeLeaderboards).entrySet()) {
-            if (typeToRemove.equalsIgnoreCase("all") || entry.getValue().type().equalsIgnoreCase(typeToRemove)) {
+        for (Map.Entry<UUID, LeaderboardInfo> entry : activeLeaderboards.entrySet()) {
+            if (type.equalsIgnoreCase("all") || entry.getValue().type().equalsIgnoreCase(type)) {
                 toRemove.add(entry.getKey());
             }
         }
-        if (toRemove.isEmpty()) return 0;
         for (UUID uuid : toRemove) {
-            Entity entity = Bukkit.getEntity(uuid);
-            if (entity instanceof TextDisplay && entity.isValid()) {
-                entity.remove();
-                removedCount++;
+            Entity e = Bukkit.getEntity(uuid);
+            if (e != null) {
+                e.getChunk().setForceLoaded(false); // Unforce chunk
+                e.remove();
             }
-            activeLeaderboards.remove(uuid); // Remove from in-memory map
+            activeLeaderboards.remove(uuid);
+            count++;
         }
-        saveLeaderboards(); // Save changes TO leaderboards.yml
-        plugin.getLogger().info("Removed " + removedCount + " leaderboards of type '" + typeToRemove + "'.");
-        return removedCount;
+        saveLeaderboards();
+        return count;
+    }
+
+    public void removeAll() {
+        removeLeaderboardsByType("all");
     }
 
     public boolean isManagedLeaderboard(UUID uuid) {
         return activeLeaderboards.containsKey(uuid);
     }
 
-    // --- Persistence Methods (Using database/leaderboards.yml) ---
-    public void loadLeaderboards() {
-        // --- DATABASE PATH CHANGE ---
-        File databaseDir = new File(plugin.getDataFolder(), "database");
-        if (!databaseDir.exists()) {
-            if (!databaseDir.mkdirs()) {
-                plugin.getLogger().severe("COULD NOT CREATE DATABASE DIRECTORY. Leaderboards may not load/save.");
-            }
-        }
-
-        leaderboardsFile = new File(databaseDir, "leaderboards.yml");
-        // --- END DATABASE PATH CHANGE ---
+    private void loadLeaderboards() {
+        File dbDir = new File(plugin.getDataFolder(), "database");
+        if (!dbDir.exists()) dbDir.mkdirs();
+        leaderboardsFile = new File(dbDir, "leaderboards.yml");
 
         if (!leaderboardsFile.exists()) {
-            // --- DATABASE PATH CHANGE: Manually copy default resource ---
-            plugin.getLogger().info("leaderboards.yml not found in database folder, attempting to copy default...");
             try (InputStream in = plugin.getResource("leaderboards.yml")) {
-                if (in != null) {
-                    Files.copy(in, leaderboardsFile.toPath());
-                    plugin.getLogger().info("Default leaderboards.yml copied to database/leaderboards.yml");
-                } else {
-                    plugin.getLogger().warning("Default leaderboards.yml not found in JAR. A new empty file will be created at database/leaderboards.yml upon save.");
-                }
-            } catch (java.nio.file.FileAlreadyExistsException e) {
-                // This is fine, means it was created between the check and copy.
+                if (in != null) Files.copy(in, leaderboardsFile.toPath());
+                else leaderboardsFile.createNewFile();
             } catch (IOException e) {
-                plugin.getLogger().severe("Could not save default leaderboards.yml to database folder!");
                 e.printStackTrace();
             }
-            // --- END DATABASE PATH CHANGE ---
         }
-
         leaderboardsConfig = YamlConfiguration.loadConfiguration(leaderboardsFile);
-        if (leaderboardsConfig == null) {
-            plugin.getLogger().severe("FAILED TO LOAD database/leaderboards.yml! File might be corrupt.");
-            leaderboardsConfig = new YamlConfiguration();
-        }
 
-        activeLeaderboards.clear(); // Clear map before loading
-        ConfigurationSection displaysSection = leaderboardsConfig.getConfigurationSection("displays");
-        if (displaysSection != null) {
-            for (String uuidString : displaysSection.getKeys(false)) {
+        activeLeaderboards.clear();
+        ConfigurationSection sec = leaderboardsConfig.getConfigurationSection("displays");
+        if (sec != null) {
+            for (String key : sec.getKeys(false)) {
                 try {
-                    UUID uuid = UUID.fromString(uuidString);
-                    // Read data FROM YML
-                    String type = displaysSection.getString(uuidString + ".type");
-                    String worldName = displaysSection.getString(uuidString + ".world");
-                    double x = displaysSection.getDouble(uuidString + ".x");
-                    double y = displaysSection.getDouble(uuidString + ".y");
-                    double z = displaysSection.getDouble(uuidString + ".z");
-
-                    if (type == null || worldName == null) {
-                        plugin.getLogger().warning("Incomplete leaderboard data for UUID: " + uuidString + " in database/leaderboards.yml. Skipping.");
-                        continue;
-                    }
-
-                    // Create in-memory object FROM YML data
-                    LeaderboardInfo info = new LeaderboardInfo(type, worldName, x, y, z);
-                    activeLeaderboards.put(uuid, info); // Store in map
-
-                } catch (IllegalArgumentException e) {
-                    plugin.getLogger().warning("Found invalid UUID in database/leaderboards.yml: " + uuidString);
+                    UUID uuid = UUID.fromString(key);
+                    String type = sec.getString(key + ".type");
+                    String world = sec.getString(key + ".world");
+                    double x = sec.getDouble(key + ".x");
+                    double y = sec.getDouble(key + ".y");
+                    double z = sec.getDouble(key + ".z");
+                    activeLeaderboards.put(uuid, new LeaderboardInfo(type, world, x, y, z));
                 } catch (Exception e) {
-                    plugin.getLogger().severe("Error loading leaderboard data for " + uuidString + ": " + e.getMessage());
+                    plugin.getLogger().warning("Error loading leaderboard: " + key);
                 }
             }
         }
-        plugin.getLogger().info("Loaded " + activeLeaderboards.size() + " leaderboard configurations from database/leaderboards.yml.");
     }
 
-    public void saveLeaderboards() {
-        if (leaderboardsConfig == null) {
-            plugin.getLogger().severe("Cannot save leaderboards: Config object is null.");
-            loadLeaderboards(); // Try reloading
-            if (leaderboardsConfig == null) return; // Still failed, abort save.
-        }
-
-        leaderboardsConfig.set("displays", null); // Clear old data in config object
-        ConfigurationSection displaysSection = leaderboardsConfig.createSection("displays");
-
-        // Loop through in-memory map
+    private void saveLeaderboards() {
+        if (leaderboardsConfig == null) return;
+        leaderboardsConfig.set("displays", null);
+        ConfigurationSection sec = leaderboardsConfig.createSection("displays");
         for (Map.Entry<UUID, LeaderboardInfo> entry : activeLeaderboards.entrySet()) {
-            UUID uuid = entry.getKey();
-            LeaderboardInfo info = entry.getValue(); // Get in-memory object
-
-            // Write data FROM in-memory object TO config object
-            ConfigurationSection uuidSection = displaysSection.createSection(uuid.toString());
-            uuidSection.set("type", info.type());
-            uuidSection.set("world", info.worldName());
-            uuidSection.set("x", info.x());
-            uuidSection.set("y", info.y());
-            uuidSection.set("z", info.z());
+            String uuid = entry.getKey().toString();
+            LeaderboardInfo info = entry.getValue();
+            sec.set(uuid + ".type", info.type());
+            sec.set(uuid + ".world", info.worldName());
+            sec.set(uuid + ".x", info.x());
+            sec.set(uuid + ".y", info.y());
+            sec.set(uuid + ".z", info.z());
         }
-
         try {
-            // This will save to the 'leaderboardsFile' object, which now points to the database folder
-            leaderboardsConfig.save(leaderboardsFile); // Save config object TO leaderboards.yml file
+            leaderboardsConfig.save(leaderboardsFile);
         } catch (IOException e) {
-            plugin.getLogger().severe("Could not save leaderboards to file!");
             e.printStackTrace();
         }
     }
-    // --- End Persistence Methods ---
 }

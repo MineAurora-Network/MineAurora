@@ -38,6 +38,20 @@ public class PetInteractListener implements Listener {
         Entity clickedEntity = event.getRightClicked();
         ItemStack itemInHand = player.getInventory().getItemInMainHand();
 
+        // --- NEW: Check for Fruit NPC ---
+        int configNpcId = petManager.getPetsConfig().getFruitNpcId();
+        if (configNpcId != -1) {
+            // Attempt to check Citizens ID if available
+            if (petManager.getPlugin().getServer().getPluginManager().isPluginEnabled("Citizens")) {
+                net.citizensnpcs.api.npc.NPC npc = net.citizensnpcs.api.CitizensAPI.getNPCRegistry().getNPC(clickedEntity);
+                if (npc != null && npc.getId() == configNpcId) {
+                    event.setCancelled(true);
+                    petManager.getFruitShop().openMainMenu(player);
+                    return;
+                }
+            }
+        }
+
         if (!(clickedEntity instanceof LivingEntity)) return;
         LivingEntity livingEntity = (LivingEntity) clickedEntity;
 

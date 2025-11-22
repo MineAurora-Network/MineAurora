@@ -1,14 +1,13 @@
 package me.login.pets.gui;
 
+import me.login.pets.PetFruitShop;
 import me.login.pets.PetManager;
 import me.login.pets.PetMessageHandler;
-import me.login.pets.data.Pet;
 import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -28,26 +27,78 @@ public class PetGuiListener implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         Inventory inv = event.getInventory();
+
+        // --- NEW: Handle Fruit Shop ---
+        if (inv.getHolder() instanceof PetFruitShop) {
+            if (!(event.getWhoClicked() instanceof Player)) return;
+            Player player = (Player) event.getWhoClicked();
+
+            // FIX: Cancel events ONLY in top inventory (The Shop) to prevent stealing
+            if (event.getClickedInventory() == inv) {
+                event.setCancelled(true);
+            } else if (event.isShiftClick()) {
+                // Cancel shift-clicking from player inventory INTO shop
+                event.setCancelled(true);
+                return;
+            } else {
+                // Allow managing own inventory
+                return;
+            }
+
+            ItemStack clicked = event.getCurrentItem();
+            if (clicked == null || clicked.getType() == Material.AIR) return;
+
+            PetFruitShop shop = (PetFruitShop) inv.getHolder();
+            int slot = event.getSlot();
+
+            if (shop.getType() == PetFruitShop.ShopType.MAIN) {
+                if (slot == 11) {
+                    petManager.getFruitShop().openXpShop(player);
+                } else if (slot == 15) {
+                    petManager.getFruitShop().openHungerShop(player);
+                }
+            } else {
+                if (slot == 31 && clicked.getType() == Material.BARRIER) {
+                    petManager.getFruitShop().openMainMenu(player);
+                    return;
+                }
+
+                if (event.getClick().isLeftClick()) {
+                    petManager.getFruitShop().processBuy(player, clicked, 1);
+                } else if (event.getClick().isShiftClick() && event.getClick().isRightClick()) {
+                    player.closeInventory();
+                    petManager.getFruitShop().openSignInput(player, clicked);
+                }
+            }
+            return;
+        }
+
+        // --- Pet Menu Logic ---
         if (!(inv.getHolder() instanceof PetMenu)) return;
 
-        event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player)) return;
         Player player = (Player) event.getWhoClicked();
-        ItemStack clickedItem = event.getCurrentItem();
 
+        // FIX: Cancel click in Top Inventory (Pet Menu)
+        if (event.getClickedInventory() == inv) {
+            event.setCancelled(true);
+        } else if (event.isShiftClick()) {
+            event.setCancelled(true);
+            return;
+        } else {
+            return;
+        }
+
+        ItemStack clickedItem = event.getCurrentItem();
         if (clickedItem == null || clickedItem.getType() == Material.AIR || !clickedItem.hasItemMeta()) return;
 
         ItemMeta meta = clickedItem.getItemMeta();
 
-        // 1. Pet Click
         if (meta.getPersistentDataContainer().has(PetMenu.PET_TYPE_KEY, PersistentDataType.STRING)) {
             String typeStr = meta.getPersistentDataContainer().get(PetMenu.PET_TYPE_KEY, PersistentDataType.STRING);
             try {
                 EntityType type = EntityType.valueOf(typeStr);
-                if (event.getClick() == ClickType.SHIFT_RIGHT) {
-                    Pet pet = petManager.getPet(player.getUniqueId(), type);
-                    if (pet != null) new me.login.pets.PetInventoryMenu(player, pet, false).open(player);
-                } else {
+                if (event.getClick().isLeftClick()) {
                     petManager.summonPet(player, type);
                     player.closeInventory();
                 }
@@ -55,17 +106,16 @@ public class PetGuiListener implements Listener {
             return;
         }
 
-        // 2. Buttons
-        if (clickedItem.getType() == Material.BARRIER) { // Despawn
+        if (clickedItem.getType() == Material.BARRIER) {
             petManager.despawnPet(player.getUniqueId(), true);
             player.closeInventory();
         }
-        else if (clickedItem.getType() == Material.COMPARATOR) { // Sort
+        else if (clickedItem.getType() == Material.COMPARATOR) {
             PetMenu menu = (PetMenu) inv.getHolder();
             PetMenu.PetMenuSort next = (menu.getSortMode() == PetMenu.PetMenuSort.RARITY) ? PetMenu.PetMenuSort.LEVEL : PetMenu.PetMenuSort.RARITY;
             new PetMenu(player, petManager, next).open(player);
         }
-        else if (clickedItem.getType() == Material.RED_BED) { // Close
+        else if (clickedItem.getType() == Material.RED_BED) {
             player.closeInventory();
         }
     }

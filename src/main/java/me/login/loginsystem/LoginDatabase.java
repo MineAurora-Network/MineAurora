@@ -1,6 +1,7 @@
-package me.login.loginsystem; // Correct package
+package me.login.loginsystem;
 
-import me.login.Login; // Import base plugin class
+import me.login.Login;
+import org.bukkit.Location;
 
 import java.io.File;
 import java.sql.*;
@@ -8,7 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-// Database for Login System (login_data.db)
 public class LoginDatabase {
 
     private final String url;
@@ -28,6 +28,9 @@ public class LoginDatabase {
             connection = DriverManager.getConnection(url);
             try (Statement stmt = connection.createStatement()) {
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS player_auth (uuid VARCHAR(36) PRIMARY KEY, hashed_password VARCHAR(255) NOT NULL, registration_ip VARCHAR(45), last_login_ip VARCHAR(45), last_login_timestamp BIGINT)");
+
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS login_parkour_points (id INTEGER PRIMARY KEY AUTOINCREMENT, world VARCHAR(50), x INT, y INT, z INT, type VARCHAR(20), point_index INT)");
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS login_parkour_cooldowns (uuid VARCHAR(36) PRIMARY KEY, last_reward BIGINT)");
             }
             plugin.getLogger().info("Connected to Login SQLite DB (login_data.db)");
         } catch (Exception e) {
@@ -87,7 +90,6 @@ public class LoginDatabase {
     }
 
     public boolean unregisterPlayer(UUID uuid) {
-        // Runs sync as called from async task
         if (getConnection() == null) return false;
         try (PreparedStatement ps = getConnection().prepareStatement("DELETE FROM player_auth WHERE uuid = ?")) {
             ps.setString(1, uuid.toString()); return ps.executeUpdate() > 0;
@@ -95,7 +97,6 @@ public class LoginDatabase {
     }
 
     public PlayerAuthData getAuthData(UUID uuid) {
-        // Runs sync as called from async task
         if (getConnection() == null) return null;
         try (PreparedStatement ps = getConnection().prepareStatement("SELECT * FROM player_auth WHERE uuid = ?")) {
             ps.setString(1, uuid.toString()); try (ResultSet rs = ps.executeQuery()) {
@@ -106,7 +107,6 @@ public class LoginDatabase {
     }
 
     public List<PlayerAuthData> getPlayersByIp(String ip) {
-        // Runs sync as called from async task
         List<PlayerAuthData> accounts = new ArrayList<>(); if (getConnection() == null) return accounts;
         try (PreparedStatement ps = getConnection().prepareStatement("SELECT * FROM player_auth WHERE registration_ip = ? OR last_login_ip = ?")) {
             ps.setString(1, ip); ps.setString(2, ip); try (ResultSet rs = ps.executeQuery()) {
@@ -116,6 +116,68 @@ public class LoginDatabase {
         return accounts;
     }
 
-    // Public record for data structure
+    public void addParkourPoint(Location loc, String type, int index) {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            if (getConnection() == null) return;
+            try (PreparedStatement ps = getConnection().prepareStatement("INSERT INTO login_parkour_points (world, x, y, z, type, point_index) VALUES (?, ?, ?, ?, ?, ?)")) {
+                ps.setString(1, loc.getWorld().getName()); ps.setInt(2, loc.getBlockX()); ps.setInt(3, loc.getBlockY()); ps.setInt(4, loc.getBlockZ()); ps.setString(5, type); ps.setInt(6, index); ps.executeUpdate();
+            } catch (SQLException e) { e.printStackTrace(); }
+        });
+    }
+
+    public void removeParkourPoint(Location loc) {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            if (getConnection() == null) return;
+            try (PreparedStatement ps = getConnection().prepareStatement("DELETE FROM login_parkour_points WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
+                ps.setString(1, loc.getWorld().getName()); ps.setInt(2, loc.getBlockX()); ps.setInt(3, loc.getBlockY()); ps.setInt(4, loc.getBlockZ()); ps.executeUpdate();
+            } catch (SQLException e) { e.printStackTrace(); }
+        });
+    }
+
+    public ParkourPoint getParkourPoint(Location loc) {
+        if (getConnection() == null) return null;
+        try (PreparedStatement ps = getConnection().prepareStatement("SELECT type, point_index FROM login_parkour_points WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
+            ps.setString(1, loc.getWorld().getName()); ps.setInt(2, loc.getBlockX()); ps.setInt(3, loc.getBlockY()); ps.setInt(4, loc.getBlockZ());
+            try (ResultSet rs = ps.executeQuery()) { if (rs.next()) return new ParkourPoint(rs.getString("type"), rs.getInt("point_index")); }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return null;
+    }
+
+    public int getParkourPointCount(String type) {
+        if (getConnection() == null) return 0;
+        try (PreparedStatement ps = getConnection().prepareStatement("SELECT COUNT(*) as count FROM login_parkour_points WHERE type = ?")) {
+            ps.setString(1, type); try (ResultSet rs = ps.executeQuery()) { if (rs.next()) return rs.getInt("count"); }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return 0;
+    }
+
+    public List<ParkourPointData> getAllParkourPoints() {
+        List<ParkourPointData> points = new ArrayList<>();
+        if (getConnection() == null) return points;
+        try (Statement stmt = getConnection().createStatement(); ResultSet rs = stmt.executeQuery("SELECT * FROM login_parkour_points")) {
+            while (rs.next()) points.add(new ParkourPointData(rs.getString("world"), rs.getInt("x"), rs.getInt("y"), rs.getInt("z"), rs.getString("type"), rs.getInt("point_index")));
+        } catch (SQLException e) { e.printStackTrace(); }
+        return points;
+    }
+
+    public long getLastParkourReward(UUID uuid) {
+        if (getConnection() == null) return 0;
+        try (PreparedStatement ps = getConnection().prepareStatement("SELECT last_reward FROM login_parkour_cooldowns WHERE uuid = ?")) {
+            ps.setString(1, uuid.toString()); try (ResultSet rs = ps.executeQuery()) { if (rs.next()) return rs.getLong("last_reward"); }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return 0;
+    }
+
+    public void setLastParkourReward(UUID uuid, long time) {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            if (getConnection() == null) return;
+            try (PreparedStatement ps = getConnection().prepareStatement("REPLACE INTO login_parkour_cooldowns (uuid, last_reward) VALUES (?, ?)")) {
+                ps.setString(1, uuid.toString()); ps.setLong(2, time); ps.executeUpdate();
+            } catch (SQLException e) { e.printStackTrace(); }
+        });
+    }
+
     public record PlayerAuthData(String uuid, String hashedPassword, String registrationIp, String lastLoginIp, long lastLoginTimestamp) {}
+    public record ParkourPoint(String type, int index) {}
+    public record ParkourPointData(String world, int x, int y, int z, String type, int index) {}
 }

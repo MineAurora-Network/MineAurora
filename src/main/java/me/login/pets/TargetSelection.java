@@ -30,28 +30,29 @@ public class TargetSelection {
                 mob.setTarget(null);
             }
 
-            // --- Restricted Movement Logic ---
-            // Only move freely if attacking
+            // --- FIX: Relaxed Movement Logic ---
+            // Only move if too far away to prevent snapping behind player constantly
             if (mob.getTarget() == null) {
                 Location playerLoc = player.getLocation();
+                double distanceSquared = pet.getLocation().distanceSquared(playerLoc);
 
-                // Calculate position 3 blocks behind the player
-                // We take direction, reverse it, multiply by 3, and add to player loc
+                // Teleport if extremely far (stuck or new chunk)
+                if (distanceSquared > 400) { // 20 blocks
+                    pet.teleport(playerLoc);
+                    return;
+                }
+
+                // Calculate "sweet spot" behind player
                 Vector direction = playerLoc.getDirection().setY(0).normalize().multiply(-3);
                 Location targetSpot = playerLoc.clone().add(direction);
 
-                // If distance to that spot > 1.5 blocks, move there
-                double distToSpot = pet.getLocation().distanceSquared(targetSpot);
-                if (distToSpot > 2.25) { // 1.5^2
+                // Only start moving if distance to player is > 5 blocks
+                // This allows the player to walk up to the pet and right-click it
+                if (distanceSquared > 25) {
                     mob.getPathfinder().moveTo(targetSpot, 1.3);
                 }
-
-                // Teleport if too far from player (e.g. 10 blocks)
-                if (pet.getLocation().distanceSquared(playerLoc) > 100) {
-                    pet.teleport(targetSpot);
-                }
+                // If within 5 blocks, just idle/look at player (handled by vanilla 'look at player' goal usually)
             }
-            // If attacking (target != null), let default AI/Aggression handle movement
         }
     }
 
