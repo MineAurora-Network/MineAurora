@@ -1,6 +1,6 @@
-bot-token:
-logger-bot-token:
-store-bot-token:
+bot-token: ""
+logger-bot-token: ""
+store-bot-token: ""
 
 normal-bot-channel: 1434006801011048621
 staff-bot-channel: 1434006967357145168
