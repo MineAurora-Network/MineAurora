@@ -9,6 +9,7 @@ import me.login.dungeon.listeners.DungeonListener;
 import me.login.dungeon.manager.DungeonManager;
 import me.login.dungeon.manager.DungeonRewardManager;
 import me.login.dungeon.utils.DungeonLogger;
+import me.login.dungeon.utils.DungeonPlaceholder;
 import org.bukkit.Bukkit;
 
 public class DungeonModule {
@@ -33,14 +34,20 @@ public class DungeonModule {
         this.gameManager = new GameManager(plugin, dungeonManager);
 
         // 3. Register Commands
-        // Pass rewardManager to AdminCommands so /dungeon rngmeter works
         if (plugin.getCommand("dungeon") != null) {
             plugin.getCommand("dungeon").setExecutor(new AdminCommands(plugin, dungeonManager, gameManager, rewardManager));
-            plugin.getCommand("dungeon").setTabCompleter(new DungeonTabCompleter(dungeonManager));
+            // CHANGED: Added rewardManager to constructor
+            plugin.getCommand("dungeon").setTabCompleter(new DungeonTabCompleter(dungeonManager, rewardManager));
         }
 
         // 4. Register Listeners
         Bukkit.getPluginManager().registerEvents(new DungeonListener(plugin, dungeonManager, gameManager, rewardManager, logger), plugin);
+
+        // 5. Register Placeholders (Soft depend)
+        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            new DungeonPlaceholder(plugin, gameManager).register();
+            plugin.getLogger().info("Dungeon Placeholders registered!");
+        }
 
         plugin.getLogger().info("Dungeon Module loaded successfully!");
     }

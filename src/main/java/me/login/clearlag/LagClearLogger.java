@@ -10,7 +10,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 import java.util.EnumSet;
-import java.util.concurrent.TimeUnit; // --- FIXED: Added Import ---
+import java.util.concurrent.TimeUnit;
 
 public class LagClearLogger {
 
@@ -30,8 +30,7 @@ public class LagClearLogger {
         }
 
         if (logChannelId == 0) {
-            plugin.getLogger().warning("lagclear-log-channel-id not set in config.yml. LagClear logging bot will not start.");
-            return;
+            plugin.getLogger().warning("lagclear-log-channel-id not set in config.yml. Discord logging will be disabled, but the bot will still start for other modules.");
         }
 
         startLoggerBot(token);
@@ -40,8 +39,6 @@ public class LagClearLogger {
     private void startLoggerBot(String token) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                // --- FIXED: Build first, then assign, then await ---
-                // This ensures 'this.jda' is not null if we need to shutdown immediately
                 this.jda = JDABuilder.createLight(token)
                         .enableIntents(GatewayIntent.GUILD_MESSAGES)
                         .disableCache(EnumSet.allOf(CacheFlag.class))
@@ -49,7 +46,6 @@ public class LagClearLogger {
 
                 this.jda.awaitReady();
 
-                // ✅ Set the bot’s status and activity
                 jda.getPresence().setPresence(OnlineStatus.ONLINE, Activity.watching("server logs 📜"));
 
                 plugin.getLogger().info("LagClear Logger Bot started successfully with presence set to Online.");
@@ -63,7 +59,13 @@ public class LagClearLogger {
     public void sendLog(String message) {
         plugin.getLogger().info("[LagClear Log] " + message);
 
-        if (jda == null || jda.getStatus() != JDA.Status.CONNECTED) return;
+        if (jda == null || jda.getStatus() != JDA.Status.CONNECTED) {
+            return;
+        }
+
+        if (logChannelId == 0) {
+            return; // Don't attempt to log if channel ID is not set. Warning was given at startup.
+        }
 
         MessageChannel channel = jda.getTextChannelById(logChannelId);
         if (channel != null) {
@@ -79,16 +81,12 @@ public class LagClearLogger {
     public void shutdown() {
         if (jda != null) {
             try {
-                // --- FIXED: Properly wait for JDA to shut down ---
-                jda.shutdown(); // Initiates graceful shutdown
-
-                // Wait up to 10 seconds for it to finish
+                jda.shutdown();
                 if (!jda.awaitShutdown(10, TimeUnit.SECONDS)) {
                     plugin.getLogger().warning("LagClear Logger Bot took too long to shutdown. Forcing...");
-                    jda.shutdownNow(); // Force shutdown if graceful fails
+                    jda.shutdownNow();
                     jda.awaitShutdown(5, TimeUnit.SECONDS);
                 }
-
                 plugin.getLogger().info("LagClear Logger Bot has been shut down.");
             } catch (InterruptedException e) {
                 plugin.getLogger().warning("Interrupted while shutting down LagClear Logger Bot.");
@@ -96,7 +94,6 @@ public class LagClearLogger {
             }
         }
     }
-
 
     /**
      * Returns the JDA instance for this logger bot.

@@ -1,9 +1,11 @@
 package me.login.dungeon.commands;
 
 import me.login.dungeon.game.GameManager;
+import me.login.dungeon.game.GameSession;
 import me.login.dungeon.gui.DungeonGUI;
 import me.login.dungeon.manager.DungeonManager;
 import me.login.dungeon.manager.DungeonRewardManager;
+import me.login.dungeon.model.Cuboid;
 import me.login.dungeon.model.Dungeon;
 import me.login.dungeon.model.DungeonRoom;
 import me.login.dungeon.utils.DungeonUtils;
@@ -61,6 +63,72 @@ public class AdminCommands implements CommandExecutor {
             return true;
         }
 
+        // --- GIVE COMMAND ---
+        if (sub.equals("give")) {
+            if (args.length < 2) {
+                DungeonUtils.error(player, "Usage: /dungeon give <item_id/all>");
+                return true;
+            }
+            String target = args[1].toLowerCase();
+            List<DungeonRewardManager.RewardItem> allRewards = rewardManager.getAllRewards();
+
+            if (target.equals("all")) {
+                for (DungeonRewardManager.RewardItem item : allRewards) {
+                    player.getInventory().addItem(item.stack.clone());
+                }
+                DungeonUtils.msg(player, "<green>Gave all dungeon items!");
+            } else {
+                boolean found = false;
+                for (DungeonRewardManager.RewardItem item : allRewards) {
+                    if (item.id.equalsIgnoreCase(target)) {
+                        player.getInventory().addItem(item.stack.clone());
+                        DungeonUtils.msg(player, "<green>Gave item: " + item.id);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    DungeonUtils.error(player, "Item '" + target + "' not found in items.yml");
+                }
+            }
+            return true;
+        }
+        // --------------------
+
+        // --- TEMP OPEN COMMAND ---
+        if (sub.equals("tempopen")) {
+            if (args.length < 4 || !args[2].equalsIgnoreCase("door")) {
+                DungeonUtils.error(player, "Usage: /dungeon tempopen <id> door <roomID>");
+                return true;
+            }
+            try {
+                int dId = Integer.parseInt(args[1]);
+                int rId = Integer.parseInt(args[3]);
+
+                GameSession session = gameManager.getSession(player);
+                if (session == null) { DungeonUtils.error(player, "Not in a session!"); return true; }
+                if (session.getDungeon().getId() != dId) { DungeonUtils.error(player, "Wrong Dungeon ID."); return true; }
+
+                Cuboid region = null;
+                if (rId == 0) region = session.getDungeon().getEntryDoor();
+                else if (rId == 6) region = session.getDungeon().getBossRoomDoor();
+                else {
+                    DungeonRoom room = session.getDungeon().getRoom(rId);
+                    if (room != null) region = room.getDoorRegion();
+                }
+
+                if (region != null) {
+                    session.openDoor(region);
+                    session.advanceRoom();
+                    session.startRoom();
+                    DungeonUtils.msg(player, "<green>Force opened Room " + rId + " door.");
+                } else {
+                    DungeonUtils.error(player, "Room " + rId + " has no door region defined!");
+                }
+            } catch (Exception e) { DungeonUtils.error(player, "Invalid ID."); }
+            return true;
+        }
+
         // Basic Commands
         if (sub.equals("create") && args.length >= 2) {
             try { dungeonManager.createDungeon(Integer.parseInt(args[1]), player.getLocation()); DungeonUtils.msg(player, "Created."); } catch(Exception e) {}
@@ -101,14 +169,13 @@ public class AdminCommands implements CommandExecutor {
 
         // SETUP
         if (sub.equals("setup")) {
-            if (args.length < 3) return true;
+            if (args.length < 3) { sendHelp(player); return true; }
             int id; try { id = Integer.parseInt(args[1]); } catch(Exception e) { return true; }
             Dungeon dungeon = dungeonManager.getDungeon(id);
-            if (dungeon == null) return true;
+            if (dungeon == null) { DungeonUtils.error(player, "Dungeon not found."); return true; }
 
             String type = args[2].toLowerCase();
 
-            // LASTROOM
             if (type.equals("lastroom")) {
                 if (args.length < 4) return true;
                 String subType = args[3].toLowerCase();
@@ -135,6 +202,7 @@ public class AdminCommands implements CommandExecutor {
             }
 
             if (type.equals("entrydoor")) {
+                if (args.length < 4) { DungeonUtils.error(player, "Usage: ... entrydoor <pos1/pos2>"); return true; }
                 dungeonManager.startSetup(player, id, 0, "entrydoor", args[3]);
                 return true;
             }
@@ -156,9 +224,15 @@ public class AdminCommands implements CommandExecutor {
                         DungeonUtils.msg(player, "Cleared spawns.");
                     }
                     else if (roomAction.equals("door")) {
+                        if (args.length < 6) {
+                            DungeonUtils.error(player, "Usage: /dungeon setup <id> room <room> door <pos1/pos2>");
+                            return true;
+                        }
                         dungeonManager.startSetup(player, id, roomId, "door", args[5]);
                     }
-                } catch (Exception e) {}
+                } catch (Exception e) {
+                    DungeonUtils.error(player, "Error: Check command syntax.");
+                }
                 return true;
             }
         }
@@ -167,7 +241,10 @@ public class AdminCommands implements CommandExecutor {
 
     private void sendHelp(Player p) {
         DungeonUtils.msg(p, "/dungeon create/delete/start/stop");
-        DungeonUtils.msg(p, "/dungeon setup <id> room <room> mobspawn/door");
+        DungeonUtils.msg(p, "/dungeon give <item/all>");
+        DungeonUtils.msg(p, "/dungeon tempopen <id> door <roomID>");
+        DungeonUtils.msg(p, "/dungeon setup <id> room <room> mobspawn");
+        DungeonUtils.msg(p, "/dungeon setup <id> room <room> door <pos1/pos2>");
         DungeonUtils.msg(p, "/dungeon setup <id> lastroom bossspawn");
         DungeonUtils.msg(p, "/dungeon setup <id> lastroom rewardloc");
         DungeonUtils.msg(p, "/dungeon setup <id> lastroom bossdoor <pos1/pos2>");

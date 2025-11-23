@@ -1,6 +1,6 @@
-bot-token: ""
-logger-bot-token: ""
-store-bot-token: ""
+bot-token: "MTQzMDc2MjY4NTE2NjkxMTUyOA.GurCYR.HyDj7MY4UhJ-w-GJkcZI0Y1uKF-kHmdRXaNrFI"
+logger-bot-token: "MTQwOTg1NTI5Mjk3NTYxNjAzMg.GW9Bdy.z_hxuwB2e0VPObanDF4tWpz2vtm9Vh6DM1CLZU"
+store-bot-token: "MTQzNzA4NTE2NDYxNzMzODk0MA.GbRY-d.7nvx8Ya7NdyKcc0pqWyxeGRKZSWipIqi23w-UA"
 
 normal-bot-channel: 1434006801011048621
 staff-bot-channel: 1434006967357145168
@@ -17,9 +17,10 @@ token-shop-channel-id: 1435894542334169138
 token-admin-channel-id: 1435894607027109918
 creator-code-channel-id: 1436624030814965832
 rank-log-channel-id: 1436623612571553896
-link-system-log-channel-id: 1430931902650388490
 verification-channel-id: 1430953529463279696
-rtp-log-channel-id: 123456789012345679
+rtp-log-channel-id: 1439666919333560330
+link-system-log-channel-id: 1430770060066291782
+
 
 verified-role-id: 1430766504575635508
 unverified-role-id: 1430779094077014066
@@ -30,54 +31,63 @@ ranks:
   legend: 334455667788990011
 
 code-expiry-seconds: 60
+worlds:
+  overworld: "normal_world"
+  nether: "nether"
+  end: "end"
 
 server_prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>: "
 server_prefix_2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
-server-prefix-2: "&x&4&7&F&0&D&E&lᴍ&x&4&6&E&2&E&2&lɪ&x&4&5&D&5&E&6&lɴ&x&4&4&C&7&E&9&lᴇ&x&4&3&B&A&E&D&lᴀ&x&4&2&A&C&F&1&lᴜ&x&3&4&A&3&F&1&lʀ&x&2&6&9&9&F&0&lᴏ&x&1&7&9&0&F&0&lʀ&x&0&9&8&6&E&F&lᴀ&f: "
 
 alert_prefix: "<gray>[<red>ALERT</red>]<white> "
 lifesteal-world: "lifesteal"
 
+store-link: "https://store.yourserver.com"
 discord-server-link: "your-discord.gg/invite"
-
-worlds:
-  overworld: "world"
-  nether: "world_nether"
-  end: "world_the_end"
-
-# Dungeon Settings
-dungeon-npc-id: 5
-dungeon-admin-log-channel-id: 1441682714557284473
-dungeon-game-log-channel-id: 1441682690620264542
 
 firesale:
   fire-npc-id: 16
   log-channel-id: "1437618511684833290"
   join-message: "<green>A firesale is currently active!%nl%<aqua><item_name></aqua> (<white>x<quantity></white>)%nl%Price: <gold><price> Credits</gold>%nl%Time Left: <yellow><time></yellow>"
 
-login-book:
-  enabled: true
-  title: "<green>Welcome!"
-  author: "<gold>MineAurora"
-  pages:
-    - "Welcome to <server_prefix>!"
-    - ""
-    - "<blue><u>Gamemodes:</u></blue>"
-    - "<click:run_command:/server survival><hover:show_text:'Click to join Survival!'>[Survival]</click></hover>"
-    - "<click:run_command:/server creative><hover:show_text:'Click to join Creative!'>[Creative]</click></hover>"
-    -
 
 daily-reward-npc-id: 6
-playtime-reward-npc-id: -1
+playtime-reward-npc-id: 12
 token-shop-npc-id: 13
+pets-fruit-npc-id: 20
 
-# ============================
-# Logging Configuration
-# ============================
-link-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-login-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-staff-system-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
-discord-staff-log-webhook: "https://discord.com/api/webhooks/1430769985915064360/OFJs603PgJDDFPrnElM0dOYYErAUt2V1BGg7PGr1YoPLVlmgqL_tMjELow2HUlxMw0zJ"
+#-----------------------------------------------
+# LoginSystem Configuration
+# -----------------------------------------------
+login-book:
+  enabled: true
+  title: "<green>Welcome Book"
+  author: "<gold>Server Core"
+  pages:
+    - "Welcome to &bMINEAURORA"
+    - "&r"
+    - "&rList of Gamemodes: "
+    - "        &cLifesteal   "
+    - "&r"
+    - "&rChannelLog 20/11/25:"
+    - "&r"
+    - "&5➤ &a+&9 Alpha 0.1 realese"
+
+login-log-channel-id: 1441262885757128768
+admin-login-log-channel-id: 1441262674481512480
+parkour-log-channel-id: 1441262756538880080
+
+#-----------------------------------------------
+# Credits Configuration
+# -----------------------------------------------
+credit-log-channel-id: 1409910381903740999
+
+#-----------------------------------------------
+# Dungeons Configuration
+# -----------------------------------------------
+dungeon-npc-id: 11
+dungeon-admin-log-channel-id: 1441682714557284473
+dungeon-game-log-channel-id: 1441682690620264542
 
 # ============================
 # Order System Configuration
@@ -103,9 +113,8 @@ discord-logging:
 # Custom Armor System
 # ============================
 armor-system:
-  log-channel-id: 123456789012345678 # Replace with your real channel ID
-  # This prefix is used for in-game messages from this module
-  prefix: "<gradient:#FF5555:#AA0000><b>ARMOR</b></gradient> <dark_gray>» <gray>"
+  log-channel-id: 123456789012345678
+  prefix: "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>: "
 
 # ============================
 # Scoreboard Configuration
@@ -117,7 +126,7 @@ scoreboard:
       - "hub"
     lines:
       - '  &7⌚ %localtime_time_dd/MM/yyyy HH:mm%'
-      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
       - '&6&l╏ &fUser: &a%player_name%'
       - '&6&l╏ &fRank: &r%vault_prefix%'
       - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
@@ -136,7 +145,7 @@ scoreboard:
       - "normal_world"
     lines:
       - '  &7⌚ %localtime_time_dd/MM/yyyy HH:mm%'
-      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
       - '&6Info &7: &a%player_name%'
       - '&6&l╏ &fRank: &r%vault_prefix%'
       - '&6&l╏ &fMoney: &a%vault_eco_balance_formatted%'
@@ -148,6 +157,26 @@ scoreboard:
       - '&r'
       - '      &eplay.mineaurora.fun  '
       - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+  dungeon:
+    title: "&6&l✦ &e&lALPHA &b&lMC &7||  &a%server_online% &6&l✦"
+    worlds:
+      - "dungeon"
+    lines:
+      - '  &7⌚ %localtime_time_dd/MM/yyyy HH:mm%'
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
+      - '&6Info &7: &a%player_name%'
+      - '&6&l╏ &fRank: &r%vault_prefix%'
+      - '&6&l╏ &fMoney: &a%vault_eco_balance_formatted%'
+      - "&6&l╏ &fLevel: &a{lifesteal_level_%player's uuid%}"
+      - "&6&l╏ &fCredits: &a{credits.%player's uuid%}"
+      - '&r'
+      - '&6Dungeon&7: &a%dungeon_current_room%'
+      - '&6&l╏ &fTime Elapsed: &a%time_dungeon_started%'
+      - '&6&l╏ &fHealth: &a%player_health_rounded%'
+      - '&6&l╏ &fMobs Left: &a%mobs_left_in_room%'
+      - '&r'
+      - '      &eplay.mineaurora.fun  '
+      - '&e&m┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅┅'
 
 # ============================
 # Leaderboards Configuration
@@ -155,35 +184,51 @@ scoreboard:
 leaderboards:
   refresh-seconds: 60
   kills:
-    title: "<gradient:gold:yellow>⚡ Top Kills Lifetime ⚡</gradient>%nl%<gray>---------------</gray>"
-    line-format: "<yellow>#%rank%. <white>%player% <dark_gray>| <gold>%value%"
-    empty-line-format: "<yellow>#%rank%. <white>N/A <dark_gray>| <gold>N/A"
+    title: "<#FC933D> Top Kills Lifetime  %nl%<gray>---------------</gray>"
+    line-format: "<#FC933D>#%rank%. <white>%player% <dark_gray>| <#FC933D>%value%"
+    empty-line-format: "<#FC933D>#%rank%. <white>N/A <dark_gray>| <#FC933D>N/A"
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
   deaths:
-    title: "<gradient:red:dark_red>☠ Top Deaths Lifetime ☠</gradient>%nl%<gray>---------------</gray>"
-    line-format: "<red>#%rank%. <white>%player% <dark_gray>| <gray>%value%"
-    empty-line-format: "<red>#%rank%. <white>N/A <dark_gray>| <gray>N/A"
+    title: "<#C6FC3D> Top Deaths Lifetime   %nl%<gray>---------------</gray>"
+    line-format: "<#C6FC3D>#%rank%. <white>%player% <dark_gray>| <#C6FC3D>%value%"
+    empty-line-format: "<#C6FC3D>#%rank%. <white>N/A <dark_gray>| <#C6FC3D>N/A"
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
   playtime:
-    title: "<gradient:aqua:white>Most Time Played</gradient>%nl%<gray>---------------</gray>"
-    line-format: "<gray>#%rank% <white>%player% | %value% Hours"
-    empty-line-format: "<gray>#%rank% <white>N/A | N/A Hours"
+    title: "<#BB5CFF>Most Time Played %nl%<gray>---------------</gray>"
+    line-format: "<#BB5CFF>#%rank% <white>%player% <dark_gray>| <#BB5CFF>%value% Hours"
+    empty-line-format: "<#BB5CFF>#%rank% <white>N/A <dark_gray>| <#BB5CFF>N/A Hours"
     footer: "<gray>---------------</gray>%nl%<dark_gray>Refreshes every %refresh-seconds%s"
   balance:
-    title: "<gradient:green:dark_green>Top Balance</gradient>%nl%<gray>---------------</gray>"
-    line-format: "<green>#%rank%. <white>%player% <dark_gray>| <green>%value%"
-    empty-line-format: "<green>#%rank%. <white>N/A <dark_gray>| <green>N/A"
+    title: "<#56FC3D>Top Balance %nl%<gray>---------------</gray>"
+    line-format: "<#56FC3D>#%rank%. <white>%player% <dark_gray>| <#56FC3D>%value%"
+    empty-line-format: "<#56FC3D>#%rank%. <white>N/A <dark_gray>| <#56FC3D>N/A"
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
   credits:
-    title: "<gradient:blue:aqua>Top Credits</gradient>%nl%<gray>---------------</gray>"
-    line-format: "<blue>#%rank%. <white>%player% <dark_gray>| <aqua>%value%"
-    empty-line-format: "<blue>#%rank%. <white>N/A <dark_gray>| <aqua>N/A"
+    title: "<#3DFCD6>Top Credits %nl%<gray>---------------</gray>"
+    line-format: "<#3DFCD6>#%rank%. <white>%player% <dark_gray>| <#3DFCD6>%value%"
+    empty-line-format: "<#3DFCD6>#%rank%. <white>N/A <dark_gray>| <#3DFCD6>N/A"
     footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
   lifesteal:
-    title: "<gradient:#F59C33:#F25C0C:#EB7E09>Top Lifesteal Level</gradient>%nl%<gray>-----------------</gray>"
-    line-format: "<#F59C33>#%rank%. <green>%player% <white>| <#F59C33>%value%'"
-    empty-line-format: "<#F59C33>#%rank%. <green>N/A <white>| <l<#F59C33>>N/A ❤"
+    title: "<#FC3D8D>Top Lifesteal Level %nl%<gray>-----------------</gray>"
+    line-format: "<#FC3D8D>#%rank%. <white>%player% <dark_gray>| <#FC3D8D>%value%"
+    empty-line-format: "<#FC3D8D>#%rank%. <white>N/A <dark_gray>| <#FC3D8D>N/A"
     footer: "<gray>-----------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+  tokens:
+    title: "<#5C7DFF>Top Tokens %nl%<gray>---------------</gray>"
+    line-format: "<#5C7DFF>#%rank%. <white>%player% <dark_gray>| <#5C7DFF>%value%"
+    empty-line-format: "<#5C7DFF>#%rank%. <white>N/A <dark_gray>| <#5C7DFF>N/A"
+    footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+  parkour:
+    title: "<#B545FF>Top Parkour Completed %nl%<gray>---------------</gray>"
+    line-format: "<#B545FF>#%rank%. <white>%player% <dark_gray>| <#B545FF>%value%"
+    empty-line-format: "<#B545FF>#%rank%. <white>N/A <dark_gray>| <#B545FF>N/A"
+    footer: "<gray>---------------</gray>%nl%<gray>Refreshes every %refresh-seconds%s"
+
+player-starts-npc-id: 8
+leaderboard_inventory:
+  slot12: http://textures.minecraft.net/texture/9fd108383dfa5b02e86635609541520e4e158952d68c1c8f8f200ec7e88642d
+  slot13: http://textures.minecraft.net/texture/8795a32906636cafb9d8aabe25d3163ee0b9f8b525e9e3fa4581901cb5345fe0
+  slot14: http://textures.minecraft.net/texture/51cbedeaaf3bcabf17faac50c9c1e93d9e898cddea7ab84a4fc5c19937cc4bc9
 
 # ============================
 # ClearLag Configuration
@@ -198,6 +243,13 @@ clearlag-limits:
   hopper: 10
   repeater: 20
   dispenser: 10
+
+hologram:
+  rtp:
+    page1:
+      - "<gradient:#2EFFF0:#2E75F0><b>Random Teleport</b></gradient>"
+      - "<gray>%nl%</white>"
+      - "%nl%<dark_gray>Current Page - 1</dark_gray>"
 
 # ============================
 # Coinflip Configuration
@@ -311,8 +363,6 @@ pet_leveling:
     SKELETON: 5
     SPIDER: 5
     ENDERMAN: 10
-    # Add any other mobs you want to give XP
-    DEFAULT: 2 # (Optional: add a DEFAULT in the code if you want)
 
   # XP gained from pet fruits (items.yml must match these keys)
   fruit-xp:
@@ -336,6 +386,8 @@ generator:
   log-channel-id: 1425308102915391588
   admin-log-channel-id: 1425301611391094845
 
-# ---- Daily Quests Settings ----
+# ============================
+# Daily Quests Configuration
+# ============================
 quests-npc-id: -1
-quests-log-channel-id: "19284756748...."
+quests-log-channel-id: "1441683205542514849"

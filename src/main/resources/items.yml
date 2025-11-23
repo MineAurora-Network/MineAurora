@@ -986,6 +986,119 @@ token-shop:
       - ""
       - "<yellow>This is a custom item!</yellow>"
 
+# ===============================
+# Dungeon Reward Configuration
+# ===============================
+dungeon_rewards:
+  rotten_remains:
+    material: PLAYER_HEAD
+    amount: 1
+    texture: "http://textures.minecraft.net/texture/18514d8230b75511a5a5a69ca93dcb2d3e7cd1a28c48dc38087f158d283b7fa7"
+    name: "&fRotten Remains"
+    lore:
+      - "&r"
+      - "&7Rotten Heart"
+    chance: 80.0
+    rarity: "COMMON"
+
+  bank_note_1:
+    material: PAPER
+    amount: 1
+    name: "&aBank Note &8[&b2.5k&8]"
+    lore:
+      - "&7Right click to redeem"
+    chance: 55.0
+    rarity: "UNCOMMON"
+
+  bank_note_2:
+    material: PAPER
+    amount: 1
+    name: "&aBank Note &8[&b5k&8]"
+    lore:
+      - "&7Right click to redeem"
+    chance: 35.0
+    rarity: "UNCOMMON"
+
+  undead_handle:
+    material: STICK
+    amount: 1
+    name: "&8Undead Handle"
+    lore:
+      - "&7Used to craft undead sword, which deal"
+      - "1.5x more damage to dungeon mobs."
+    chance: 25.0
+    rarity: "RARE"
+
+  undead_fragment:
+    material: PLAYER_HEAD
+    texture: "http://textures.minecraft.net/texture/df914beb235281042474bee7842fb29ecc58ad7550784d4dad7d8a2dfd8632ce"
+    amount: 2
+    name: "&5Undead Fragment"
+    lore:
+      - "&7Used to craft undead armor, which protects"
+      - "better then from undeads"
+    chance: 10.0
+    rarity: "EPIC"
+
+  undead_attribute:
+    material: PLAYER_HEAD
+    texture: "http://textures.minecraft.net/texture/c4444c3982720b30938f504c4374232b11a4f6f56cd57c973d8abb07fd0dcff7"
+    amount: 1
+    name: "&5Undead Attribute"
+    lore:
+      - "&7Make your undead pet more powerful."
+    chance: 5.0
+    rarity: "LEGENDARY"
+
+  generater_core:
+    material: PLAYER_HEAD
+    amount: 1
+    texture: "http://textures.minecraft.net/texture/c328adeb7027559f3ec5ef66d452d8840c2b093e397f0f93e59029f2931cc093"
+    name: "&6Generator Core"
+    lore:
+      - "&7Used to craft basic generator."
+    chance: 2.0
+    rarity: "MYTHIC"
+
+  token_note:
+    material: PAPER
+    amount: 1
+    name: "&dToken Note &8[&b25&8]"
+    lore:
+      - "&7Right click to redeem"
+    chance: 1.0
+    rarity: "MYTHIC"
+
+  aurora_core:
+    material: BEACON
+    amount: 1
+    name: "&c&lAurora Core"
+    lore:
+      - "&7The ultimate power source."
+      - "&7Radiates pure energy."
+    chance: 0.05
+    rarity: "OMEGA"
+
+  warden_heart:
+    material: PLAYER_HEAD
+    texture: "http://textures.minecraft.net/texture/e34a592a79397a8df3997c412816051a479072327a7a5c3836f485a00184223"
+    amount: 1
+    name: "&c&lWarden's Heart"
+    lore:
+      - "&7It still beats..."
+    chance: 0.01
+    rarity: "OMEGA"
+
+  admin_head:
+    material: PLAYER_HEAD
+    texture: "http://textures.minecraft.net/texture/24b49c60907c4c61275a0575a20320f25299142330976416737779676503796"
+    amount: 1
+    name: "&c&lAdmin's Relic"
+    lore:
+      - "&7How did you get this?"
+    chance: 0.001
+    rarity: "OMEGA"
+
 # ----------------------------------------------------------------
 # PET UTILITY ITEMS
 # ----------------------------------------------------------------
@@ -1057,15 +1170,6 @@ pet_attributes:
     nbt:
       plugin_key: mineaurora:pet_attribute_id
       value: weakness_shard
-  healer_shard:
-    material: PLAYER_HEAD
-    texture: http://textures.minecraft.net/texture/eb9cb45cdeccbc1431b1154f8828dcc83e367e8c6d8c42a8506175735cbd7819
-    name: <light_purple>Healer Attribute
-    lore:
-      - "<gray>Reduces owner damage taken by 20%"
-    nbt:
-      plugin_key: mineaurora:pet_attribute_id
-      value: healer_shard
 
 # ----------------------------------------------------------------
 # PET FRUITS (XP FOOD)
@@ -1076,8 +1180,11 @@ pet_fruits:
     texture: "http://textures.minecraft.net/texture/12e430e4c95881c4a090284d609f77c70c3954a850d1d3152a91bb32581f0fd8"
     name: "<white>Common Apple</white>"
     lore:
+      - "<dark_gray>Pet Fruit"
+      - ""
       - "<gray>+50 Pet XP"
     xp_give: 50
+    fruit_price: 1000
     nbt:
       plugin_key: "mineaurora:pet_fruit"
       value: "apple"

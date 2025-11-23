@@ -114,6 +114,20 @@ public class Login extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+
+        try {
+            YamlConfiguration.loadConfiguration(new File(getDataFolder(), "config.yml"));
+        } catch (Exception e) {
+            getLogger().severe("==================================================");
+            getLogger().severe("CRITICAL ERROR: config.yml is invalid!");
+            getLogger().severe("The plugin cannot read the bot token.");
+            getLogger().severe("Please fix the YAML syntax errors.");
+            getLogger().severe("==================================================");
+            e.printStackTrace();
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
         itemsFile = new File(getDataFolder(), "items.yml");
         if (!itemsFile.exists()) {
             saveResource("items.yml", false);
@@ -205,15 +219,17 @@ public class Login extends JavaPlugin implements Listener {
         hubHeadModule = new me.login.misc.hub.HubHeadModule(this);
         hubHeadModule.enable();
 
-        this.creditsModule = new me.login.premimumfeatures.credits.CreditsModule(this);
-        this.creditsModule.enable();
-
-        // REMOVED: dungeonModule init from here. Moved to bottom inside Runnable.
-
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!isEnabled() || Bukkit.isStopping()) {
                 getLogger().warning("Plugin disabled before Discord startup. Skipping bot init.");
                 return;
+            }
+
+            String token = getConfig().getString("logger-bot-token");
+            if (token == null || token.isEmpty()) {
+                getLogger().severe("CRITICAL: logger-bot-token is NULL/EMPTY in config! Bot cannot start.");
+            } else {
+                getLogger().info("Logger Bot Token loaded (starts with): " + (token.length() > 5 ? token.substring(0, 5) + "..." : "INVALID"));
             }
 
             this.lagClearLogger = new LagClearLogger(this);
@@ -236,10 +252,8 @@ public class Login extends JavaPlugin implements Listener {
                     if (lagClearLogger != null && lagClearLogger.getJDA() != null && lagClearLogger.getJDA().getStatus() == JDA.Status.CONNECTED) {
                         getLogger().info("LagClear Logger JDA is now connected. Initializing JDA-dependent modules...");
 
-                        // --- INITIALIZE DUNGEON MODULE HERE (Ensures Logging works) ---
                         getLogger().info("Initializing DungeonModule...");
                         dungeonModule = new DungeonModule(Login.this);
-                        // -------------------------------------------------------------
 
                         getLogger().info("Initializing RankModule...");
                         if (luckPermsApi == null) {
@@ -343,6 +357,10 @@ public class Login extends JavaPlugin implements Listener {
                         getLogger().info("Initializing AdminCommandsModule...");
                         adminCommandsModule = new AdminCommandsModule(Login.this);
                         adminCommandsModule.enable();
+
+                        getLogger().info("Initializing CreditsModule...");
+                        creditsModule = new me.login.premimumfeatures.credits.CreditsModule(Login.this);
+                        creditsModule.enable();
 
                         this.cancel();
                         return;

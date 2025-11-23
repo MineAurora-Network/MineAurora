@@ -18,6 +18,7 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -25,11 +26,13 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityCombustEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
@@ -76,6 +79,27 @@ public class DungeonListener implements Listener {
         LivingEntity entity = (LivingEntity) event.getEntity();
 
         if (entity.getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
+
+            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) return;
+
+            boolean isPlayerDamage = false;
+
+            if (event instanceof EntityDamageByEntityEvent) {
+                Entity damager = ((EntityDamageByEntityEvent) event).getDamager();
+                if (damager instanceof Player) {
+                    isPlayerDamage = true;
+                } else if (damager instanceof Projectile) {
+                    if (((Projectile) damager).getShooter() instanceof Player) {
+                        isPlayerDamage = true;
+                    }
+                }
+            }
+
+            if (!isPlayerDamage) {
+                event.setCancelled(true);
+                return;
+            }
+
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (!entity.isDead()) MobManager.updateMobName(entity);
             }, 1L);
@@ -108,6 +132,21 @@ public class DungeonListener implements Listener {
             if (id == plugin.getConfig().getInt("dungeon-npc-id", -1)) DungeonGUI.openStartMenu(event.getPlayer());
         }
     }
+
+    // --- Armor Stand Key Interaction ---
+    @EventHandler
+    public void onEntityInteract(PlayerInteractAtEntityEvent event) {
+        Player player = event.getPlayer();
+        GameSession session = gameManager.getSession(player);
+        if (session == null) return;
+
+        // Check if clicked entity is the Key Armor Stand
+        if (session.isKeyEntity(event.getRightClicked())) {
+            event.setCancelled(true);
+            session.pickupKey();
+        }
+    }
+
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent event) {
         String t = event.getView().getTitle();
@@ -144,7 +183,6 @@ public class DungeonListener implements Listener {
         }
     }
 
-    // --- INTERACTION LOGIC (DEBUGGED) ---
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
@@ -155,7 +193,6 @@ public class DungeonListener implements Listener {
         GameSession session = gameManager.getSession(player);
         if (session == null) return;
 
-        // 1. Chest Logic (Special Case)
         if (block.getType() == Material.CHEST && block.getLocation().equals(session.getDungeon().getRewardChestLocation())) {
             event.setCancelled(true);
             DungeonGUI.openRewardChest(player, rewardManager.generateChestRewards(player.getUniqueId()));
@@ -163,15 +200,8 @@ public class DungeonListener implements Listener {
             return;
         }
 
-        // 2. COAL BLOCK CHECK (All active doors are Coal Blocks)
-        if (block.getType() != Material.COAL_BLOCK) {
-            return; // Ignore interactions with non-doors
-        }
+        if (block.getType() != Material.COAL_BLOCK) return;
 
-        ItemStack held = player.getInventory().getItemInMainHand();
-        boolean isKey = MobManager.isKey(held);
-
-        // 3. Entry Door (Room 0)
         if (session.getCurrentRoomId() == 0) {
             if (session.getDungeon().getEntryDoor().containsBlock(block.getLocation())) {
                 session.openDoor(session.getDungeon().getEntryDoor());
@@ -182,49 +212,35 @@ public class DungeonListener implements Listener {
             return;
         }
 
-        // 4. Room Doors
         DungeonRoom currentRoom = session.getDungeon().getRoom(session.getCurrentRoomId());
         if (currentRoom != null && currentRoom.getDoorRegion() != null) {
-            // Check if clicked block is inside this room's door region
             if (currentRoom.getDoorRegion().containsBlock(block.getLocation())) {
-
-                // Debug Info
                 if (!session.hasKey()) {
                     DungeonUtils.error(player, "Door Locked: Kill all mobs to spawn the Key.");
                     return;
                 }
-
-                if (isKey) {
-                    held.setAmount(held.getAmount() - 1); // Remove key
-                    session.setHasKey(false); // Reset logic flag
-                    session.openDoor(currentRoom.getDoorRegion());
-                    session.advanceRoom();
-                    session.startRoom();
-                    DungeonUtils.msg(player, "<green>Door unlocked! Proceeding...</green>");
-                } else {
-                    DungeonUtils.error(player, "Door Locked: Right-click with the <dark_red>Ominous Trial Key</dark_red>.");
-                    plugin.getLogger().info("[Debug] Player clicked door but item was not key. Item: " + held.getType());
-                }
+                // VIRTUAL KEY CHECK: Just check session.hasKey(), no item check!
+                session.setHasKey(false);
+                session.openDoor(currentRoom.getDoorRegion());
+                session.advanceRoom();
+                session.startRoom();
+                DungeonUtils.msg(player, "<green>Door unlocked! Proceeding...</green>");
                 return;
             }
         }
 
-        // 5. Boss Room Door (Room 6 -> 7)
         if (session.getDungeon().getBossRoomDoor() != null && session.getDungeon().getBossRoomDoor().containsBlock(block.getLocation())) {
             if (session.getCurrentRoomId() == 6) {
                 if (!session.hasKey()) { DungeonUtils.error(player, "Key required!"); return; }
-                if (isKey) {
-                    held.setAmount(held.getAmount() - 1);
-                    session.setHasKey(false);
-                    session.openDoor(session.getDungeon().getBossRoomDoor());
-                    session.advanceRoom();
-                    session.startRoom();
-                } else { DungeonUtils.error(player, "Use the Key!"); }
+
+                session.setHasKey(false);
+                session.openDoor(session.getDungeon().getBossRoomDoor());
+                session.advanceRoom();
+                session.startRoom();
             }
             return;
         }
 
-        // 6. Treasure Door
         if (session.getDungeon().getRewardDoor() != null && session.getDungeon().getRewardDoor().containsBlock(block.getLocation())) {
             if (session.isBossDead()) {
                 session.openDoor(session.getDungeon().getRewardDoor());
@@ -237,17 +253,18 @@ public class DungeonListener implements Listener {
     @EventHandler
     public void onMobDeath(EntityDeathEvent event) {
         Entity entity = event.getEntity();
-        Player killer = event.getEntity().getKiller();
 
-        if (killer != null) {
-            GameSession session = gameManager.getSession(killer);
-            if (session != null) {
-                if (entity.equals(session.getBossEntity())) {
-                    session.handleBossDeath();
-                } else {
-                    session.handleMobDeath(entity);
-                    if (session.isBossActive()) session.checkBossHealth();
-                }
+        if (entity.getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
+            event.getDrops().clear();
+        }
+
+        GameSession session = gameManager.getSessionByMob(entity);
+        if (session != null) {
+            if (entity.equals(session.getBossEntity())) {
+                session.handleBossDeath();
+            } else {
+                session.handleMobDeath(entity);
+                if (session.isBossActive()) session.checkBossHealth();
             }
         }
     }

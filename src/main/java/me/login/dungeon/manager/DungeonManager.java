@@ -146,7 +146,7 @@ public class DungeonManager {
     public void saveDungeon(Dungeon dungeon) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                // Expanded SQL for new columns
+                // Save dungeon metadata
                 String sql = "INSERT OR REPLACE INTO dungeons (id, world, spawn_x, spawn_y, spawn_z, spawn_yaw, spawn_pitch, " +
                         "entry_world, entry_min_x, entry_min_y, entry_min_z, entry_max_x, entry_max_y, entry_max_z, " +
                         "boss_world, boss_x, boss_y, boss_z, chest_world, chest_x, chest_y, chest_z, " +
@@ -179,18 +179,27 @@ public class DungeonManager {
                     ps.executeUpdate();
                 }
 
-                // ... Room/Spawn Saving (Logic same as Batch 3) ...
-                String roomSql = "INSERT OR REPLACE INTO dungeon_rooms (dungeon_id, room_id, door_min_x, door_min_y, door_min_z, door_max_x, door_max_y, door_max_z) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                // Save rooms with DOOR_WORLD
+                String roomSql = "INSERT OR REPLACE INTO dungeon_rooms (dungeon_id, room_id, door_min_x, door_min_y, door_min_z, door_max_x, door_max_y, door_max_z, door_world) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 try (PreparedStatement ps = database.getConnection().prepareStatement(roomSql)) {
                     for (DungeonRoom room : dungeon.getRooms().values()) {
                         ps.setInt(1, dungeon.getId()); ps.setInt(2, room.getRoomId());
                         Cuboid d = room.getDoorRegion();
-                        if (d!=null) { ps.setDouble(3, d.getMinX()); ps.setDouble(4, d.getMinY()); ps.setDouble(5, d.getMinZ()); ps.setDouble(6, d.getMaxX()); ps.setDouble(7, d.getMaxY()); ps.setDouble(8, d.getMaxZ()); }
-                        else { ps.setDouble(3,0); ps.setDouble(4,0); ps.setDouble(5,0); ps.setDouble(6,0); ps.setDouble(7,0); ps.setDouble(8,0); }
+                        if (d!=null) {
+                            ps.setDouble(3, d.getMinX()); ps.setDouble(4, d.getMinY()); ps.setDouble(5, d.getMinZ());
+                            ps.setDouble(6, d.getMaxX()); ps.setDouble(7, d.getMaxY()); ps.setDouble(8, d.getMaxZ());
+                            ps.setString(9, d.getWorld().getName()); // Saving the world!
+                        }
+                        else {
+                            ps.setDouble(3,0); ps.setDouble(4,0); ps.setDouble(5,0);
+                            ps.setDouble(6,0); ps.setDouble(7,0); ps.setDouble(8,0);
+                            ps.setString(9, null);
+                        }
                         ps.addBatch();
                     }
                     ps.executeBatch();
                 }
+
                 try (PreparedStatement ps = database.getConnection().prepareStatement("DELETE FROM dungeon_room_spawns WHERE dungeon_id = ?")) { ps.setInt(1, dungeon.getId()); ps.executeUpdate(); }
                 try (PreparedStatement ps = database.getConnection().prepareStatement("INSERT INTO dungeon_room_spawns (dungeon_id, room_id, world, x, y, z) VALUES (?, ?, ?, ?, ?, ?)")) {
                     for (DungeonRoom room : dungeon.getRooms().values()) {
@@ -245,7 +254,6 @@ public class DungeonManager {
             }
             rs.close();
 
-            // ... Load rooms/spawns (Logic same as Batch 3) ...
             ResultSet rsRooms = st.executeQuery("SELECT * FROM dungeon_rooms");
             while (rsRooms.next()) {
                 int dId = rsRooms.getInt("dungeon_id");
@@ -254,7 +262,21 @@ public class DungeonManager {
                     int rId = rsRooms.getInt("room_id");
                     DungeonRoom room = d.getRoom(rId);
                     if (rsRooms.getDouble("door_min_x") != 0) {
-                        room.setDoorRegion(new Cuboid(d.getSpawnLocation().getWorld().getName(),
+                        // --- SMART FIX HERE ---
+                        // 1. Try getting the new "door_world" from database
+                        String worldName = rsRooms.getString("door_world");
+
+                        // 2. If NULL (old data), use the ENTRANCE world instead of SPAWN world
+                        if (worldName == null) {
+                            if (d.getEntryDoor() != null) {
+                                worldName = d.getEntryDoor().getWorld().getName();
+                            } else {
+                                // Last resort fallback
+                                worldName = d.getSpawnLocation().getWorld().getName();
+                            }
+                        }
+
+                        room.setDoorRegion(new Cuboid(worldName,
                                 rsRooms.getDouble("door_min_x"), rsRooms.getDouble("door_min_y"), rsRooms.getDouble("door_min_z"),
                                 rsRooms.getDouble("door_max_x"), rsRooms.getDouble("door_max_y"), rsRooms.getDouble("door_max_z")));
                     }

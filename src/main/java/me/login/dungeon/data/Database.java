@@ -37,7 +37,6 @@ public class Database {
 
     private void createTables() {
         try (Statement statement = connection.createStatement()) {
-            // Updated Table with bdoor (Boss Door) and rdoor (Reward Door)
             statement.execute("CREATE TABLE IF NOT EXISTS dungeons (" +
                     "id INTEGER PRIMARY KEY, " +
                     "world TEXT, " +
@@ -52,9 +51,11 @@ public class Database {
                     "rdoor_max_x DOUBLE, rdoor_max_y DOUBLE, rdoor_max_z DOUBLE" +
                     ")");
 
+            // ADDED door_world to the definition
             statement.execute("CREATE TABLE IF NOT EXISTS dungeon_rooms (" +
                     "dungeon_id INTEGER, " +
                     "room_id INTEGER, " +
+                    "door_world TEXT, " +
                     "door_min_x DOUBLE, door_min_y DOUBLE, door_min_z DOUBLE, " +
                     "door_max_x DOUBLE, door_max_y DOUBLE, door_max_z DOUBLE, " +
                     "PRIMARY KEY (dungeon_id, room_id)" +
@@ -69,7 +70,10 @@ public class Database {
                     "z DOUBLE" +
                     ")");
 
-            // Migrations
+            // --- MIGRATION: Add the missing column ---
+            try { statement.execute("ALTER TABLE dungeon_rooms ADD COLUMN door_world TEXT;"); } catch (SQLException ignored) {}
+
+            // Other standard migrations
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN boss_world TEXT;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN boss_x DOUBLE;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN boss_y DOUBLE;"); } catch (SQLException ignored) {}
@@ -78,8 +82,6 @@ public class Database {
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN chest_x DOUBLE;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN chest_y DOUBLE;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN chest_z DOUBLE;"); } catch (SQLException ignored) {}
-
-            // Reward Door
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN rdoor_world TEXT;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN rdoor_min_x DOUBLE;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN rdoor_min_y DOUBLE;"); } catch (SQLException ignored) {}
@@ -87,8 +89,6 @@ public class Database {
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN rdoor_max_x DOUBLE;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN rdoor_max_y DOUBLE;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN rdoor_max_z DOUBLE;"); } catch (SQLException ignored) {}
-
-            // Boss Room Door
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN bdoor_world TEXT;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN bdoor_min_x DOUBLE;"); } catch (SQLException ignored) {}
             try { statement.execute("ALTER TABLE dungeons ADD COLUMN bdoor_min_y DOUBLE;"); } catch (SQLException ignored) {}

@@ -1,6 +1,7 @@
 package me.login.dungeon.commands;
 
 import me.login.dungeon.manager.DungeonManager;
+import me.login.dungeon.manager.DungeonRewardManager;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
@@ -11,53 +12,104 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class DungeonTabCompleter implements TabCompleter {
 
     private final DungeonManager dungeonManager;
+    private final DungeonRewardManager rewardManager; // Added
 
-    public DungeonTabCompleter(DungeonManager dungeonManager) {
+    public DungeonTabCompleter(DungeonManager dungeonManager, DungeonRewardManager rewardManager) {
         this.dungeonManager = dungeonManager;
+        this.rewardManager = rewardManager; // Added
     }
 
     @Override
-    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
-            List<String> completions = new ArrayList<>();
-            completions.add("rngmeter");
-            if (sender.hasPermission("dungeon.admin")) {
-                completions.addAll(Arrays.asList("create", "setup", "delete", "start", "stop", "redo", "check", "teleport"));
+            return filter(Arrays.asList("create", "delete", "setup", "start", "stop", "check", "redo", "tempopen", "rngmeter", "give"), args[0]);
+        }
+
+        if (args.length == 2) {
+            String sub = args[0].toLowerCase();
+            if (sub.equals("give")) {
+                List<String> options = new ArrayList<>();
+                options.add("all");
+                for (DungeonRewardManager.RewardItem item : rewardManager.getAllRewards()) {
+                    options.add(item.id);
+                }
+                return filter(options, args[1]);
             }
-            return completions;
+            if (sub.equals("create") || sub.equals("delete") || sub.equals("start") || sub.equals("setup") || sub.equals("redo") || sub.equals("check") || sub.equals("tempopen")) {
+                return Collections.singletonList("<id>");
+            }
         }
 
-        if (args.length == 2 && sender.hasPermission("dungeon.admin")) {
-            return Arrays.asList("1", "2", "3");
+        if (args.length == 3) {
+            String sub = args[0].toLowerCase();
+            if (sub.equals("setup")) {
+                return filter(Arrays.asList("room", "lastroom", "entrydoor"), args[2]);
+            }
+            if (sub.equals("tempopen")) {
+                return Collections.singletonList("door");
+            }
+            if (sub.equals("check")) {
+                return Collections.singletonList("room");
+            }
         }
 
-        if (!sender.hasPermission("dungeon.admin")) return Collections.emptyList();
-
-        if (args[0].equalsIgnoreCase("setup")) {
-            if (args.length == 3) return Arrays.asList("entrydoor", "lastroom", "room");
-
+        // ... rest of the logic remains same ...
+        if (args.length == 4) {
+            String sub = args[0].toLowerCase();
             String type = args[2].toLowerCase();
 
-            if (type.equals("entrydoor")) {
-                if (args.length == 4) return Arrays.asList("pos1", "pos2");
+            if (sub.equals("tempopen")) {
+                return Collections.singletonList("<roomID>");
             }
-            else if (type.equals("lastroom")) {
-                // Updated list with both doors
-                if (args.length == 4) return Arrays.asList("bossspawn", "rewardloc", "bossdoor", "treasuredoor");
-                if ((args[3].equalsIgnoreCase("bossdoor") || args[3].equalsIgnoreCase("treasuredoor")) && args.length == 5) {
-                    return Arrays.asList("pos1", "pos2");
+
+            if (sub.equals("setup")) {
+                if (type.equals("room")) {
+                    return Collections.singletonList("<roomID>");
+                }
+                if (type.equals("lastroom")) {
+                    return filter(Arrays.asList("bossspawn", "rewardloc", "bossdoor", "treasuredoor"), args[3]);
+                }
+                if (type.equals("entrydoor")) {
+                    return filter(Arrays.asList("pos1", "pos2"), args[3]);
                 }
             }
-            else if (type.equals("room")) {
-                if (args.length == 4) return Arrays.asList("1", "2", "3", "4", "5", "6", "7");
-                if (args.length == 5) return Arrays.asList("door", "mobspawn", "resetspawns");
-                if (args.length == 6 && args[4].equalsIgnoreCase("door")) return Arrays.asList("pos1", "pos2");
+        }
+
+        if (args.length == 5) {
+            String sub = args[0].toLowerCase();
+            if (sub.equals("setup")) {
+                String type = args[2].toLowerCase();
+                if (type.equals("room")) {
+                    return filter(Arrays.asList("mobspawn", "resetspawns", "door"), args[4]);
+                }
+                if (type.equals("lastroom")) {
+                    String lastType = args[3].toLowerCase();
+                    if (lastType.equals("bossdoor") || lastType.equals("treasuredoor")) {
+                        return filter(Arrays.asList("pos1", "pos2"), args[4]);
+                    }
+                }
             }
         }
+
+        if (args.length == 6) {
+            String sub = args[0].toLowerCase();
+            if (sub.equals("setup")) {
+                String type = args[2].toLowerCase();
+                if (type.equals("room") && args[4].equalsIgnoreCase("door")) {
+                    return filter(Arrays.asList("pos1", "pos2"), args[5]);
+                }
+            }
+        }
+
         return Collections.emptyList();
+    }
+
+    private List<String> filter(List<String> list, String arg) {
+        return list.stream().filter(s -> s.toLowerCase().startsWith(arg.toLowerCase())).collect(Collectors.toList());
     }
 }

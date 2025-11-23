@@ -2,6 +2,7 @@ package me.login.dungeon.game;
 
 import me.login.Login;
 import me.login.dungeon.gui.DungeonGUI;
+import me.login.utility.TextureToHead;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -26,6 +27,8 @@ public class MobManager {
     public static boolean IS_SPAWNING = false;
 
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
+    // Custom Key Texture URL
+    public static final String KEY_TEXTURE = "http://textures.minecraft.net/texture/d570c1bbd8c4d05d7bea6d960e0a6eab600c8eb26634799176b311dbff5b1b98";
 
     public static Entity spawnRoomMob(Location loc, int roomNumber) {
         if (loc == null || loc.getWorld() == null) return null;
@@ -42,7 +45,7 @@ public class MobManager {
 
         tagMob(le);
 
-        // --- NO BABIES FIX ---
+        // --- NO BABIES FIX (Except Minions) ---
         if (le instanceof Zombie) ((Zombie) le).setBaby(false);
         if (le instanceof Ageable) ((Ageable) le).setAdult();
         // ---------------------
@@ -69,7 +72,7 @@ public class MobManager {
         IS_SPAWNING = false;
 
         tagMob(boss);
-        boss.setAdult(); // Boss is always adult
+        boss.setAdult();
 
         if (boss.getAttribute(Attribute.GENERIC_MAX_HEALTH) != null) {
             boss.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(400);
@@ -95,7 +98,7 @@ public class MobManager {
         IS_SPAWNING = false;
 
         tagMob(minion);
-        minion.setBaby(); // Minions ARE babies (per original design)
+        minion.setBaby(); // Minions ARE babies
 
         minion.getEquipment().setHelmet(makeUnbreakable(Material.GOLDEN_HELMET));
         minion.getEquipment().setChestplate(makeUnbreakable(Material.GOLDEN_CHESTPLATE));
@@ -115,7 +118,8 @@ public class MobManager {
     public static void updateMobName(LivingEntity entity) {
         String baseName = "Corrupted " + formatTypeName(entity.getType());
         if (entity instanceof Zombie && ((Zombie)entity).isBaby()) baseName = "Boss Minion";
-        if (entity instanceof Zombie && ((Zombie)entity).getEquipment().getHelmet().getType() == Material.LEATHER_HELMET
+        if (entity instanceof Zombie && ((Zombie)entity).getEquipment().getHelmet() != null
+                && ((Zombie)entity).getEquipment().getHelmet().getType() == Material.LEATHER_HELMET
                 && ((LeatherArmorMeta)((Zombie)entity).getEquipment().getHelmet().getItemMeta()).getColor().equals(Color.BLACK)) {
             baseName = "Dungeon Boss";
         }
@@ -129,23 +133,14 @@ public class MobManager {
         entity.customName(LEGACY.deserialize(format));
     }
 
+    // Only used for visual display now, or if you want to give a dummy item (but we are using virtual key)
     public static ItemStack getKey() {
-        Material mat = Material.getMaterial("OMINOUS_TRIAL_KEY");
-        if (mat == null) mat = Material.TRIPWIRE_HOOK;
-
-        ItemStack key = new ItemStack(mat);
+        ItemStack key = TextureToHead.getHead(KEY_TEXTURE);
         ItemMeta meta = key.getItemMeta();
         meta.displayName(Component.text("Ominous Trial Key", NamedTextColor.DARK_RED).decoration(TextDecoration.ITALIC, false));
         meta.getPersistentDataContainer().set(DungeonGUI.ITEM_ID_KEY, PersistentDataType.STRING, "ominous_key");
         key.setItemMeta(meta);
         return key;
-    }
-
-    public static boolean isKey(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return false;
-        // We strictly check the PDC ID, material check is secondary
-        String id = item.getItemMeta().getPersistentDataContainer().get(DungeonGUI.ITEM_ID_KEY, PersistentDataType.STRING);
-        return "ominous_key".equals(id);
     }
 
     private static String formatTypeName(EntityType type) {
