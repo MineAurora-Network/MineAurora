@@ -1,6 +1,6 @@
-bot-token: "MTQzMDc2MjY4NTE2NjkxMTUyOA.GurCYR.HyDj7MY4UhJ-w-GJkcZI0Y1uKF-kHmdRXaNrFI"
-logger-bot-token: "MTQwOTg1NTI5Mjk3NTYxNjAzMg.GW9Bdy.z_hxuwB2e0VPObanDF4tWpz2vtm9Vh6DM1CLZU"
-store-bot-token: "MTQzNzA4NTE2NDYxNzMzODk0MA.GbRY-d.7nvx8Ya7NdyKcc0pqWyxeGRKZSWipIqi23w-UA"
+bot-token: ""
+logger-bot-token: ""
+store-bot-token: ""
 
 normal-bot-channel: 1434006801011048621
 staff-bot-channel: 1434006967357145168
