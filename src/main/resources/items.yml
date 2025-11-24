@@ -1195,6 +1195,7 @@ pet_fruits:
     lore:
       - "<gray>Restores Hunger</gray>"
     xp_give:
+
     nbt:
       plugin_key: "mineaurora:pet_fruit"
       value: "inferno_fruit"

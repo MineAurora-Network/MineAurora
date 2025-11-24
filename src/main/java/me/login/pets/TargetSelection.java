@@ -5,7 +5,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
-import org.bukkit.util.Vector;
 
 /**
  * Handles all Pet AI, including target selection, pathfinding, and aggression logic.
@@ -26,32 +25,27 @@ public class TargetSelection {
         if (pet instanceof Mob) {
             Mob mob = (Mob) pet;
 
+            // Prevent pet from targeting its owner
             if (mob.getTarget() != null && mob.getTarget().getUniqueId().equals(player.getUniqueId())) {
                 mob.setTarget(null);
             }
 
-            // --- FIX: Relaxed Movement Logic ---
-            // Only move if too far away to prevent snapping behind player constantly
+            // --- FIX: Improved Follow Logic ---
             if (mob.getTarget() == null) {
                 Location playerLoc = player.getLocation();
                 double distanceSquared = pet.getLocation().distanceSquared(playerLoc);
 
-                // Teleport if extremely far (stuck or new chunk)
-                if (distanceSquared > 400) { // 20 blocks
+                // Teleport if stuck or too far (15 blocks / 225 sq)
+                if (distanceSquared > 225) {
                     pet.teleport(playerLoc);
                     return;
                 }
 
-                // Calculate "sweet spot" behind player
-                Vector direction = playerLoc.getDirection().setY(0).normalize().multiply(-3);
-                Location targetSpot = playerLoc.clone().add(direction);
-
-                // Only start moving if distance to player is > 5 blocks
-                // This allows the player to walk up to the pet and right-click it
-                if (distanceSquared > 25) {
-                    mob.getPathfinder().moveTo(targetSpot, 1.3);
+                // Follow if distance > 3 blocks (9 sq)
+                // We move directly to the player location to prevent "lagging behind" issues
+                if (distanceSquared > 9) {
+                    mob.getPathfinder().moveTo(playerLoc, 1.35); // Slightly increased speed for responsiveness
                 }
-                // If within 5 blocks, just idle/look at player (handled by vanilla 'look at player' goal usually)
             }
         }
     }

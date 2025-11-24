@@ -33,6 +33,7 @@ public class GameSession {
     private boolean bossDead = false;
 
     private final List<Entity> activeMobs = new ArrayList<>();
+    private final List<Entity> trapMobs = new ArrayList<>();
     private Zombie bossEntity;
     private final List<Entity> minions = new ArrayList<>();
 
@@ -73,10 +74,8 @@ public class GameSession {
         startTrapTicker();
     }
 
-    // --- Block Recording ---
     public void recordBlockChange(Block block) {
         if (!changedBlocks.containsKey(block.getLocation())) {
-            // Save original state
             changedBlocks.put(block.getLocation(), block.getBlockData().clone());
         }
     }
@@ -88,7 +87,6 @@ public class GameSession {
         changedBlocks.clear();
     }
 
-    // --- Chest Logic ---
     public boolean isChestUsed(Location loc) {
         return usedChests.contains(loc);
     }
@@ -100,95 +98,55 @@ public class GameSession {
         }
         usedChests.add(loc);
 
-        double chance = Math.random();
-
-        if (chance < 0.30) {
+        // FIX: 50/50 Chance - Buff or Trap (No Empty)
+        if (Math.random() < 0.50) {
             spawnBuffOrb(loc);
             DungeonUtils.msg(player, "<green><b>A Mysterious Orb appears!</b> <gray>Grab it!");
-        } else if (chance < 0.90) {
+        } else {
             MobManager.IS_SPAWNING = true;
             try {
                 Entity e = MobManager.spawnCryptZombie(loc.clone().add(0.5, 1, 0.5));
-                activeMobs.add(e);
+                trapMobs.add(e);
             } finally {
                 MobManager.IS_SPAWNING = false;
             }
             DungeonUtils.msg(player, "<red><b>IT'S A TRAP!</b> <gray>Crypt Zombie spawned!");
-        } else {
-            DungeonUtils.msg(player, "<gray>The chest was empty...");
         }
     }
 
     private void spawnBuffOrb(Location chestLoc) {
         Location spawnLoc = chestLoc.clone().add(0.5, -1.0, 0.5);
-
         MobManager.IS_SPAWNING = true;
         try {
             buffOrb = (ArmorStand) chestLoc.getWorld().spawnEntity(spawnLoc, EntityType.ARMOR_STAND);
-            buffOrb.setVisible(true); // Start visible to ensure client sees it
-            buffOrb.setGravity(false);
-            buffOrb.setSmall(true);
-            buffOrb.setBasePlate(false);
-            buffOrb.setInvulnerable(true);
-            buffOrb.setMarker(false);
-
+            buffOrb.setVisible(true); buffOrb.setGravity(false); buffOrb.setSmall(true); buffOrb.setBasePlate(false); buffOrb.setInvulnerable(true); buffOrb.setMarker(false);
             ItemStack head = TextureToHead.getHead(MobManager.BUFF_ORB_TEXTURE);
             buffOrb.getEquipment().setHelmet(head);
-
-            buffOrb.setVisible(false); // Hide after setting up
-
+            buffOrb.setVisible(false);
             buffOrb.setCustomNameVisible(true);
             buffOrb.customName(Component.text("Buff Orb (Right Click)", NamedTextColor.AQUA));
-        } finally {
-            MobManager.IS_SPAWNING = false;
-        }
-
+        } finally { MobManager.IS_SPAWNING = false; }
         buffTask = new BukkitRunnable() {
-            double ticks = 0;
-            final Location base = spawnLoc.clone();
-            @Override
-            public void run() {
+            double ticks = 0; final Location base = spawnLoc.clone();
+            @Override public void run() {
                 if (buffOrb == null || buffOrb.isDead() || !player.isOnline()) { cancel(); return; }
-
-                float yaw = (buffOrb.getLocation().getYaw() + 10) % 360;
-                double height = Math.min(1.5, ticks * 0.05);
-                double bob = Math.sin(ticks * 0.2) * 0.1;
-
-                Location next = base.clone().add(0, height + bob, 0);
-                next.setYaw(yaw);
-                buffOrb.teleport(next);
-
-                buffOrb.getWorld().spawnParticle(Particle.DUST, buffOrb.getLocation().add(0, 1.5, 0), 1,
-                        new Particle.DustOptions(org.bukkit.Color.AQUA, 1));
-
+                float yaw = (buffOrb.getLocation().getYaw() + 10) % 360; double height = Math.min(1.5, ticks * 0.05); double bob = Math.sin(ticks * 0.2) * 0.1;
+                Location next = base.clone().add(0, height + bob, 0); next.setYaw(yaw); buffOrb.teleport(next);
+                buffOrb.getWorld().spawnParticle(Particle.DUST, buffOrb.getLocation().add(0, 1.5, 0), 1, new Particle.DustOptions(org.bukkit.Color.AQUA, 1));
                 ticks++;
             }
-        };
-        buffTask.runTaskTimer(Login.getPlugin(Login.class), 0L, 1L);
+        }; buffTask.runTaskTimer(Login.getPlugin(Login.class), 0L, 1L);
     }
-
-    public boolean isBuffOrb(Entity entity) {
-        return buffOrb != null && entity.getUniqueId().equals(buffOrb.getUniqueId());
-    }
-
+    public boolean isBuffOrb(Entity entity) { return buffOrb != null && entity.getUniqueId().equals(buffOrb.getUniqueId()); }
     public void collectBuff() {
         if (buffOrb != null) {
-            buffOrb.remove();
-            if (buffTask != null) buffTask.cancel();
-            buffOrb = null;
-
-            double currentMax = player.getAttribute(Attribute.GENERIC_MAX_HEALTH).getBaseValue();
-            player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(currentMax * 1.10);
-            float currentSpeed = player.getWalkSpeed();
-            player.setWalkSpeed(currentSpeed * 1.20f);
-            player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, Integer.MAX_VALUE, 0, false, false));
-
-            DungeonUtils.msg(player, "<aqua><b>BUFF ACQUIRED!</b> <gray>+10% HP, +20% Speed, +20% Regen!");
-            player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_ACTIVATE, 1f, 2f);
+            buffOrb.remove(); if (buffTask != null) buffTask.cancel(); buffOrb = null;
+            double currentMax = player.getAttribute(Attribute.GENERIC_MAX_HEALTH).getBaseValue(); player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(currentMax * 1.10);
+            float currentSpeed = player.getWalkSpeed(); player.setWalkSpeed(currentSpeed * 1.20f); player.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, Integer.MAX_VALUE, 0, false, false));
+            DungeonUtils.msg(player, "<aqua><b>BUFF ACQUIRED!</b> <gray>+10% HP, +20% Speed, +20% Regen!"); player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_BEACON_ACTIVATE, 1f, 2f);
         }
     }
 
-    // ... [Getters same as before] ...
     public Dungeon getDungeon() { return dungeon; }
     public int getCurrentRoomId() { return currentRoomId; }
     public Player getPlayer() { return player; }
@@ -198,7 +156,7 @@ public class GameSession {
     public boolean isBossDead() { return bossDead; }
 
     public boolean hasMob(Entity entity) {
-        return activeMobs.contains(entity) || minions.contains(entity) || (bossEntity != null && bossEntity.equals(entity));
+        return activeMobs.contains(entity) || minions.contains(entity) || trapMobs.contains(entity) || (bossEntity != null && bossEntity.equals(entity));
     }
 
     public boolean isKeyEntity(Entity entity) {
@@ -244,6 +202,15 @@ public class GameSession {
     }
 
     public void startRoom() {
+        // FIX: Room 7 / Boss Room Logic
+        if (isBossRoom) {
+            // Boss room doesn't use standard spawns, just trigger boss if not active
+            if (bossEntity == null) {
+                spawnBoss();
+            }
+            return;
+        }
+
         DungeonRoom room = dungeon.getRoom(currentRoomId);
         if (room == null) return;
         List<Location> spawns = room.getMobSpawnLocations();
@@ -254,24 +221,16 @@ public class GameSession {
             Entity e = MobManager.spawnRoomMob(loc, currentRoomId);
             if (e != null) activeMobs.add(e);
         }
-        // REMOVED SPAWN MESSAGE AS REQUESTED
     }
 
     public void spawnTrapHead(Location loc) {
         MobManager.IS_SPAWNING = true;
         try {
             ArmorStand stand = (ArmorStand) loc.getWorld().spawnEntity(loc.clone().add(0, -1.4, 0), EntityType.ARMOR_STAND);
-            stand.setVisible(true);
-            stand.setGravity(false);
-            stand.setSmall(false);
-            stand.setBasePlate(false);
-            stand.setInvulnerable(true);
-            stand.getEquipment().setHelmet(TextureToHead.getHead(MobManager.TRAP_HEAD_TEXTURE));
-            stand.setVisible(false); // Hide later
+            stand.setVisible(true); stand.setGravity(false); stand.setSmall(false); stand.setBasePlate(false); stand.setInvulnerable(true);
+            stand.getEquipment().setHelmet(TextureToHead.getHead(MobManager.TRAP_HEAD_TEXTURE)); stand.setVisible(false);
             trapHeads.put(stand, loc);
-        } finally {
-            MobManager.IS_SPAWNING = false;
-        }
+        } finally { MobManager.IS_SPAWNING = false; }
     }
 
     private void startTrapTicker() {
@@ -285,10 +244,11 @@ public class GameSession {
                     if (entry.getKey().isDead()) { it.remove(); continue; }
 
                     if (entry.getValue().distanceSquared(player.getLocation()) < 4) {
-                        MobManager.spawnUndeadSkeleton(entry.getValue());
+                        Entity e = MobManager.spawnUndeadSkeleton(entry.getValue());
+                        if (e != null) trapMobs.add(e);
+
                         entry.getKey().remove();
                         it.remove();
-                        // Removed message as requested
                         player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_SKELETON_AMBIENT, 1f, 0.5f);
                     }
                 }
@@ -298,6 +258,11 @@ public class GameSession {
     }
 
     public void handleMobDeath(Entity entity) {
+        if (trapMobs.contains(entity)) {
+            trapMobs.remove(entity);
+            return;
+        }
+
         if (minions.contains(entity)) {
             minions.remove(entity);
             if (minions.isEmpty() && isBossActive()) {
@@ -308,8 +273,6 @@ public class GameSession {
         }
 
         if (activeMobs.remove(entity)) {
-            // REMOVED MOB REMAINING MESSAGE AS REQUESTED
-
             if (Math.random() < 0.60) {
                 spawnTrapHead(entity.getLocation());
             }
@@ -325,133 +288,45 @@ public class GameSession {
         }
     }
 
-    private void spawnBoss() {
-        if (dungeon.getBossSpawnLocation() == null) return;
-        DungeonUtils.msg(player, "<dark_red><b>BOSS SPAWNED!</b>");
-        bossEntity = MobManager.spawnBoss(dungeon.getBossSpawnLocation());
-    }
-
+    // ... (rest of methods)
+    private void spawnBoss() { if (dungeon.getBossSpawnLocation() == null) return; DungeonUtils.msg(player, "<dark_red><b>BOSS SPAWNED!</b>"); bossEntity = MobManager.spawnBoss(dungeon.getBossSpawnLocation()); }
     public void checkBossHealth() {
         if (bossEntity == null || bossEntity.isDead()) return;
         double health = bossEntity.getHealth();
-        if (health <= 200 && !bossPhase1Triggered) {
-            bossPhase1Triggered = true;
-            triggerMinionPhase(5);
-        } else if (health <= 75 && !bossPhase2Triggered) {
-            bossPhase2Triggered = true;
-            triggerMinionPhase(7);
-        }
+        if (health <= 200 && !bossPhase1Triggered) { bossPhase1Triggered = true; triggerMinionPhase(5); } else if (health <= 75 && !bossPhase2Triggered) { bossPhase2Triggered = true; triggerMinionPhase(7); }
     }
-
-    private void triggerMinionPhase(int count) {
-        isBossInvulnerable = true;
-        DungeonUtils.msg(player, "<yellow>Boss Invulnerable! Kill minions!");
-        for (int i = 0; i < count; i++) {
-            minions.add(MobManager.spawnMinion(bossEntity.getLocation()));
-        }
-    }
-
+    private void triggerMinionPhase(int count) { isBossInvulnerable = true; DungeonUtils.msg(player, "<yellow>Boss Invulnerable! Kill minions!"); for (int i = 0; i < count; i++) { minions.add(MobManager.spawnMinion(bossEntity.getLocation())); } }
     public void handleBossDeath() {
-        bossDead = true;
-        DungeonUtils.msg(player, "<gold><b>Dungeon Cleared!</b></gold>");
-        if (dungeon.getRewardDoor() != null) {
-            openDoor(dungeon.getRewardDoor());
-            DungeonUtils.msg(player, "<green>Treasure Room Open!");
-        }
-        if (dungeon.getRewardChestLocation() != null) {
-            dungeon.getRewardChestLocation().getBlock().setType(Material.CHEST);
-        }
+        bossDead = true; DungeonUtils.msg(player, "<gold><b>Dungeon Cleared!</b></gold>");
+        if (dungeon.getRewardDoor() != null) { openDoor(dungeon.getRewardDoor()); DungeonUtils.msg(player, "<green>Treasure Room Open!"); }
+        if (dungeon.getRewardChestLocation() != null) { dungeon.getRewardChestLocation().getBlock().setType(Material.CHEST); }
     }
-
     private void dropKey(Location deathLoc) {
-        cleanupKey();
-        MobManager.IS_SPAWNING = true;
+        cleanupKey(); MobManager.IS_SPAWNING = true;
         try {
             Location spawnLoc = deathLoc.clone().add(0, -1.0, 0);
-
-            keyStand = (ArmorStand) deathLoc.getWorld().spawnEntity(spawnLoc, EntityType.ARMOR_STAND);
-            keyStand.setGravity(false);
-            keyStand.setSmall(true);
-            keyStand.setBasePlate(false);
-            keyStand.setInvulnerable(true);
-            keyStand.setMarker(false);
-
-            ItemStack head = TextureToHead.getHead(MobManager.KEY_TEXTURE);
-            keyStand.getEquipment().setHelmet(head);
-            keyStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
-            keyStand.setVisible(false);
-
-            textStand1 = (ArmorStand) deathLoc.getWorld().spawnEntity(spawnLoc.clone().add(0, 1.5, 0), EntityType.ARMOR_STAND);
-            textStand1.setVisible(false);
-            textStand1.setGravity(false);
-            textStand1.setSmall(true);
-            textStand1.setCustomNameVisible(true);
-            textStand1.customName(Component.text("Room " + (currentRoomId + 1) + " Key", NamedTextColor.GOLD));
-            textStand1.setMarker(true);
-
-            textStand2 = (ArmorStand) deathLoc.getWorld().spawnEntity(spawnLoc.clone().add(0, 1.25, 0), EntityType.ARMOR_STAND);
-            textStand2.setVisible(false);
-            textStand2.setGravity(false);
-            textStand2.setSmall(true);
-            textStand2.setCustomNameVisible(true);
-            textStand2.customName(Component.text("Click to pick up", NamedTextColor.YELLOW));
-            textStand2.setMarker(true);
-        } finally {
-            MobManager.IS_SPAWNING = false;
-        }
-
+            keyStand = (ArmorStand) deathLoc.getWorld().spawnEntity(spawnLoc, EntityType.ARMOR_STAND); keyStand.setGravity(false); keyStand.setSmall(true); keyStand.setBasePlate(false); keyStand.setInvulnerable(true); keyStand.setMarker(false);
+            ItemStack head = TextureToHead.getHead(MobManager.KEY_TEXTURE); keyStand.getEquipment().setHelmet(head); keyStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING); keyStand.setVisible(false);
+            textStand1 = (ArmorStand) deathLoc.getWorld().spawnEntity(spawnLoc.clone().add(0, 1.5, 0), EntityType.ARMOR_STAND); textStand1.setVisible(false); textStand1.setGravity(false); textStand1.setSmall(true); textStand1.setCustomNameVisible(true); textStand1.customName(Component.text("Room " + (currentRoomId + 1) + " Key", NamedTextColor.GOLD)); textStand1.setMarker(true);
+            textStand2 = (ArmorStand) deathLoc.getWorld().spawnEntity(spawnLoc.clone().add(0, 1.25, 0), EntityType.ARMOR_STAND); textStand2.setVisible(false); textStand2.setGravity(false); textStand2.setSmall(true); textStand2.setCustomNameVisible(true); textStand2.customName(Component.text("Click to pick up", NamedTextColor.YELLOW)); textStand2.setMarker(true);
+        } finally { MobManager.IS_SPAWNING = false; }
         DungeonUtils.msg(player, "<green>The Key has appeared! Click it to pick it up!");
-
         keyTask = new BukkitRunnable() {
-            double ticks = 0;
-            final Location animBase = deathLoc.clone().add(0, 1.0, 0);
-
-            @Override
-            public void run() {
-                if (keyStand == null || keyStand.isDead() || player == null || !player.isOnline()) {
-                    this.cancel();
-                    return;
-                }
-
-                float yaw = (keyStand.getLocation().getYaw() + 5) % 360;
-                double yOffset = Math.sin(ticks * 0.1) * 0.75;
-
-                Location newLoc = animBase.clone().add(0, yOffset, 0);
-                newLoc.setYaw(yaw);
-                keyStand.teleport(newLoc);
-
-                if (textStand1 != null) textStand1.teleport(newLoc.clone().add(0, 1.0, 0));
-                if (textStand2 != null) textStand2.teleport(newLoc.clone().add(0, 0.75, 0));
-
-                keyStand.getWorld().spawnParticle(Particle.CLOUD, keyStand.getLocation().add(0, 1.0, 0), 1, 0, 0, 0, 0.01);
-                ticks++;
+            double ticks = 0; final Location animBase = deathLoc.clone().add(0, 1.0, 0);
+            @Override public void run() {
+                if (keyStand == null || keyStand.isDead() || player == null || !player.isOnline()) { this.cancel(); return; }
+                float yaw = (keyStand.getLocation().getYaw() + 5) % 360; double yOffset = Math.sin(ticks * 0.1) * 0.75;
+                Location newLoc = animBase.clone().add(0, yOffset, 0); newLoc.setYaw(yaw); keyStand.teleport(newLoc);
+                if (textStand1 != null) textStand1.teleport(newLoc.clone().add(0, 1.0, 0)); if (textStand2 != null) textStand2.teleport(newLoc.clone().add(0, 0.75, 0));
+                keyStand.getWorld().spawnParticle(Particle.CLOUD, keyStand.getLocation().add(0, 1.0, 0), 1, 0, 0, 0, 0.01); ticks++;
             }
-        };
-        keyTask.runTaskTimer(Login.getPlugin(Login.class), 0L, 1L);
+        }; keyTask.runTaskTimer(Login.getPlugin(Login.class), 0L, 1L);
     }
-
-    public void pickupKey() {
-        cleanupKey();
-        hasKey = true;
-        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ITEM_PICKUP, 1f, 1f);
-        DungeonUtils.msg(player, "<green><b>You obtained the Virtual Key!</b> <gray>Right-click the door to open it.");
-    }
-
-    private void cleanupKey() {
-        if (keyStand != null && !keyStand.isDead()) keyStand.remove();
-        if (textStand1 != null && !textStand1.isDead()) textStand1.remove();
-        if (textStand2 != null && !textStand2.isDead()) textStand2.remove();
-        if (keyTask != null && !keyTask.isCancelled()) keyTask.cancel();
-        keyStand = null; textStand1 = null; textStand2 = null; keyTask = null;
-    }
-
+    public void pickupKey() { cleanupKey(); hasKey = true; player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_ITEM_PICKUP, 1f, 1f); DungeonUtils.msg(player, "<green><b>You obtained the Virtual Key!</b> <gray>Right-click the door to open it."); }
+    private void cleanupKey() { if (keyStand != null && !keyStand.isDead()) keyStand.remove(); if (textStand1 != null && !textStand1.isDead()) textStand1.remove(); if (textStand2 != null && !textStand2.isDead()) textStand2.remove(); if (keyTask != null && !keyTask.isCancelled()) keyTask.cancel(); keyStand = null; textStand1 = null; textStand2 = null; keyTask = null; }
     public boolean hasKey() { return hasKey; }
     public void setHasKey(boolean hasKey) { this.hasKey = hasKey; }
-
-    public void openDoor(me.login.dungeon.model.Cuboid region) {
-        if (region == null) return;
-        modifyRegion(region, Material.AIR);
-    }
+    public void openDoor(me.login.dungeon.model.Cuboid region) { if (region == null) return; modifyRegion(region, Material.AIR); }
 
     public void cleanup() {
         cleanupKey();
@@ -461,19 +336,22 @@ public class GameSession {
         trapHeads.clear();
         if (buffOrb != null) buffOrb.remove();
 
-        restoreBlocks(); // RESTORE BLOCKS HERE
+        restoreBlocks();
 
         player.getAttribute(Attribute.GENERIC_MAX_HEALTH).setBaseValue(20.0);
         player.setWalkSpeed(0.2f);
         player.removePotionEffect(PotionEffectType.REGENERATION);
 
-        // Remove Undead Skeletons
         player.getWorld().getEntities().stream()
                 .filter(e -> e.getPersistentDataContainer().has(MobManager.UNDEAD_KEY, org.bukkit.persistence.PersistentDataType.BYTE))
                 .forEach(Entity::remove);
 
         activeMobs.forEach(Entity::remove);
         activeMobs.clear();
+
+        trapMobs.forEach(Entity::remove);
+        trapMobs.clear();
+
         minions.forEach(Entity::remove);
         minions.clear();
         if (bossEntity != null) bossEntity.remove();

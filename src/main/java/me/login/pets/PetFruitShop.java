@@ -55,21 +55,18 @@ public class PetFruitShop implements InventoryHolder {
     }
 
     public void openMainMenu(Player player) {
-        // FIX: Gray title (no bold)
         PetFruitShop menu = new PetFruitShop(plugin, config, messageHandler, ShopType.MAIN, 27, MiniMessage.miniMessage().deserialize("<gray>Fruit Shop"));
         menu.initializeMainItems();
         player.openInventory(menu.getInventory());
     }
 
     public void openXpShop(Player player) {
-        // FIX: Gray title
         PetFruitShop menu = new PetFruitShop(plugin, config, messageHandler, ShopType.XP, 36, MiniMessage.miniMessage().deserialize("<gray>XP Fruits"));
         menu.initializeSubItems(true);
         player.openInventory(menu.getInventory());
     }
 
     public void openHungerShop(Player player) {
-        // FIX: Gray title
         PetFruitShop menu = new PetFruitShop(plugin, config, messageHandler, ShopType.HUNGER, 36, MiniMessage.miniMessage().deserialize("<gray>Hunger Fruits"));
         menu.initializeSubItems(false);
         player.openInventory(menu.getInventory());
@@ -82,7 +79,6 @@ public class PetFruitShop implements InventoryHolder {
         ItemStack xpHead = new ItemStack(Material.PLAYER_HEAD);
         xpHead = TextureToHead.applyTexture(xpHead, XP_HEAD_URL);
         ItemMeta xpMeta = xpHead.getItemMeta();
-        // FIX: No Bold, No Italic
         xpMeta.displayName(MiniMessage.miniMessage().deserialize("<green>XP Fruits").decoration(TextDecoration.ITALIC, false));
         xpMeta.lore(List.of(MiniMessage.miniMessage().deserialize("<gray>Click to buy XP fruits").decoration(TextDecoration.ITALIC, false)));
         xpHead.setItemMeta(xpMeta);
@@ -115,21 +111,26 @@ public class PetFruitShop implements InventoryHolder {
             double price = config.getFruitPrice(fruitName);
 
             ItemMeta meta = item.getItemMeta();
-            // FIX: Remove Bold from Name
             Component displayName = meta.displayName();
             if (displayName != null) {
+                // FORCE remove italic and bold from shop display
                 meta.displayName(displayName.decoration(TextDecoration.BOLD, false).decoration(TextDecoration.ITALIC, false));
             }
 
             List<Component> lore = meta.lore();
             if (lore == null) lore = new ArrayList<>();
-            lore.add(Component.empty());
-            // FIX: No Italic in price lore
-            lore.add(MiniMessage.miniMessage().deserialize("<gray>Price: <gold>$" + String.format("%.2f", price)).decoration(TextDecoration.ITALIC, false));
-            lore.add(MiniMessage.miniMessage().deserialize("<yellow>Left-Click to Buy (1)").decoration(TextDecoration.ITALIC, false));
-            lore.add(MiniMessage.miniMessage().deserialize("<yellow>Shift+Right-Click to Bulk Buy").decoration(TextDecoration.ITALIC, false));
-            meta.lore(lore);
+            // Clean existing lore italics
+            List<Component> cleanLore = new ArrayList<>();
+            for (Component line : lore) {
+                cleanLore.add(line.decoration(TextDecoration.ITALIC, false));
+            }
 
+            cleanLore.add(Component.empty());
+            cleanLore.add(MiniMessage.miniMessage().deserialize("<gray>Price: <gold>$" + String.format("%.2f", price)).decoration(TextDecoration.ITALIC, false));
+            cleanLore.add(MiniMessage.miniMessage().deserialize("<yellow>Left-Click to Buy (1)").decoration(TextDecoration.ITALIC, false));
+            cleanLore.add(MiniMessage.miniMessage().deserialize("<yellow>Shift+Right-Click to Bulk Buy").decoration(TextDecoration.ITALIC, false));
+
+            meta.lore(cleanLore);
             meta.getPersistentDataContainer().set(fruitKey, PersistentDataType.STRING, fruitName);
             item.setItemMeta(meta);
 
@@ -180,6 +181,21 @@ public class PetFruitShop implements InventoryHolder {
         if (r.transactionSuccess()) {
             ItemStack giveItem = config.getFruit(fruitId);
             giveItem.setAmount(quantity);
+
+            // FIX: Remove italics from the purchased item
+            ItemMeta meta = giveItem.getItemMeta();
+            if (meta.hasDisplayName()) {
+                meta.displayName(meta.displayName().decoration(TextDecoration.ITALIC, false));
+            }
+            if (meta.hasLore()) {
+                List<Component> lore = meta.lore();
+                List<Component> cleanLore = new ArrayList<>();
+                for (Component line : lore) {
+                    cleanLore.add(line.decoration(TextDecoration.ITALIC, false));
+                }
+                meta.lore(cleanLore);
+            }
+            giveItem.setItemMeta(meta);
 
             HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(giveItem);
             if (!leftover.isEmpty()) {

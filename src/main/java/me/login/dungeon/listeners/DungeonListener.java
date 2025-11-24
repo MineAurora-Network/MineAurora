@@ -52,8 +52,8 @@ public class DungeonListener implements Listener {
         this.logger = logger;
     }
 
-    // --- BLOCK ENDERMAN TELEPORTATION ---
-    @EventHandler
+    // --- FIX: BLOCK ENDERMAN TELEPORTATION ---
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntityTeleport(EntityTeleportEvent event) {
         // Prevent dungeon mobs (like Endermen) from teleporting out of rooms
         if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
@@ -70,14 +70,13 @@ public class DungeonListener implements Listener {
         for (GameSession s : gameManager.getAllSessions()) {
             if (s.getDungeon().getSpawnLocation().getWorld().equals(event.getBlock().getWorld())) {
                 s.recordBlockChange(event.getBlock());
-                // We don't cancel here; we let WorldGuard handle protection.
-                // But if it DOES break (admin override etc), we have recorded it.
                 return;
             }
         }
     }
 
-    // --- SPAWN HANDLING ---
+    // ... (Rest of listener methods remain unchanged) ...
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntitySpawn(EntitySpawnEvent event) {
         if (MobManager.IS_SPAWNING) {
@@ -102,7 +101,6 @@ public class DungeonListener implements Listener {
         if (isDungeonWorld) event.setCancelled(true);
     }
 
-    // --- DAMAGE LOGIC ---
     @EventHandler
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
@@ -118,7 +116,6 @@ public class DungeonListener implements Listener {
             }
         }
 
-        // Mob Abilities (Mutations)
         if (event.getEntity() instanceof Player && event.getDamager() instanceof LivingEntity) {
             LivingEntity damager = (LivingEntity) event.getDamager();
             if (damager.getPersistentDataContainer().has(MobManager.MUTATION_KEY, PersistentDataType.STRING)) {
@@ -368,11 +365,9 @@ public class DungeonListener implements Listener {
     public void onMobDeath(EntityDeathEvent event) {
         Entity entity = event.getEntity();
 
-        // Prevent regular mob drops
         if (entity.getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
             event.getDrops().clear();
         }
-        // NEW: Prevent Undead Skeleton drops specifically
         if (entity.getPersistentDataContainer().has(MobManager.UNDEAD_KEY, PersistentDataType.BYTE)) {
             event.getDrops().clear();
         }

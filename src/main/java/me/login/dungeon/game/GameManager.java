@@ -48,6 +48,17 @@ public class GameManager {
             return;
         }
 
+        if (sessions.containsKey(player.getUniqueId())) {
+            DungeonUtils.error(player, "You are already in a dungeon session!");
+            return;
+        }
+
+        // Feature 4: Prevent joining occupied dungeons
+        if (dungeon.isOccupied()) {
+            DungeonUtils.error(player, "All dungeons are full or this dungeon is active. Try again later.");
+            return;
+        }
+
         if (!dungeon.isSetupComplete()) {
             DungeonUtils.error(player, "Dungeon is not fully setup!");
             return;
@@ -56,22 +67,23 @@ public class GameManager {
         player.teleport(dungeon.getSpawnLocation());
         GameSession session = new GameSession(player, dungeon);
         sessions.put(player.getUniqueId(), session);
-        DungeonUtils.msg(player, "You have entered Dungeon <yellow>" + dungeonId + "</yellow>!");
-        DungeonUtils.msg(player, "You have <red>15 minutes</red> to clear it!");
-        DungeonUtils.msg(player, "Click the entry door to begin.");
+
+        // Feature 2: Consolidated message
+        DungeonUtils.msg(player, "You have entered Dungeon <yellow>" + dungeonId + "</yellow>!%nl%" +
+                "You have <red>15 minutes</red> to clear it!%nl%" +
+                "Click the entry door to begin.");
     }
 
     public void failDungeon(Player player, String reason) {
         if (player != null) {
-            DungeonUtils.msg(player, "<red><b>Dungeon Failed:</b> " + reason);
+            // Feature 2: Consolidated message
+            DungeonUtils.msg(player, "<red><b>Dungeon Failed:</b> " + reason + "%nl%<gray>Teleporting to spawn...");
 
             World lifesteal = Bukkit.getWorld("lifesteal");
             if (lifesteal != null) {
-                // Fixed: Teleport to specific coordinates
                 Location tpLoc = new Location(lifesteal, 231.5, 57, 77.5);
                 player.teleport(tpLoc);
             } else {
-                DungeonUtils.error(player, "World 'lifesteal' not found! Teleporting to spawn.");
                 player.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
             }
         }
