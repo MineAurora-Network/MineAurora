@@ -722,4 +722,7 @@ public class Login extends JavaPlugin implements Listener {
     public String getServerPrefix() {
         return serverPrefix;
     }
+    public me.login.dungeon.DungeonModule getDungeonModule() {
+        return this.dungeonModule;
+    }
 }

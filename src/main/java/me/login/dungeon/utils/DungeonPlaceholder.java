@@ -4,6 +4,7 @@ import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import me.login.Login;
 import me.login.dungeon.game.GameManager;
 import me.login.dungeon.game.GameSession;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
@@ -38,20 +39,22 @@ public class DungeonPlaceholder extends PlaceholderExpansion {
     }
 
     @Override
-    public String onPlaceholderRequest(Player player, @NotNull String params) {
-        if (player == null) return "";
+    public String onRequest(OfflinePlayer player, @NotNull String params) {
+        if (!player.isOnline()) return "";
+        Player p = (Player) player;
+        GameSession session = gameManager.getSession(p);
 
-        GameSession session = gameManager.getSession(player);
         if (session == null) return "N/A";
 
         if (params.equalsIgnoreCase("current_room")) {
-            return String.valueOf(session.getCurrentRoomId());
-        }
-        if (params.equalsIgnoreCase("time_started")) {
-            return session.getTimeElapsed();
+            return String.valueOf(session.getCurrentRoomId() + 1);
         }
         if (params.equalsIgnoreCase("mobs_left")) {
             return String.valueOf(session.getMobsLeft());
+        }
+        // CHANGED: Using getTimeLeft() for both placeholders to ensure consistency with the countdown
+        if (params.equalsIgnoreCase("time_elapsed") || params.equalsIgnoreCase("time_left")) {
+            return session.getTimeLeft();
         }
 
         return null;

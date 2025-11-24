@@ -1,6 +1,7 @@
 package me.login.scoreboard;
 
 import me.login.Login;
+import me.login.dungeon.game.GameSession;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -12,54 +13,57 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet; // Use HashSet for faster lookups
 import java.util.List;
 import java.util.Map;
-import java.util.Set; // Import Set
+import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors; // For converting list to lowercase set
+import java.util.stream.Collectors;
 
 public class ScoreboardManager implements Listener {
 
     private final Login plugin;
     private final Map<UUID, Scoreboard> scoreboardMap = new HashMap<>();
 
-    // Variables to hold the designs from the config
+    // Hub Scoreboard Variables
     private String hubTitle;
     private List<String> hubLines;
-    private Set<String> hubWorlds; // <-- NEW: Use Set for efficiency
+    private Set<String> hubWorlds;
+
+    // Lifesteal Scoreboard Variables
     private String lifestealTitle;
     private List<String> lifestealLines;
-    private Set<String> lifestealWorlds; // <-- NEW: Use Set for efficiency
+    private Set<String> lifestealWorlds;
+
+    // Dungeon Scoreboard Variables
+    private String dungeonTitle;
+    private List<String> dungeonLines;
+    private Set<String> dungeonWorlds;
 
     public ScoreboardManager(JavaPlugin plugin) {
         this.plugin = (Login) plugin;
-        loadConfig(); // Load the design from config on startup
+        loadConfig();
         Bukkit.getPluginManager().registerEvents(this, plugin);
         startUpdater();
     }
 
-    /**
-     * Loads or reloads the scoreboard format from the config.yml.
-     */
     public void loadConfig() {
-        // Load Hub scoreboard
+        // Hub
         this.hubTitle = plugin.getConfig().getString("scoreboard.hub.title", "&cHub Title Not Set");
         this.hubLines = plugin.getConfig().getStringList("scoreboard.hub.lines");
-        // Convert world list to lowercase set for fast, case-insensitive checks
         this.hubWorlds = plugin.getConfig().getStringList("scoreboard.hub.worlds")
-                .stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.toSet()); // <-- NEW
+                .stream().map(String::toLowerCase).collect(Collectors.toSet());
 
-        // Load Lifesteal scoreboard
+        // Lifesteal
         this.lifestealTitle = plugin.getConfig().getString("scoreboard.lifesteal.title", "&cLifesteal Title Not Set");
         this.lifestealLines = plugin.getConfig().getStringList("scoreboard.lifesteal.lines");
-        // Convert world list to lowercase set
         this.lifestealWorlds = plugin.getConfig().getStringList("scoreboard.lifesteal.worlds")
-                .stream()
-                .map(String::toLowerCase)
-                .collect(Collectors.toSet()); // <-- NEW
+                .stream().map(String::toLowerCase).collect(Collectors.toSet());
+
+        // Dungeon
+        this.dungeonTitle = plugin.getConfig().getString("scoreboard.dungeon.title", "&cDungeon Title Not Set");
+        this.dungeonLines = plugin.getConfig().getStringList("scoreboard.dungeon.lines");
+        this.dungeonWorlds = plugin.getConfig().getStringList("scoreboard.dungeon.worlds")
+                .stream().map(String::toLowerCase).collect(Collectors.toSet());
     }
 
     @EventHandler
@@ -85,42 +89,69 @@ public class ScoreboardManager implements Listener {
                     updateScoreboard(player);
                 }
             }
-        }.runTaskTimer(plugin, 0, 20L); // 20L = 1 second
+        }.runTaskTimer(plugin, 0, 20L);
     }
 
     public void updateScoreboard(Player player) {
         Scoreboard scoreboard = scoreboardMap.get(player.getUniqueId());
-        if (scoreboard == null) {
-            return;
-        }
+        if (scoreboard == null) return;
 
-        String worldName = player.getWorld().getName().toLowerCase(); // Already lowercase
+        String worldName = player.getWorld().getName().toLowerCase();
         String title;
         List<String> lines;
 
-        // --- UPDATED LOGIC ---
-        // Check if the current world is in the hub worlds list
         if (hubWorlds.contains(worldName)) {
             title = hubTitle;
-            lines = hubLines;
-            // Check if the current world is in the lifesteal worlds list
+            lines = new ArrayList<>(hubLines);
         } else if (lifestealWorlds.contains(worldName)) {
             title = lifestealTitle;
-            lines = lifestealLines;
-            // Otherwise, clear the scoreboard
+            lines = new ArrayList<>(lifestealLines);
+        } else if (dungeonWorlds.contains(worldName)) {
+            title = dungeonTitle;
+            lines = new ArrayList<>(dungeonLines);
+
+            // DUNGEON PLACEHOLDERS
+            try {
+                // This call now works because getters exist in Login and DungeonModule
+                if (plugin.getDungeonModule() != null && plugin.getDungeonModule().getGameManager() != null) {
+                    GameSession session = plugin.getDungeonModule().getGameManager().getSession(player);
+                    if (session != null) {
+                        for (int i = 0; i < lines.size(); i++) {
+                            String line = lines.get(i);
+                            if (line.contains("%time_dungeon_started%")) {
+                                line = line.replace("%time_dungeon_started%", session.getTimeLeft());
+                            }
+                            if (line.contains("%mobs_left_in_room%")) {
+                                line = line.replace("%mobs_left_in_room%", String.valueOf(session.getMobsLeft()));
+                            }
+                            if (line.contains("%dungeon_current_room%")) {
+                                line = line.replace("%dungeon_current_room%", String.valueOf(session.getCurrentRoomId() + 1));
+                            }
+                            lines.set(i, line);
+                        }
+                    } else {
+                        // Fallback
+                        for (int i = 0; i < lines.size(); i++) {
+                            lines.set(i, lines.get(i)
+                                    .replace("%time_dungeon_started%", "--:--")
+                                    .replace("%mobs_left_in_room%", "0")
+                                    .replace("%dungeon_current_room%", "N/A"));
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
         } else {
             scoreboard.clear();
             return;
         }
-        // --- END UPDATED LOGIC ---
 
-        // If for some reason the config lines are empty, clear the board.
-        if (lines == null || lines.isEmpty()) { // Added null check
+        if (lines == null || lines.isEmpty()) {
             scoreboard.clear();
             return;
         }
 
         scoreboard.setTitle(title);
-        scoreboard.updateLines(new ArrayList<>(lines)); // Use a copy to prevent modification issues
+        scoreboard.updateLines(lines);
     }
 }

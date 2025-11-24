@@ -4,6 +4,7 @@ import me.login.Login;
 import me.login.dungeon.game.GameManager;
 import me.login.dungeon.game.GameSession;
 import me.login.dungeon.game.MobManager;
+import me.login.dungeon.game.MobManager.MobMutation;
 import me.login.dungeon.gui.DungeonGUI;
 import me.login.dungeon.manager.DungeonManager;
 import me.login.dungeon.manager.DungeonRewardManager;
@@ -14,29 +15,26 @@ import me.login.dungeon.utils.DungeonUtils;
 import net.citizensnpcs.api.CitizensAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
+import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.entity.CreatureSpawnEvent;
-import org.bukkit.event.entity.EntityCombustEvent;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 public class DungeonListener implements Listener {
 
@@ -54,11 +52,36 @@ public class DungeonListener implements Listener {
         this.logger = logger;
     }
 
-    // --- BURNING & SPAWNING ---
+    // --- BLOCK ENDERMAN TELEPORTATION ---
     @EventHandler
-    public void onMobCombust(EntityCombustEvent event) {
+    public void onEntityTeleport(EntityTeleportEvent event) {
+        // Prevent dungeon mobs (like Endermen) from teleporting out of rooms
         if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
             event.setCancelled(true);
+        }
+    }
+
+    // --- BLOCK RESTORATION LOGIC ---
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onDungeonBlockBreak(BlockBreakEvent event) {
+        if (dungeonManager.isSettingUp(event.getPlayer())) return;
+
+        // Record any block break in a dungeon world for restoration later
+        for (GameSession s : gameManager.getAllSessions()) {
+            if (s.getDungeon().getSpawnLocation().getWorld().equals(event.getBlock().getWorld())) {
+                s.recordBlockChange(event.getBlock());
+                // We don't cancel here; we let WorldGuard handle protection.
+                // But if it DOES break (admin override etc), we have recorded it.
+                return;
+            }
+        }
+    }
+
+    // --- SPAWN HANDLING ---
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onEntitySpawn(EntitySpawnEvent event) {
+        if (MobManager.IS_SPAWNING) {
+            event.setCancelled(false);
         }
     }
 
@@ -70,54 +93,128 @@ public class DungeonListener implements Listener {
         }
         if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
             event.setCancelled(false);
+            return;
+        }
+
+        String spawnWorld = event.getLocation().getWorld().getName();
+        boolean isDungeonWorld = gameManager.getAllSessions().stream()
+                .anyMatch(s -> s.getDungeon().getSpawnLocation().getWorld().getName().equals(spawnWorld));
+        if (isDungeonWorld) event.setCancelled(true);
+    }
+
+    // --- DAMAGE LOGIC ---
+    @EventHandler
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
+            boolean isPlayer = event.getDamager() instanceof Player;
+            boolean isPet = false;
+
+            if (event.getDamager().hasMetadata("pet_owner") || event.getDamager().getCustomName() != null) isPet = true;
+            if (event.getDamager() instanceof Tameable) { if (((Tameable) event.getDamager()).getOwner() instanceof Player) isPet = true; }
+
+            if (!isPlayer && !isPet && !(event.getDamager() instanceof Projectile && ((Projectile)event.getDamager()).getShooter() instanceof Player)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        // Mob Abilities (Mutations)
+        if (event.getEntity() instanceof Player && event.getDamager() instanceof LivingEntity) {
+            LivingEntity damager = (LivingEntity) event.getDamager();
+            if (damager.getPersistentDataContainer().has(MobManager.MUTATION_KEY, PersistentDataType.STRING)) {
+                String mutationName = damager.getPersistentDataContainer().get(MobManager.MUTATION_KEY, PersistentDataType.STRING);
+                MobMutation mutation = MobMutation.valueOf(mutationName);
+                Player victim = (Player) event.getEntity();
+
+                if (mutation == MobMutation.CORRUPTED_ZOMBIE) {
+                    if (Math.random() < 0.25) {
+                        victim.addPotionEffect(new PotionEffect(PotionEffectType.POISON, 60, 0, false, false));
+                        victim.sendMessage("§aYou were poisoned by a Corrupted Zombie!");
+                    }
+                }
+                else if (mutation == MobMutation.ZOMBIE_KNIGHT) {
+                    damager.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 40, 1, false, false));
+                }
+            }
+        }
+
+        if (event.getEntity() instanceof Player && event.getDamager() instanceof Projectile) {
+            Projectile proj = (Projectile) event.getDamager();
+            if (proj.getShooter() instanceof LivingEntity) {
+                LivingEntity shooter = (LivingEntity) proj.getShooter();
+                if (shooter.getPersistentDataContainer().has(MobManager.MUTATION_KEY, PersistentDataType.STRING)) {
+                    String mutationName = shooter.getPersistentDataContainer().get(MobManager.MUTATION_KEY, PersistentDataType.STRING);
+                    MobMutation mutation = MobMutation.valueOf(mutationName);
+                    Player victim = (Player) event.getEntity();
+
+                    if (mutation == MobMutation.SKELETON_MASTER) {
+                        victim.addPotionEffect(new PotionEffect(PotionEffectType.POISON, 100, 0, false, false));
+                    }
+                }
+            }
         }
     }
 
     @EventHandler
-    public void onMobDamage(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof LivingEntity)) return;
-        LivingEntity entity = (LivingEntity) event.getEntity();
+    public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        if (event.getEntity().getShooter() instanceof LivingEntity) {
+            LivingEntity shooter = (LivingEntity) event.getEntity().getShooter();
+            if (shooter.getPersistentDataContainer().has(MobManager.MUTATION_KEY, PersistentDataType.STRING)) {
+                String mutationName = shooter.getPersistentDataContainer().get(MobManager.MUTATION_KEY, PersistentDataType.STRING);
+                MobMutation mutation = MobMutation.valueOf(mutationName);
 
-        if (entity.getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
-
-            if (event.getCause() == EntityDamageEvent.DamageCause.VOID) return;
-
-            boolean isPlayerDamage = false;
-
-            if (event instanceof EntityDamageByEntityEvent) {
-                Entity damager = ((EntityDamageByEntityEvent) event).getDamager();
-                if (damager instanceof Player) {
-                    isPlayerDamage = true;
-                } else if (damager instanceof Projectile) {
-                    if (((Projectile) damager).getShooter() instanceof Player) {
-                        isPlayerDamage = true;
-                    }
-                }
-            }
-
-            if (!isPlayerDamage) {
-                event.setCancelled(true);
-                return;
-            }
-
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (!entity.isDead()) MobManager.updateMobName(entity);
-            }, 1L);
-
-            if (entity instanceof org.bukkit.entity.Zombie) {
-                for (GameSession session : gameManager.getAllSessions()) {
-                    if (entity.equals(session.getBossEntity()) && session.isBossInvulnerable()) {
-                        event.setCancelled(true);
-                    }
-                    if (entity.equals(session.getBossEntity())) {
-                        session.checkBossHealth();
-                    }
+                if (mutation == MobMutation.WITHER_GUARD && event.getEntity() instanceof Arrow) {
+                    event.getEntity().setFireTicks(100);
                 }
             }
         }
     }
 
-    // --- SETUP/NPC/GUI ---
+    @EventHandler
+    public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
+        if (event.getRightClicked().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
+            ItemStack hand = event.getPlayer().getInventory().getItemInMainHand();
+            if (hand.getType() == Material.LEAD) {
+                event.setCancelled(true);
+                DungeonUtils.error(event.getPlayer(), "You cannot capture Dungeon Mobs!");
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        GameSession session = gameManager.getSession(player);
+
+        if (session != null) {
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                player.spigot().respawn();
+                gameManager.failDungeon(player, "You died in the Dungeon!");
+            }, 2L);
+        }
+    }
+
+    @EventHandler
+    public void onWorldChange(PlayerChangedWorldEvent event) {
+        Player player = event.getPlayer();
+        GameSession session = gameManager.getSession(player);
+
+        if (session != null) {
+            if (!player.getWorld().equals(session.getDungeon().getSpawnLocation().getWorld())) {
+                gameManager.endSession(player);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onMobCombust(EntityCombustEvent event) {
+        if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler
     public void onSetupBreak(BlockBreakEvent event) {
         if (dungeonManager.isSettingUp(event.getPlayer())) {
@@ -133,17 +230,20 @@ public class DungeonListener implements Listener {
         }
     }
 
-    // --- Armor Stand Key Interaction ---
     @EventHandler
     public void onEntityInteract(PlayerInteractAtEntityEvent event) {
         Player player = event.getPlayer();
         GameSession session = gameManager.getSession(player);
         if (session == null) return;
 
-        // Check if clicked entity is the Key Armor Stand
         if (session.isKeyEntity(event.getRightClicked())) {
             event.setCancelled(true);
             session.pickupKey();
+        }
+
+        if (session.isBuffOrb(event.getRightClicked())) {
+            event.setCancelled(true);
+            session.collectBuff();
         }
     }
 
@@ -190,14 +290,30 @@ public class DungeonListener implements Listener {
         if (block == null) return;
 
         Player player = event.getPlayer();
+
+        if (dungeonManager.isSettingUp(player)) {
+            if (block.getType() == Material.CHEST || block.getType() == Material.TRAPPED_CHEST) {
+                event.setCancelled(true);
+                dungeonManager.handleInteract(player, block);
+                return;
+            }
+        }
+
         GameSession session = gameManager.getSession(player);
         if (session == null) return;
 
-        if (block.getType() == Material.CHEST && block.getLocation().equals(session.getDungeon().getRewardChestLocation())) {
-            event.setCancelled(true);
-            DungeonGUI.openRewardChest(player, rewardManager.generateChestRewards(player.getUniqueId()));
-            rewardManager.addRun(player.getUniqueId());
-            return;
+        if (block.getType() == Material.CHEST || block.getType() == Material.TRAPPED_CHEST) {
+            if (block.getLocation().equals(session.getDungeon().getRewardChestLocation())) {
+                event.setCancelled(true);
+                DungeonGUI.openRewardChest(player, rewardManager.generateChestRewards(player.getUniqueId()));
+                rewardManager.addRun(player.getUniqueId());
+                return;
+            }
+            if (session.isChestUsed(block.getLocation()) || session.getDungeon().getChestLocations().contains(block.getLocation())) {
+                event.setCancelled(true);
+                session.triggerChest(block.getLocation());
+                return;
+            }
         }
 
         if (block.getType() != Material.COAL_BLOCK) return;
@@ -219,7 +335,6 @@ public class DungeonListener implements Listener {
                     DungeonUtils.error(player, "Door Locked: Kill all mobs to spawn the Key.");
                     return;
                 }
-                // VIRTUAL KEY CHECK: Just check session.hasKey(), no item check!
                 session.setHasKey(false);
                 session.openDoor(currentRoom.getDoorRegion());
                 session.advanceRoom();
@@ -232,7 +347,6 @@ public class DungeonListener implements Listener {
         if (session.getDungeon().getBossRoomDoor() != null && session.getDungeon().getBossRoomDoor().containsBlock(block.getLocation())) {
             if (session.getCurrentRoomId() == 6) {
                 if (!session.hasKey()) { DungeonUtils.error(player, "Key required!"); return; }
-
                 session.setHasKey(false);
                 session.openDoor(session.getDungeon().getBossRoomDoor());
                 session.advanceRoom();
@@ -254,7 +368,12 @@ public class DungeonListener implements Listener {
     public void onMobDeath(EntityDeathEvent event) {
         Entity entity = event.getEntity();
 
+        // Prevent regular mob drops
         if (entity.getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
+            event.getDrops().clear();
+        }
+        // NEW: Prevent Undead Skeleton drops specifically
+        if (entity.getPersistentDataContainer().has(MobManager.UNDEAD_KEY, PersistentDataType.BYTE)) {
             event.getDrops().clear();
         }
 

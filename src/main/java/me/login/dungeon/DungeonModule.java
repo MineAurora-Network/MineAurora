@@ -36,7 +36,6 @@ public class DungeonModule {
         // 3. Register Commands
         if (plugin.getCommand("dungeon") != null) {
             plugin.getCommand("dungeon").setExecutor(new AdminCommands(plugin, dungeonManager, gameManager, rewardManager));
-            // CHANGED: Added rewardManager to constructor
             plugin.getCommand("dungeon").setTabCompleter(new DungeonTabCompleter(dungeonManager, rewardManager));
         }
 
@@ -56,6 +55,27 @@ public class DungeonModule {
         if (this.database != null) {
             this.database.close();
         }
-        this.dungeonManager.saveAll();
+        // Save all dungeons on disable to ensure data safety
+        if (this.dungeonManager != null) {
+            this.dungeonManager.saveAll();
+        }
+        // End all sessions
+        if (this.gameManager != null) {
+            this.gameManager.getAllSessions().forEach(session -> session.cleanup());
+        }
+    }
+
+    // --- ADD THESE METHODS HERE ---
+
+    public GameManager getGameManager() {
+        return gameManager;
+    }
+
+    public DungeonManager getDungeonManager() {
+        return dungeonManager;
+    }
+
+    public DungeonRewardManager getRewardManager() {
+        return rewardManager;
     }
 }

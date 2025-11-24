@@ -1,27 +1,31 @@
 package me.login.dungeon.model;
 
 import org.bukkit.Location;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class Dungeon {
     private final int id;
     private Location spawnLocation;
-    private Cuboid entryDoor; // Door to start Dungeon
+    private Cuboid entryDoor;
 
-    // Boss & Reward Configuration
     private Location bossSpawnLocation;
-    private Cuboid bossRoomDoor; // Door INTO Boss Room
+    private Cuboid bossRoomDoor;
 
     private Location rewardChestLocation;
-    private Cuboid rewardDoor; // Door INTO Treasure Room (opens after boss dies)
+    private Cuboid rewardDoor;
 
     private final Map<Integer, DungeonRoom> rooms;
+    private final List<Location> chestLocations; // New: Setup chests
+
     private boolean isOccupied = false;
 
     public Dungeon(int id) {
         this.id = id;
         this.rooms = new HashMap<>();
+        this.chestLocations = new ArrayList<>();
     }
 
     public int getId() { return id; }
@@ -50,8 +54,18 @@ public class Dungeon {
 
     public Map<Integer, DungeonRoom> getRooms() { return rooms; }
 
+    // --- CHEST METHODS ---
+    public List<Location> getChestLocations() { return chestLocations; }
+
+    public void addChestLocation(Location loc) {
+        if (!chestLocations.contains(loc)) {
+            chestLocations.add(loc);
+        }
+    }
+
+    public void clearChestLocations() { chestLocations.clear(); }
+
     public boolean isSetupComplete() {
-        // Check key components
         return spawnLocation != null && entryDoor != null && !rooms.isEmpty()
                 && bossSpawnLocation != null && rewardChestLocation != null;
     }
