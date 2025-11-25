@@ -27,6 +27,7 @@ public class MobManager {
     public static final NamespacedKey DUNGEON_MOB_KEY = new NamespacedKey(Login.getPlugin(Login.class), "dungeon_mob");
     public static final NamespacedKey MUTATION_KEY = new NamespacedKey(Login.getPlugin(Login.class), "mob_mutation");
     public static final NamespacedKey UNDEAD_KEY = new NamespacedKey(Login.getPlugin(Login.class), "dungeon_undead");
+    public static final NamespacedKey MARKER_KEY = new NamespacedKey(Login.getPlugin(Login.class), "dungeon_spawn_marker");
 
     public static boolean IS_SPAWNING = false;
     public static final String KEY_TEXTURE = "9fd108383dfa5b02e86635609541520e4e158952d68c1c8f8f200ec7e88642d";
@@ -55,8 +56,16 @@ public class MobManager {
         MobMutation(String name, Color color) { this.name = name; this.color = color; }
     }
 
-    // ... (spawnRoomMob, pickMobType, applyMutation, updateMobName, applyArmor, createColoredArmor, setAttribute, spawnBoss, spawnMinion match original, omitted for brevity)
+    // --- NEW METHOD: SPAWN TEXT DISPLAY MARKER ---
+    public static void spawnMarker(Location loc, int roomId) {
+        TextDisplay display = (TextDisplay) loc.getWorld().spawnEntity(loc, EntityType.TEXT_DISPLAY);
+        display.setCustomName("Mob Spawn " + roomId);
+        display.setCustomNameVisible(false);
+        display.getPersistentDataContainer().set(MARKER_KEY, PersistentDataType.INTEGER, roomId);
+    }
+
     public static Entity spawnRoomMob(Location loc, int roomId) { IS_SPAWNING = true; try { EntityType type = pickMobType(roomId); LivingEntity entity = (LivingEntity) loc.getWorld().spawnEntity(loc, type); if (entity instanceof Zombie) { ((Zombie) entity).setBaby(false); } entity.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1); entity.setRemoveWhenFarAway(false); applyMutation(entity, type); return entity; } finally { IS_SPAWNING = false; } }
+
     private static EntityType pickMobType(int roomId) { if (roomId <= 2) { if (random.nextDouble() < 0.80) { return random.nextBoolean() ? EntityType.ZOMBIE : EntityType.SKELETON; } else { return random.nextBoolean() ? EntityType.WITHER_SKELETON : EntityType.ENDERMAN; } } else { List<EntityType> types = Arrays.asList(EntityType.ZOMBIE, EntityType.SKELETON, EntityType.WITHER_SKELETON, EntityType.ENDERMAN); return types.get(random.nextInt(types.size())); } }
     private static void applyMutation(LivingEntity entity, EntityType type) { MobMutation mutation = MobMutation.NONE; if (type == EntityType.ZOMBIE) { double r = random.nextDouble(); if (r < 0.30) mutation = MobMutation.ZOMBIE_SOLDIER; else if (r < 0.55) mutation = MobMutation.ZOMBIE_KNIGHT; else if (r < 0.80) mutation = MobMutation.CORRUPTED_ZOMBIE; else mutation = MobMutation.ZOMBIE_LORD; applyArmor(entity, mutation.color); if (mutation == MobMutation.ZOMBIE_SOLDIER) { setAttribute(entity, Attribute.GENERIC_MOVEMENT_SPEED, 0.35); } else if (mutation == MobMutation.ZOMBIE_LORD) { entity.getEquipment().setItemInMainHand(new ItemStack(Material.IRON_SWORD)); setAttribute(entity, Attribute.GENERIC_MOVEMENT_SPEED, 0.35); setAttribute(entity, Attribute.GENERIC_ATTACK_DAMAGE, 6.0); } } else if (type == EntityType.SKELETON) { double r = random.nextDouble(); if (r < 0.40) mutation = MobMutation.SKELETON_SOLDIER; else if (r < 0.70) mutation = MobMutation.SKELETON_MASTER; else mutation = MobMutation.SKELETON_LORD; applyArmor(entity, mutation.color); entity.getEquipment().setItemInMainHand(new ItemStack(Material.BOW)); if (mutation == MobMutation.SKELETON_LORD) { setAttribute(entity, Attribute.GENERIC_MAX_HEALTH, 40.0); entity.setHealth(40.0); setAttribute(entity, Attribute.GENERIC_MOVEMENT_SPEED, 0.3); } } else if (type == EntityType.WITHER_SKELETON) { if (random.nextBoolean()) { mutation = MobMutation.WITHER_GUARD; ItemStack bow = new ItemStack(Material.BOW); bow.addEnchantment(Enchantment.FLAME, 1); entity.getEquipment().setItemInMainHand(bow); } else { mutation = MobMutation.WITHERMANCER; entity.getEquipment().setItemInMainHand(new ItemStack(Material.STONE_SWORD)); setAttribute(entity, Attribute.GENERIC_ATTACK_DAMAGE, 10.0); } } else if (type == EntityType.ENDERMAN) { mutation = MobMutation.END_GUARD; setAttribute(entity, Attribute.GENERIC_MOVEMENT_SPEED, 0.4); setAttribute(entity, Attribute.GENERIC_ATTACK_DAMAGE, 10.0); } entity.getPersistentDataContainer().set(MUTATION_KEY, PersistentDataType.STRING, mutation.name()); updateMobName(entity); }
     public static void updateMobName(LivingEntity entity) { if (entity.getPersistentDataContainer().has(MUTATION_KEY, PersistentDataType.STRING)) { String name = entity.getPersistentDataContainer().get(MUTATION_KEY, PersistentDataType.STRING); MobMutation m = MobMutation.valueOf(name); double health = Math.round(entity.getHealth() * 10.0) / 10.0; entity.customName(Component.text(m.name + " ", m.color != null ? NamedTextColor.nearestTo(me.login.dungeon.utils.DungeonUtils.bukkitToTextColor(m.color)) : NamedTextColor.RED).append(Component.text("[HP: " + health + "]", NamedTextColor.GRAY))); entity.setCustomNameVisible(true); } }
@@ -70,22 +79,16 @@ public class MobManager {
         IS_SPAWNING = true;
         try {
             Skeleton skel = (Skeleton) loc.getWorld().spawnEntity(loc, EntityType.SKELETON);
-            // Feature 6: Add DUNGEON_MOB_KEY so they don't burn in sun (checked in Listener)
             skel.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1);
             skel.getPersistentDataContainer().set(UNDEAD_KEY, PersistentDataType.BYTE, (byte) 1);
-
             skel.customName(Component.text("Undead Skeleton", NamedTextColor.DARK_RED));
             skel.setCustomNameVisible(true);
-
             ItemStack bow = new ItemStack(Material.BOW);
             bow.addEnchantment(Enchantment.POWER, 3);
             skel.getEquipment().setItemInMainHand(bow);
-
             setAttribute(skel, Attribute.GENERIC_ATTACK_DAMAGE, 8.0);
             return skel;
-        } finally {
-            IS_SPAWNING = false;
-        }
+        } finally { IS_SPAWNING = false; }
     }
 
     public static Entity spawnCryptZombie(Location loc) {
@@ -96,17 +99,9 @@ public class MobManager {
             zombie.setAdult();
             zombie.customName(Component.text("Crypt Zombie", NamedTextColor.DARK_GRAY));
             zombie.setCustomNameVisible(true);
-
             zombie.getEquipment().setHelmet(new ItemStack(Material.TURTLE_HELMET));
-            zombie.getEquipment().setChestplate(null);
-            zombie.getEquipment().setLeggings(null);
-            zombie.getEquipment().setBoots(null);
-
             zombie.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, Integer.MAX_VALUE, 0, false, false));
-
             return zombie;
-        } finally {
-            IS_SPAWNING = false;
-        }
+        } finally { IS_SPAWNING = false; }
     }
 }

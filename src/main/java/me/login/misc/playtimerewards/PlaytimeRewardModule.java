@@ -1,9 +1,8 @@
 package me.login.misc.playtimerewards;
 
 import me.login.Login;
-import me.login.misc.dailyreward.DailyRewardDatabase; // This import is now used
+import me.login.misc.tokens.TokenManager;
 import net.milkbowl.vault.economy.Economy;
-import org.bukkit.command.TabCompleter;
 
 /**
  * Initializes all components for the Playtime Rewards feature.
@@ -12,6 +11,7 @@ public class PlaytimeRewardModule {
 
     private final Login plugin;
     private final Economy economy;
+    private final TokenManager tokenManager;
     private PlaytimeRewardDatabase database;
     private PlaytimeRewardLogger logger;
     private PlaytimeRewardManager manager;
@@ -19,13 +19,10 @@ public class PlaytimeRewardModule {
     private PlaytimeRewardCommand command;
     private PlaytimeRewardNPCListener npcListener;
 
-    // --- ADDED FIELD ---
-    private final DailyRewardDatabase dailyRewardDatabase;
-
-    public PlaytimeRewardModule(Login plugin, Economy economy, DailyRewardDatabase dailyRewardDatabase) {
+    public PlaytimeRewardModule(Login plugin, Economy economy, TokenManager tokenManager) {
         this.plugin = plugin;
         this.economy = economy;
-        this.dailyRewardDatabase = dailyRewardDatabase; // Store this
+        this.tokenManager = tokenManager;
     }
 
     public boolean init() {
@@ -43,16 +40,15 @@ public class PlaytimeRewardModule {
                 this.logger = new PlaytimeRewardLogger(plugin, plugin.getLagClearLogger().getJDA());
             }
 
-            // 3. Get DailyRewardDatabase for token management
-            // This is now passed in the constructor
-            if (dailyRewardDatabase == null) { // This will now correctly check the field
-                plugin.getLogger().severe("DailyRewardDatabase is not initialized! PlaytimeReward token rewards will fail.");
+            // 3. Verify TokenManager (was previously DailyRewardDatabase check)
+            if (tokenManager == null) {
+                plugin.getLogger().severe("TokenManager is not initialized! PlaytimeReward token rewards will fail.");
                 return false;
             }
 
-            // 4. Initialize Manager (Core Logic)
-            this.manager = new PlaytimeRewardManager(plugin, database, logger, economy, dailyRewardDatabase); // Pass it here
-            plugin.getServer().getPluginManager().registerEvents(manager, plugin); // Registers Join/Quit for playtime tracking
+            // 4. Initialize Manager (Core Logic) - passing tokenManager now
+            this.manager = new PlaytimeRewardManager(plugin, database, logger, economy, tokenManager);
+            plugin.getServer().getPluginManager().registerEvents(manager, plugin);
 
             // 5. Initialize GUI
             this.gui = new PlaytimeRewardGUI(plugin, manager);
@@ -83,7 +79,8 @@ public class PlaytimeRewardModule {
 
     public void shutdown() {
         if (manager != null) {
-            manager.saveAllPlayerData();
+            // FIX: Use the synchronous save method to prevent "Plugin disabled" scheduler error
+            manager.saveAllPlayerDataSync();
         }
         if (database != null) {
             database.disconnect();

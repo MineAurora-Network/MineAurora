@@ -14,16 +14,15 @@ import java.util.List;
 
 public class KillLeaderboardCommand implements TabExecutor {
 
-    private final Login plugin;
     private final LeaderboardDisplayManager manager;
     private final List<String> leaderboardTypes = Arrays.asList(
-            "kills", "deaths", "playtime", "balance", "credits", "lifesteal", "token", "parkour", "all"
+            "kills", "deaths", "playtime", "balance", "credits",
+            "lifesteal", "tokens", "parkour", "mobkills", "blocksbroken", "all"
     );
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public KillLeaderboardCommand(Login plugin, LeaderboardDisplayManager manager) {
-        this.plugin = plugin;
         this.manager = manager;
     }
 
@@ -37,17 +36,19 @@ public class KillLeaderboardCommand implements TabExecutor {
         }
 
         if (args.length != 1) {
-            sendUsage(sender);
+            audience.sendMessage(miniMessage.deserialize("<red>Usage: /killleaderboard <type|all></red>"));
             return true;
         }
 
         String typeToRemove = args[0].toLowerCase();
 
-        if (!leaderboardTypes.contains(typeToRemove)) {
+        if (!leaderboardTypes.contains(typeToRemove) && !typeToRemove.equals("token")) { // allow "token" as alias for cleanup
             audience.sendMessage(miniMessage.deserialize("<red>Invalid leaderboard type specified.</red>"));
-            sendUsage(sender);
             return true;
         }
+
+        // Normalize token -> tokens for cleanup
+        if (typeToRemove.equals("token")) typeToRemove = "tokens";
 
         int removedCount = manager.removeLeaderboardsByType(typeToRemove);
 
@@ -69,10 +70,5 @@ public class KillLeaderboardCommand implements TabExecutor {
             return completions;
         }
         return null;
-    }
-
-    private void sendUsage(CommandSender sender) {
-        Audience audience = (Audience) sender;
-        audience.sendMessage(miniMessage.deserialize("<red>Usage: /killleaderboard <type|all></red>"));
     }
 }

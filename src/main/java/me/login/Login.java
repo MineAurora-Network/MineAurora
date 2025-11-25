@@ -302,24 +302,28 @@ public class Login extends JavaPlugin implements Listener {
                         getLogger().info("Initializing Coinflip system...");
                         coinflipModule.initLogicAndListeners();
 
-                        getLogger().info("Initializing DailyRewardModule...");
-                        dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
-                        if (!dailyRewardModule.init()) {
-                            getLogger().severe("Failed to initialize DailyReward Module!");
-                        }
 
-                        getLogger().info("Initializing PlaytimeRewardModule...");
-                        playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, dailyRewardDatabase);
-                        if (!playtimeRewardModule.init()) {
-                            getLogger().severe("Failed to initialize PlaytimeReward Module!");
-                        }
-
+                        // 1. Initialize TokenModule FIRST (others depend on it)
                         getLogger().info("Initializing TokenModule...");
-                        tokenModule = new TokenModule(Login.this, luckPermsApi, dailyRewardDatabase);
+                        tokenModule = new TokenModule(Login.this, luckPermsApi);
                         if (!tokenModule.init()) {
                             getLogger().severe("Failed to initialize Token Module!");
                         }
                         tokenManager = tokenModule.getTokenManager();
+
+                        // 2. Initialize DailyRewardModule (Pass TokenManager)
+                        getLogger().info("Initializing DailyRewardModule...");
+                        dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase, tokenManager);
+                        if (!dailyRewardModule.init()) {
+                            getLogger().severe("Failed to initialize DailyReward Module!");
+                        }
+
+                        // 3. Initialize PlaytimeRewardModule (Pass TokenManager)
+                        getLogger().info("Initializing PlaytimeRewardModule...");
+                        playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, tokenManager);
+                        if (!playtimeRewardModule.init()) {
+                            getLogger().severe("Failed to initialize PlaytimeReward Module!");
+                        }
 
                         getLogger().info("Initializing QuestsModule...");
                         questsModule.enable();
@@ -620,8 +624,24 @@ public class Login extends JavaPlugin implements Listener {
         return (coinflipModule != null) ? coinflipModule.getCoinflipAdminMenu() : null;
     }
 
+    public me.login.misc.tokens.TokenModule getTokenModule() {
+        return this.tokenModule;
+    }
+
+    public me.login.premimumfeatures.credits.CreditsModule getCreditsModule() {
+        return this.creditsModule;
+    }
+
+    public me.login.misc.hologram.HologramModule getHologramModule() {
+        return this.hologramModule;
+    }
+
     public LeaderboardModule getLeaderboardModule() {
         return leaderboardModule;
+    }
+
+    public me.login.loginsystem.LoginModule getLoginModule() {
+        return this.loginModule;
     }
 
     public LagClearConfig getLagClearConfig() {

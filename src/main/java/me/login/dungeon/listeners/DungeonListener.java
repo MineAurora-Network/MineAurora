@@ -52,7 +52,23 @@ public class DungeonListener implements Listener {
         this.logger = logger;
     }
 
-    // --- FIX: BLOCK ENDERMAN TELEPORTATION ---
+    // --- NEW: PROTECT MARKERS ---
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onMarkerDamage(EntityDamageEvent event) {
+        // Prevent markers from being destroyed by explosions, players, etc.
+        if (event.getEntity().getPersistentDataContainer().has(MobManager.MARKER_KEY, PersistentDataType.INTEGER)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onMarkerInteract(PlayerInteractAtEntityEvent event) {
+        // Prevent right-clicking markers
+        if (event.getRightClicked().getPersistentDataContainer().has(MobManager.MARKER_KEY, PersistentDataType.INTEGER)) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntityTeleport(EntityTeleportEvent event) {
         // Prevent dungeon mobs (like Endermen) from teleporting out of rooms
@@ -74,8 +90,6 @@ public class DungeonListener implements Listener {
             }
         }
     }
-
-    // ... (Rest of listener methods remain unchanged) ...
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntitySpawn(EntitySpawnEvent event) {

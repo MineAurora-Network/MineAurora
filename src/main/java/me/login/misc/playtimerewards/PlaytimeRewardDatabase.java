@@ -6,7 +6,6 @@ import java.io.File;
 import java.sql.*;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 import java.util.logging.Level;
 
 public class PlaytimeRewardDatabase {
@@ -15,9 +14,6 @@ public class PlaytimeRewardDatabase {
     private Connection connection;
     private final Login plugin;
 
-    /**
-     * Internal record to hold player data.
-     */
     public record PlayerPlaytimeData(long totalPlaytimeSeconds, int lastClaimedLevel, int notifiedLevel) {}
 
     public PlaytimeRewardDatabase(Login plugin) {
@@ -77,11 +73,6 @@ public class PlaytimeRewardDatabase {
         }
     }
 
-    /**
-     * Gets all playtime data for a player.
-     * @param uuid The player's UUID.
-     * @return CompletableFuture with their data, or defaults (0, 0, 0) if not found.
-     */
     public CompletableFuture<PlayerPlaytimeData> getPlayerPlaytimeData(UUID uuid) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT total_playtime_seconds, last_claimed_level, notified_level FROM player_playtime WHERE player_uuid = ?";
@@ -99,37 +90,41 @@ public class PlaytimeRewardDatabase {
             } catch (SQLException e) {
                 plugin.getLogger().log(Level.WARNING, "Could not get playtime data for " + uuid, e);
             }
-            return new PlayerPlaytimeData(0, 0, 0); // Default data
+            return new PlayerPlaytimeData(0, 0, 0);
         }, runnable -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, runnable));
     }
 
     /**
-     * Saves all playtime data for a player.
-     * @param uuid The player's UUID.
-     * @param totalPlaytimeSeconds The total accumulated playtime.
-     * @param lastClaimedLevel The highest level they have claimed.
-     * @param notifiedLevel The highest level they have been notified for.
+     * Async save method (Normal use)
      */
     public void savePlayerPlaytimeData(UUID uuid, long totalPlaytimeSeconds, int lastClaimedLevel, int notifiedLevel) {
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            String sql = "INSERT INTO player_playtime (player_uuid, total_playtime_seconds, last_claimed_level, notified_level) VALUES (?, ?, ?, ?) " +
-                    "ON CONFLICT(player_uuid) DO UPDATE SET " +
-                    "total_playtime_seconds = ?, " +
-                    "last_claimed_level = ?, " +
-                    "notified_level = ?";
-            try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
-                ps.setString(1, uuid.toString());
-                ps.setLong(2, totalPlaytimeSeconds);
-                ps.setInt(3, lastClaimedLevel);
-                ps.setInt(4, notifiedLevel);
-                // On conflict
-                ps.setLong(5, totalPlaytimeSeconds);
-                ps.setInt(6, lastClaimedLevel);
-                ps.setInt(7, notifiedLevel);
-                ps.executeUpdate();
-            } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "Could not save playtime data for " + uuid, e);
-            }
-        });
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () ->
+                savePlayerPlaytimeDataSync(uuid, totalPlaytimeSeconds, lastClaimedLevel, notifiedLevel)
+        );
+    }
+
+    /**
+     * Synchronous save method (For shutdown)
+     * This runs on the current thread and does not schedule a new task.
+     */
+    public void savePlayerPlaytimeDataSync(UUID uuid, long totalPlaytimeSeconds, int lastClaimedLevel, int notifiedLevel) {
+        String sql = "INSERT INTO player_playtime (player_uuid, total_playtime_seconds, last_claimed_level, notified_level) VALUES (?, ?, ?, ?) " +
+                "ON CONFLICT(player_uuid) DO UPDATE SET " +
+                "total_playtime_seconds = ?, " +
+                "last_claimed_level = ?, " +
+                "notified_level = ?";
+        try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setLong(2, totalPlaytimeSeconds);
+            ps.setInt(3, lastClaimedLevel);
+            ps.setInt(4, notifiedLevel);
+            // On conflict
+            ps.setLong(5, totalPlaytimeSeconds);
+            ps.setInt(6, lastClaimedLevel);
+            ps.setInt(7, notifiedLevel);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Could not save playtime data for " + uuid, e);
+        }
     }
 }

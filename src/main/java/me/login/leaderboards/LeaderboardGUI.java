@@ -2,208 +2,189 @@ package me.login.leaderboards;
 
 import me.login.Login;
 import me.login.utility.TextureToHead;
-import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Statistic;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class LeaderboardGUI implements Listener {
 
     private final Login plugin;
     private final StatsFetcher fetcher;
-    private final MiniMessage miniMessage;
+    private final LeaderboardDisplayManager displayManager;
 
-    public LeaderboardGUI(Login plugin) {
+    public LeaderboardGUI(Login plugin, StatsFetcher fetcher, LeaderboardDisplayManager displayManager) {
         this.plugin = plugin;
-        this.fetcher = new StatsFetcher(plugin);
-        this.miniMessage = MiniMessage.miniMessage();
+        this.fetcher = fetcher;
+        this.displayManager = displayManager;
+    }
+
+    private static class LeaderboardHolder implements InventoryHolder {
+        @Override public org.bukkit.inventory.Inventory getInventory() { return null; }
     }
 
     public void openMenu(Player player) {
-        Inventory inv = Bukkit.createInventory(null, 45, Component.text("Leaderboards"));
-        FileConfiguration config = plugin.getConfig();
+        Inventory inv = Bukkit.createInventory(new LeaderboardHolder(), 45, Component.text("Leaderboards"));
 
-        ItemStack glass = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta gMeta = glass.getItemMeta();
-        gMeta.setDisplayName(" ");
-        glass.setItemMeta(gMeta);
+        ItemStack glass = createItem(Material.GRAY_STAINED_GLASS_PANE, " ");
+        for (int i = 0; i < 45; i++) inv.setItem(i, glass);
 
-        for (int i = 0; i < 45; i++) {
-            inv.setItem(i, glass);
-        }
+        // Row 2
+        String tex12 = plugin.getConfig().getString("leaderboard_inventory.slot12", "");
+        inv.setItem(12, createHead(tex12, "§e§lBalance Leaderboard", "§7Click to view top balances."));
 
-        // --- Row 2: Main Stats (Heads) ---
+        String tex13 = plugin.getConfig().getString("leaderboard_inventory.slot13", "");
+        inv.setItem(13, createHead(tex13, "§c§lDeaths Leaderboard", "§7Click to view top deaths."));
 
-        // Slot 12: Balance
-        String balanceUrl = config.getString("leaderboard_inventory.slot12");
-        setItem(inv, 12, balanceUrl, Material.PAPER, "§e§lBalance Leaderboard", "§7Click to view top balances.");
+        String tex14 = plugin.getConfig().getString("leaderboard_inventory.slot14", "");
+        inv.setItem(14, createHead(tex14, "§a§lKills Leaderboard", "§7Click to view top kills."));
 
-        // Slot 13: Deaths
-        String deathsUrl = config.getString("leaderboard_inventory.slot13");
-        setItem(inv, 13, deathsUrl, Material.SKELETON_SKULL, "§c§lDeaths Leaderboard", "§7Click to view top deaths.");
+        // Row 3
+        inv.setItem(21, createItem(Material.AMETHYST_SHARD, "§d§lTokens Leaderboard", "§7Click to view top tokens."));
+        inv.setItem(22, createItem(Material.EMERALD, "§6§lCredits Leaderboard", "§7Click to view top credits."));
+        inv.setItem(23, createItem(Material.CLOCK, "§b§lPlaytime Leaderboard", "§7Click to view top playtime."));
 
-        // Slot 14: Kills
-        String killsUrl = config.getString("leaderboard_inventory.slot14");
-        setItem(inv, 14, killsUrl, Material.DIAMOND_SWORD, "§a§lKills Leaderboard", "§7Click to view top kills.");
-
-
-        // --- Row 3: Misc Stats (Items) ---
-
-        // Slot 21: Tokens
-        setItem(inv, 21, null, Material.AMETHYST_SHARD, "§d§lTokens Leaderboard", "§7Click to view top tokens.");
-
-        // Slot 22: Credits
-        setItem(inv, 22, null, Material.SUNFLOWER, "§6§lCredits Leaderboard", "§7Click to view top credits.");
-
-        // Slot 23: Playtime
-        setItem(inv, 23, null, Material.CLOCK, "§b§lPlaytime Leaderboard", "§7Click to view top playtime.");
-
-        // Slots 30, 31, 32 are intentionally left as Gray Glass
+        // Row 4
+        inv.setItem(30, createItem(Material.ZOMBIE_HEAD, "§2§lMob Kills Leaderboard", "§7Click to view top mob kills."));
+        inv.setItem(31, createItem(Material.IRON_PICKAXE, "§f§lBlocks Broken Leaderboard", "§7Click to view top miners."));
+        inv.setItem(32, createItem(Material.PAPER, "§7Coming Soon...", ""));
 
         player.openInventory(inv);
     }
 
-    private void setItem(Inventory inv, int slot, String headUrl, Material fallback, String name, String... lore) {
-        ItemStack item;
-        if (headUrl != null && !headUrl.isEmpty()) {
-            item = TextureToHead.getHead(headUrl);
-        } else {
-            item = new ItemStack(fallback);
+    private void openLeaderboardView(Player player, String type) {
+        Inventory inv = Bukkit.createInventory(new LeaderboardHolder(), 54, Component.text("Top 10: " + capitalize(type)));
+
+        ItemStack glass = createItem(Material.BLACK_STAINED_GLASS_PANE, " ");
+        for (int i = 0; i < 54; i++) inv.setItem(i, glass);
+
+        inv.setItem(49, createItem(Material.ARROW, "§cGo Back"));
+
+        // Set Loading indicators
+        ItemStack loading = createItem(Material.CLOCK, "§eLoading Data...", "§7Please wait.");
+        int[] slots = {12, 13, 14, 21, 22, 23, 30, 31, 32, 40};
+        for (int slot : slots) inv.setItem(slot, loading);
+
+        player.openInventory(inv);
+
+        // ASYNC FETCH
+        CompletableFuture<Map<String, Double>> future;
+        switch (type) {
+            case "kills": future = fetcher.getTopStats(Statistic.PLAYER_KILLS, 10); break;
+            case "deaths": future = fetcher.getTopStats(Statistic.DEATHS, 10); break;
+            case "playtime": future = fetcher.getTopStats(Statistic.PLAY_ONE_MINUTE, 10); break;
+            case "balance": future = fetcher.getTopBalances(10); break;
+            case "tokens": future = fetcher.getTopTokens(10); break;
+            case "credits": future = fetcher.getTopCredits(10); break;
+            case "mobkills": future = fetcher.getTopMobKills(10); break;
+            case "blocksbroken": future = fetcher.getTopBlocksBroken(10); break;
+            default: future = CompletableFuture.completedFuture(new HashMap<>());
         }
-        ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(name);
-        meta.setLore(Arrays.asList(lore));
-        item.setItemMeta(meta);
-        inv.setItem(slot, item);
+
+        future.thenAccept(stats -> {
+            // SWITCH BACK TO MAIN THREAD TO UPDATE INVENTORY
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (player.getOpenInventory().getTopInventory().equals(inv)) {
+                    int rank = 1;
+                    for (Map.Entry<String, Double> entry : stats.entrySet()) {
+                        if (rank > 10) break;
+
+                        String name = entry.getKey();
+                        double val = entry.getValue();
+                        String displayVal = LeaderboardFormatter.formatNoDecimal(val);
+
+                        if (type.equals("playtime")) displayVal = (long)(val / 20 / 3600) + "h";
+                        if (type.equals("balance") || type.equals("credits")) displayVal = "$" + LeaderboardFormatter.formatSuffix(val);
+
+                        ItemStack skull = new ItemStack(Material.PLAYER_HEAD);
+                        SkullMeta meta = (SkullMeta) skull.getItemMeta();
+                        meta.setOwner(name);
+                        meta.setDisplayName("§6#" + rank + " §e" + name);
+                        meta.setLore(Arrays.asList("§7Value: §f" + displayVal));
+                        skull.setItemMeta(meta);
+
+                        inv.setItem(slots[rank - 1], skull);
+                        rank++;
+                    }
+                    // Clear remaining loading slots if less than 10 players
+                    for (int i = stats.size(); i < 10; i++) {
+                        inv.setItem(slots[i], createItem(Material.BARRIER, "§cNo Data"));
+                    }
+                }
+            });
+        });
     }
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
-        if (!e.getView().getTitle().equals("Leaderboards")) return;
-        e.setCancelled(true);
+        if (e.getInventory().getHolder() instanceof LeaderboardHolder) {
+            e.setCancelled(true);
+            if (e.getCurrentItem() == null) return;
+            Player p = (Player) e.getWhoClicked();
+            int slot = e.getRawSlot();
+            String title = e.getView().getTitle();
 
-        if (!(e.getWhoClicked() instanceof Player)) return;
-        Player p = (Player) e.getWhoClicked();
-        int slot = e.getRawSlot();
-
-        String type = null;
-        switch (slot) {
-            case 12: type = "balance"; break;
-            case 13: type = "deaths"; break;
-            case 14: type = "kills"; break;
-            case 21: type = "tokens"; break;
-            case 22: type = "credits"; break;
-            case 23: type = "playtime"; break;
-            default: return;
-        }
-
-        p.closeInventory();
-        sendLeaderboardChat(p, type, 1);
-    }
-
-    public void sendLeaderboardChat(Player player, String type, int page) {
-        int pageSize = 10;
-        Map<String, Double> stats;
-
-        // Using lower limit for chat to avoid lag, can increase if needed
-        switch (type.toLowerCase()) {
-            case "balance": stats = fetcher.getTopBalances(100); break;
-            case "credits": stats = fetcher.getTopCredits(100); break;
-            case "token": case "tokens": stats = fetcher.getTopTokens(100); break; // Support both
-            case "kills": stats = fetcher.getTopStats(Statistic.PLAYER_KILLS, 100); break;
-            case "deaths": stats = fetcher.getTopStats(Statistic.DEATHS, 100); break;
-            case "playtime": stats = fetcher.getTopStats(Statistic.PLAY_ONE_MINUTE, 100); break;
-            case "parkour": stats = fetcher.getTopParkour(100); break;
-            default:
-                player.sendMessage("§cLeaderboard type '" + type + "' not implemented yet.");
-                return;
-        }
-
-        List<Map.Entry<String, Double>> list = new ArrayList<>(stats.entrySet());
-        int totalPages = (int) Math.ceil((double) list.size() / pageSize);
-        if (list.isEmpty()) totalPages = 1;
-
-        if (page < 1) page = 1;
-        if (page > totalPages) page = totalPages;
-
-        Audience audience = (Audience) player;
-        String prefixRaw = plugin.getConfig().getString("server_prefix", "<gradient:blue:aqua>[MineAurora]</gradient> ");
-
-        Component header = miniMessage.deserialize(prefixRaw + " <yellow>Top " + capitalize(type) + " [Page " + page + "/" + totalPages + "]");
-        audience.sendMessage(header);
-
-        int start = (page - 1) * pageSize;
-        int end = Math.min(start + pageSize, list.size());
-
-        if (list.isEmpty()) {
-            audience.sendMessage(miniMessage.deserialize("<gray>No data available for this leaderboard.</gray>"));
-        } else {
-            for (int i = start; i < end; i++) {
-                Map.Entry<String, Double> entry = list.get(i);
-                String value;
-                String smallValue = LeaderboardFormatter.formatSuffix(entry.getValue());
-
-                if (type.equalsIgnoreCase("playtime")) {
-                    long hours = (long) (entry.getValue() / 20 / 3600);
-                    value = String.valueOf(hours) + "h";
-                    smallValue = value;
-                } else if (type.equalsIgnoreCase("balance") || type.equalsIgnoreCase("credits")) {
-                    // As requested: Value in chat uses the short format (100.15M)
-                    value = smallValue;
-                } else {
-                    value = LeaderboardFormatter.formatNoDecimal(entry.getValue());
+            if (title.equals("Leaderboards")) {
+                switch (slot) {
+                    case 12: openLeaderboardView(p, "balance"); break;
+                    case 13: openLeaderboardView(p, "deaths"); break;
+                    case 14: openLeaderboardView(p, "kills"); break;
+                    case 21: openLeaderboardView(p, "tokens"); break;
+                    case 22: openLeaderboardView(p, "credits"); break;
+                    case 23: openLeaderboardView(p, "playtime"); break;
+                    case 30: openLeaderboardView(p, "mobkills"); break;
+                    case 31: openLeaderboardView(p, "blocksbroken"); break;
                 }
-
-                // #1. Player | Value
-                String line = "<white>" + (i + 1) + ". <green>" + entry.getKey() + " <gray>| <yellow>" + value;
-                audience.sendMessage(miniMessage.deserialize(line));
+            } else if (title.startsWith("Top 10:")) {
+                if (slot == 49) openMenu(p);
             }
         }
+    }
 
-        // Navigation Buttons
-        // These use a hidden command `_navigate` to handle the pagination click
-        Component nav = Component.text("");
-
-        if (page > 1) {
-            nav = nav.append(Component.text("Previous Page", NamedTextColor.RED)
-                    .clickEvent(ClickEvent.runCommand("/leaderboard _navigate " + type + " " + (page - 1)))
-                    .hoverEvent(Component.text("Go to page " + (page - 1))));
-        } else {
-            nav = nav.append(Component.text("Previous Page", NamedTextColor.GRAY));
+    private ItemStack createItem(Material mat, String name, String... lore) {
+        ItemStack item = new ItemStack(mat);
+        ItemMeta meta = item.getItemMeta();
+        meta.displayName(Component.text(name).decoration(TextDecoration.ITALIC, false));
+        if (lore.length > 0) {
+            List<Component> l = new ArrayList<>();
+            for (String s : lore) if(!s.isEmpty()) l.add(Component.text(s).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+            meta.lore(l);
         }
+        item.setItemMeta(meta);
+        return item;
+    }
 
-        nav = nav.append(Component.text(" || ", NamedTextColor.DARK_GRAY));
-
-        if (page < totalPages) {
-            nav = nav.append(Component.text("Next Page", NamedTextColor.GREEN)
-                    .clickEvent(ClickEvent.runCommand("/leaderboard _navigate " + type + " " + (page + 1)))
-                    .hoverEvent(Component.text("Go to page " + (page + 1))));
+    private ItemStack createHead(String texture, String name, String... lore) {
+        ItemStack item;
+        if (texture != null && !texture.isEmpty()) {
+            item = TextureToHead.getHead(texture);
         } else {
-            nav = nav.append(Component.text("Next Page", NamedTextColor.GRAY));
+            item = new ItemStack(Material.PLAYER_HEAD);
         }
-
-        audience.sendMessage(nav);
+        ItemMeta meta = item.getItemMeta();
+        meta.setDisplayName(name);
+        if (lore.length > 0) {
+            meta.setLore(Arrays.asList(lore));
+        }
+        item.setItemMeta(meta);
+        return item;
     }
 
     private String capitalize(String str) {
-        if (str == null || str.isEmpty()) return str;
         return str.substring(0, 1).toUpperCase() + str.substring(1);
     }
 }

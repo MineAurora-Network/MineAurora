@@ -20,17 +20,19 @@ public class LeaderboardCommand implements TabExecutor {
     private final LeaderboardDisplayManager manager;
     private final LeaderboardGUI gui;
 
-    // Admin spawn types
-    private final List<String> spawnTypes = Arrays.asList("kills", "deaths", "playtime", "balance", "credits", "lifesteal", "token", "parkour", "tokens");
-    // User subcommands
+    // Removed "token", kept "tokens"
+    private final List<String> spawnTypes = Arrays.asList(
+            "kills", "deaths", "playtime", "balance", "credits",
+            "lifesteal", "tokens", "parkour", "mobkills", "blocksbroken"
+    );
     private final List<String> subCommands = Arrays.asList("reload", "toggleop", "menu");
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public LeaderboardCommand(Login plugin, LeaderboardModule module, LeaderboardDisplayManager manager) {
+    public LeaderboardCommand(Login plugin, LeaderboardModule module, LeaderboardDisplayManager manager, LeaderboardGUI gui) {
         this.plugin = plugin;
         this.module = module;
         this.manager = manager;
-        this.gui = new LeaderboardGUI(plugin);
+        this.gui = gui;
     }
 
     @Override
@@ -38,19 +40,12 @@ public class LeaderboardCommand implements TabExecutor {
         final Audience audience = (Audience) sender;
 
         if (!(sender instanceof Player)) {
-            // Console logic
             if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
                 module.reload();
-                audience.sendMessage(miniMessage.deserialize("<green>Leaderboards reloaded.</green>"));
+                sender.sendMessage("Reloaded.");
                 return true;
             }
-            if (args.length == 1 && args[0].equalsIgnoreCase("toggleop")) {
-                boolean newState = !LeaderboardModule.isShowOps();
-                LeaderboardModule.setShowOps(newState);
-                audience.sendMessage(miniMessage.deserialize("<green>Leaderboard OP visibility set to: " + newState + "</green>"));
-                return true;
-            }
-            audience.sendMessage(miniMessage.deserialize("<red>Command not supported from console.</red>"));
+            sender.sendMessage("This command is for players.");
             return true;
         }
 
@@ -63,21 +58,9 @@ public class LeaderboardCommand implements TabExecutor {
 
         String arg = args[0].toLowerCase();
 
-        // Hidden command for chat pagination functionality
-        if (arg.equals("_navigate")) {
-            if (args.length < 3) return true; // Silently fail if args missing
-            String type = args[1];
-            int page = 1;
-            try {
-                page = Integer.parseInt(args[2]);
-            } catch (NumberFormatException ignored) {}
-            gui.sendLeaderboardChat(player, type, page);
-            return true;
-        }
-
-        // Admin Logic for Spawning/Reloading
+        // Admin Commands
         if (!player.hasPermission("leaderboards.admin")) {
-            audience.sendMessage(miniMessage.deserialize("<red>No permission.</red>"));
+            gui.openMenu(player);
             return true;
         }
 
@@ -90,7 +73,7 @@ public class LeaderboardCommand implements TabExecutor {
             case "toggleop":
                 boolean newState = !LeaderboardModule.isShowOps();
                 LeaderboardModule.setShowOps(newState);
-                audience.sendMessage(miniMessage.deserialize("<green>Leaderboard OP visibility set to: " + newState + "</green>"));
+                audience.sendMessage(miniMessage.deserialize("<green>Leaderboard OP visibility: " + newState + "</green>"));
                 return true;
 
             default:
@@ -98,7 +81,7 @@ public class LeaderboardCommand implements TabExecutor {
                     manager.createLeaderboard(player.getLocation(), arg, player);
                     return true;
                 }
-                sendUsage(player);
+                audience.sendMessage(miniMessage.deserialize("<red>Usage: /leaderboard <type> (to spawn) or /leaderboard menu</red>"));
                 return true;
         }
     }
@@ -113,18 +96,11 @@ public class LeaderboardCommand implements TabExecutor {
                 StringUtil.copyPartialMatches(partial, spawnTypes, completions);
                 StringUtil.copyPartialMatches(partial, subCommands, completions);
             } else {
-                // Regular players only see "menu"
                 StringUtil.copyPartialMatches(partial, Arrays.asList("menu"), completions);
             }
-
             completions.sort(String.CASE_INSENSITIVE_ORDER);
             return completions;
         }
         return null;
-    }
-
-    private void sendUsage(Player player) {
-        Audience audience = (Audience) player;
-        audience.sendMessage(miniMessage.deserialize("<red>Usage: /leaderboard <menu|type|reload|toggleop></red>"));
     }
 }

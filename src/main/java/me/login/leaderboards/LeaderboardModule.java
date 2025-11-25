@@ -1,13 +1,16 @@
 package me.login.leaderboards;
 
 import me.login.Login;
+import me.login.misc.tokens.TokenModule;
+import me.login.premimumfeatures.credits.CreditsModule;
 import org.bukkit.scheduler.BukkitTask;
 
 public class LeaderboardModule {
 
     private final Login plugin;
     private LeaderboardDisplayManager leaderboardManager;
-    private LeaderboardGUI leaderboardGUI; // Store GUI instance
+    private LeaderboardGUI leaderboardGUI;
+    private StatsFetcher statsFetcher;
     private BukkitTask leaderboardUpdateTask;
     private static boolean showOps = true;
 
@@ -18,8 +21,16 @@ public class LeaderboardModule {
     public boolean init() {
         plugin.getLogger().info("Initializing LeaderboardModule...");
 
-        this.leaderboardManager = new LeaderboardDisplayManager(plugin);
-        this.leaderboardGUI = new LeaderboardGUI(plugin); // Initialize GUI here
+        // 1. Get Database Dependencies
+        TokenModule tokenModule = plugin.getTokenModule();
+        CreditsModule creditsModule = plugin.getCreditsModule();
+
+        // 2. Initialize StatsFetcher with dependencies
+        this.statsFetcher = new StatsFetcher(plugin, tokenModule, creditsModule);
+
+        // 3. Initialize Managers
+        this.leaderboardManager = new LeaderboardDisplayManager(plugin, statsFetcher);
+        this.leaderboardGUI = new LeaderboardGUI(plugin, statsFetcher, leaderboardManager);
 
         registerCommands();
         registerListeners();
@@ -53,8 +64,7 @@ public class LeaderboardModule {
     }
 
     private void registerCommands() {
-        // Pass the module instance for reload/toggleop functionality
-        LeaderboardCommand leaderboardCmd = new LeaderboardCommand(plugin, this, this.leaderboardManager);
+        LeaderboardCommand leaderboardCmd = new LeaderboardCommand(plugin, this, this.leaderboardManager, this.leaderboardGUI);
         plugin.getCommand("leaderboard").setExecutor(leaderboardCmd);
         plugin.getCommand("leaderboard").setTabCompleter(leaderboardCmd);
 
@@ -64,17 +74,11 @@ public class LeaderboardModule {
     }
 
     private void registerListeners() {
-        // Register Protection Listener
         plugin.getServer().getPluginManager().registerEvents(new LeaderboardProtectionListener(this.leaderboardManager), plugin);
-
-        // Register GUI Listener (The GUI class itself implements Listener)
         plugin.getServer().getPluginManager().registerEvents(this.leaderboardGUI, plugin);
 
-        // Register NPC Listener (Check if Citizens is enabled first to be safe, or just register if hard dependency)
         if (plugin.getServer().getPluginManager().isPluginEnabled("Citizens")) {
             plugin.getServer().getPluginManager().registerEvents(new LeaderboardNPCListener(plugin, this.leaderboardGUI), plugin);
-        } else {
-            plugin.getLogger().warning("Citizens not found! Leaderboard NPC will not work.");
         }
     }
 
@@ -84,15 +88,6 @@ public class LeaderboardModule {
         this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(plugin, delay, refreshTicks);
     }
 
-    public LeaderboardDisplayManager getLeaderboardManager() {
-        return leaderboardManager;
-    }
-
-    public static boolean isShowOps() {
-        return showOps;
-    }
-
-    public static void setShowOps(boolean show) {
-        showOps = show;
-    }
+    public static boolean isShowOps() { return showOps; }
+    public static void setShowOps(boolean show) { showOps = show; }
 }

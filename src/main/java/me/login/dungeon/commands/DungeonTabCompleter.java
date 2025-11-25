@@ -17,17 +17,21 @@ import java.util.stream.Collectors;
 public class DungeonTabCompleter implements TabCompleter {
 
     private final DungeonManager dungeonManager;
-    private final DungeonRewardManager rewardManager; // Added
+    private final DungeonRewardManager rewardManager;
 
     public DungeonTabCompleter(DungeonManager dungeonManager, DungeonRewardManager rewardManager) {
         this.dungeonManager = dungeonManager;
-        this.rewardManager = rewardManager; // Added
+        this.rewardManager = rewardManager;
     }
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
-            return filter(Arrays.asList("create", "delete", "setup", "start", "stop", "check", "redo", "tempopen", "rngmeter", "give"), args[0]);
+            return filter(Arrays.asList(
+                    "create", "delete", "setup", "start", "stop", "check",
+                    "redo", "tempopen", "rngmeter", "give",
+                    "removemobspawn", "showremaining"
+            ), args[0]);
         }
 
         if (args.length == 2) {
@@ -40,7 +44,9 @@ public class DungeonTabCompleter implements TabCompleter {
                 }
                 return filter(options, args[1]);
             }
-            if (sub.equals("create") || sub.equals("delete") || sub.equals("start") || sub.equals("setup") || sub.equals("redo") || sub.equals("check") || sub.equals("tempopen")) {
+            if (sub.equals("create") || sub.equals("delete") || sub.equals("start") ||
+                    sub.equals("setup") || sub.equals("redo") || sub.equals("check") ||
+                    sub.equals("tempopen")) {
                 return Collections.singletonList("<id>");
             }
         }
@@ -48,7 +54,7 @@ public class DungeonTabCompleter implements TabCompleter {
         if (args.length == 3) {
             String sub = args[0].toLowerCase();
             if (sub.equals("setup")) {
-                return filter(Arrays.asList("room", "lastroom", "entrydoor"), args[2]);
+                return filter(Arrays.asList("room", "lastroom", "entrydoor", "chest"), args[2]);
             }
             if (sub.equals("tempopen")) {
                 return Collections.singletonList("door");
@@ -58,12 +64,15 @@ public class DungeonTabCompleter implements TabCompleter {
             }
         }
 
-        // ... rest of the logic remains same ...
         if (args.length == 4) {
             String sub = args[0].toLowerCase();
             String type = args[2].toLowerCase();
 
             if (sub.equals("tempopen")) {
+                return Collections.singletonList("<roomID>");
+            }
+
+            if (sub.equals("check")) {
                 return Collections.singletonList("<roomID>");
             }
 
@@ -82,10 +91,15 @@ public class DungeonTabCompleter implements TabCompleter {
 
         if (args.length == 5) {
             String sub = args[0].toLowerCase();
+
+            if (sub.equals("check")) {
+                return Collections.singletonList("mobspawn");
+            }
+
             if (sub.equals("setup")) {
                 String type = args[2].toLowerCase();
                 if (type.equals("room")) {
-                    return filter(Arrays.asList("mobspawn", "resetspawns", "door"), args[4]);
+                    return filter(Arrays.asList("mobspawn", "door"), args[4]);
                 }
                 if (type.equals("lastroom")) {
                     String lastType = args[3].toLowerCase();

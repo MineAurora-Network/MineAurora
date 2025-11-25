@@ -82,4 +82,5 @@ public class LoginModule {
     public LoginDatabase getLoginDatabase() { return loginDatabase; }
     public LoginSystemLogger getLogger() { return loginSystemLogger; }
     public ParkourManager getParkourManager() { return parkourManager; }
+
 }

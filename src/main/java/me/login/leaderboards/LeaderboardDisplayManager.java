@@ -2,8 +2,6 @@ package me.login.leaderboards;
 
 import me.clip.placeholderapi.PlaceholderAPI;
 import me.login.Login;
-import net.kyori.adventure.audience.Audience;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -24,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class LeaderboardDisplayManager {
 
@@ -35,9 +34,9 @@ public class LeaderboardDisplayManager {
     private final boolean papiEnabled;
     private final MiniMessage miniMessage;
 
-    public LeaderboardDisplayManager(Login plugin) {
+    public LeaderboardDisplayManager(Login plugin, StatsFetcher fetcher) {
         this.plugin = plugin;
-        this.fetcher = new StatsFetcher(plugin);
+        this.fetcher = fetcher;
         this.papiEnabled = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
         this.miniMessage = MiniMessage.miniMessage();
         loadLeaderboards();
@@ -52,7 +51,7 @@ public class LeaderboardDisplayManager {
         location.setPitch(0);
         TextDisplay textDisplay = spawnNewDisplay(location, type);
         if (textDisplay == null) {
-            ((Audience) creator).sendMessage(miniMessage.deserialize("<red>Failed to spawn entity.</red>"));
+            creator.sendMessage("Failed to spawn entity.");
             return;
         }
 
@@ -66,20 +65,18 @@ public class LeaderboardDisplayManager {
         activeLeaderboards.put(textDisplay.getUniqueId(), info);
         saveLeaderboards();
 
-        ((Audience) creator).sendMessage(miniMessage.deserialize("<green>Leaderboard created.</green>"));
+        creator.sendMessage("Leaderboard created: " + type);
         updateDisplay(textDisplay.getUniqueId());
     }
 
     private TextDisplay spawnNewDisplay(Location location, String type) {
         if (location == null || location.getWorld() == null) return null;
-
-        // Force Chunk Load
         Chunk chunk = location.getChunk();
         if (!chunk.isLoaded()) chunk.load();
         chunk.setForceLoaded(true);
 
         TextDisplay textDisplay = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
-        textDisplay.setCustomName("leaderboard");
+        textDisplay.setCustomName("leaderboard_" + type);
         textDisplay.setCustomNameVisible(false);
         textDisplay.text(miniMessage.deserialize("<yellow>Loading " + type + "..."));
         textDisplay.setBillboard(Display.Billboard.VERTICAL);
@@ -104,10 +101,8 @@ public class LeaderboardDisplayManager {
         }
         String type = info.type();
         Location loc = info.getLocation();
+        if (loc == null) return;
 
-        if (loc == null) return; // World not loaded
-
-        // Ensure chunk is force loaded
         if (!loc.getChunk().isForceLoaded()) {
             loc.getChunk().load();
             loc.getChunk().setForceLoaded(true);
@@ -131,87 +126,92 @@ public class LeaderboardDisplayManager {
     }
 
     private void updateText(TextDisplay display, String type) {
-        // Handle "token" vs "tokens" mismatch by normalizing
-        String configKey = type.equals("tokens") ? "token" : type;
+        String configKey = type.equalsIgnoreCase("token") ? "tokens" : type.toLowerCase();
 
-        String titleFormat = plugin.getConfig().getString("leaderboards." + configKey + ".title", "<red>Title Missing (" + type + ")");
+        String titleFormat = plugin.getConfig().getString("leaderboards." + configKey + ".title", "<red>Title Missing</red>");
         String lineFormat = plugin.getConfig().getString("leaderboards." + configKey + ".line-format", "<white>%rank% %player% %value%");
-        String emptyLineFormat = plugin.getConfig().getString("leaderboards." + configKey + ".empty-line-format", "<gray>Empty");
+        String emptyLineFormat = plugin.getConfig().getString("leaderboards." + configKey + ".empty-line-format", "<gray>Empty</gray>");
         String footerFormat = plugin.getConfig().getString("leaderboards." + configKey + ".footer", "");
 
-        StringBuilder text = new StringBuilder();
-        text.append(titleFormat).append("%nl%");
-
-        Map<String, Double> stats;
-        switch (type.toLowerCase()) {
-            case "kills": stats = fetcher.getTopStats(Statistic.PLAYER_KILLS, 10); break;
-            case "deaths": stats = fetcher.getTopStats(Statistic.DEATHS, 10); break;
-            case "playtime": stats = fetcher.getTopStats(Statistic.PLAY_ONE_MINUTE, 10); break;
-            case "balance": stats = fetcher.getTopBalances(10); break;
-            case "credits": stats = fetcher.getTopCredits(10); break;
-            case "token": case "tokens": stats = fetcher.getTopTokens(10); break;
-            case "parkour": stats = fetcher.getTopParkour(10); break;
-            case "lifesteal": stats = fetcher.getTopSkriptVar("lifesteal_level_%uuid%", 10); break;
-            default: stats = new HashMap<>();
+        CompletableFuture<Map<String, Double>> future;
+        switch (configKey) {
+            case "kills": future = fetcher.getTopStats(Statistic.PLAYER_KILLS, 10); break;
+            case "deaths": future = fetcher.getTopStats(Statistic.DEATHS, 10); break;
+            case "playtime": future = fetcher.getTopStats(Statistic.PLAY_ONE_MINUTE, 10); break;
+            case "balance": future = fetcher.getTopBalances(10); break;
+            case "credits": future = fetcher.getTopCredits(10); break;
+            case "tokens": future = fetcher.getTopTokens(10); break;
+            case "parkour": future = fetcher.getTopParkour(10); break;
+            case "mobkills": future = fetcher.getTopMobKills(10); break;
+            case "blocksbroken": future = fetcher.getTopBlocksBroken(10); break;
+            case "lifesteal": future = fetcher.getTopSkriptVar("lifesteal_level_%uuid%", 10); break;
+            default: future = CompletableFuture.completedFuture(new HashMap<>());
         }
 
-        List<Map.Entry<String, Double>> entries = new ArrayList<>(stats.entrySet());
+        future.thenAccept(stats -> {
+            List<Map.Entry<String, Double>> entries = new ArrayList<>(stats.entrySet());
+            StringBuilder text = new StringBuilder();
+            text.append(titleFormat).append("%nl%");
 
-        for (int i = 0; i < 10; i++) {
-            String line;
-            int rank = i + 1;
-            if (i < entries.size()) {
-                Map.Entry<String, Double> entry = entries.get(i);
-                String value;
+            for (int i = 0; i < 10; i++) {
+                String line;
+                int rank = i + 1;
+                if (i < entries.size()) {
+                    Map.Entry<String, Double> entry = entries.get(i);
+                    String value;
+                    String fullValue = LeaderboardFormatter.formatNoDecimal(entry.getValue());
+                    String smallValue = LeaderboardFormatter.formatSuffix(entry.getValue());
 
-                // Standard full format (e.g. 1,500)
-                String fullValue = LeaderboardFormatter.formatNoDecimal(entry.getValue());
-                // Suffix format (e.g. 1.5k)
-                String smallValue = LeaderboardFormatter.formatSuffix(entry.getValue());
+                    if (configKey.equals("playtime")) {
+                        long hours = (long) (entry.getValue() / 20 / 3600);
+                        value = String.valueOf(hours);
+                    } else if (configKey.equals("balance") || configKey.equals("credits")) {
+                        value = smallValue;
+                    } else {
+                        value = fullValue;
+                    }
 
-                if (type.equals("playtime")) {
-                    long hours = (long) (entry.getValue() / 20 / 3600);
-                    value = String.valueOf(hours);
-                } else if (type.equals("balance") || type.equals("credits")) {
-                    // Use short format as default %value% for these economy types
-                    value = smallValue;
+                    line = lineFormat
+                            .replace("%rank%", String.valueOf(rank))
+                            .replace("%player%", entry.getKey())
+                            .replace("%value%", value);
                 } else {
-                    value = fullValue;
+                    line = emptyLineFormat.replace("%rank%", String.valueOf(rank));
                 }
-
-                line = lineFormat
-                        .replace("%rank%", String.valueOf(rank))
-                        .replace("%player%", entry.getKey())
-                        .replace("%value%", value)
-                        .replace("%small_balance%", smallValue)
-                        .replace("%full_balance%", fullValue);
-            } else {
-                line = emptyLineFormat.replace("%rank%", String.valueOf(rank));
+                text.append(line).append("%nl%");
             }
-            text.append(line).append("%nl%");
-        }
 
-        String refresh = String.valueOf(plugin.getConfig().getLong("leaderboards.refresh-seconds", 60));
-        text.append(footerFormat.replace("%refresh-seconds%", refresh));
+            String refresh = String.valueOf(plugin.getConfig().getLong("leaderboards.refresh-seconds", 60));
+            text.append(footerFormat.replace("%refresh-seconds%", refresh));
 
-        String finalStr = text.toString();
-        if (papiEnabled) finalStr = PlaceholderAPI.setPlaceholders(null, finalStr);
+            String finalStr = text.toString();
+            if (papiEnabled) finalStr = PlaceholderAPI.setPlaceholders(null, finalStr);
 
-        display.text(miniMessage.deserialize(finalStr.replace("%nl%", "<newline>")));
+            String finalText = finalStr.replace("%nl%", "<newline>");
+
+            // Switch to main thread to update entity
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (display.isValid()) {
+                    display.text(miniMessage.deserialize(finalText));
+                }
+            });
+        });
     }
 
     public int removeLeaderboardsByType(String type) {
         int count = 0;
         List<UUID> toRemove = new ArrayList<>();
+        String searchType = type.equals("token") ? "tokens" : type;
+
         for (Map.Entry<UUID, LeaderboardInfo> entry : activeLeaderboards.entrySet()) {
-            if (type.equalsIgnoreCase("all") || entry.getValue().type().equalsIgnoreCase(type)) {
+            if (searchType.equalsIgnoreCase("all") || entry.getValue().type().equalsIgnoreCase(searchType)) {
                 toRemove.add(entry.getKey());
             }
         }
         for (UUID uuid : toRemove) {
             Entity e = Bukkit.getEntity(uuid);
             if (e != null) {
-                e.getChunk().setForceLoaded(false); // Unforce chunk
+                e.getChunk().setForceLoaded(false);
                 e.remove();
             }
             activeLeaderboards.remove(uuid);

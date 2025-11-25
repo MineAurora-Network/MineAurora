@@ -145,6 +145,8 @@ public class ParkourManager implements Listener {
         long now = System.currentTimeMillis();
         long cooldown = 24 * 60 * 60 * 1000;
 
+        database.incrementParkourCompletions(player.getUniqueId());
+
         plugin.getTokenManager().getTokenBalance(player.getUniqueId()).thenAccept(oldTokens -> {
             if (now - lastReward >= cooldown) {
                 plugin.getTokenManager().addTokens(player.getUniqueId(), 5);

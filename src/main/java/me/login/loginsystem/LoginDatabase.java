@@ -1,12 +1,16 @@
 package me.login.loginsystem;
 
 import me.login.Login;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.OfflinePlayer;
 
 import java.io.File;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class LoginDatabase {
@@ -27,10 +31,13 @@ public class LoginDatabase {
             Class.forName("org.sqlite.JDBC");
             connection = DriverManager.getConnection(url);
             try (Statement stmt = connection.createStatement()) {
+                // --- Original Tables ---
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS player_auth (uuid VARCHAR(36) PRIMARY KEY, hashed_password VARCHAR(255) NOT NULL, registration_ip VARCHAR(45), last_login_ip VARCHAR(45), last_login_timestamp BIGINT)");
-
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS login_parkour_points (id INTEGER PRIMARY KEY AUTOINCREMENT, world VARCHAR(50), x INT, y INT, z INT, type VARCHAR(20), point_index INT)");
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS login_parkour_cooldowns (uuid VARCHAR(36) PRIMARY KEY, last_reward BIGINT)");
+
+                // --- NEW TABLE FOR LEADERBOARD ---
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS login_parkour_completions (uuid VARCHAR(36) PRIMARY KEY, count INTEGER DEFAULT 0)");
             }
             plugin.getLogger().info("Connected to Login SQLite DB (login_data.db)");
         } catch (Exception e) {
@@ -46,6 +53,8 @@ public class LoginDatabase {
     public void disconnect() {
         try { if (connection != null && !connection.isClosed()) { connection.close(); plugin.getLogger().info("Disconnected Login SQLite DB."); } } catch (SQLException e) { e.printStackTrace(); }
     }
+
+    // --- ORIGINAL AUTH METHODS (Restored) ---
 
     public boolean isRegistered(UUID uuid) {
         if (getConnection() == null) return false;
@@ -116,6 +125,8 @@ public class LoginDatabase {
         return accounts;
     }
 
+    // --- ORIGINAL PARKOUR METHODS (Restored) ---
+
     public void addParkourPoint(Location loc, String type, int index) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             if (getConnection() == null) return;
@@ -177,6 +188,42 @@ public class LoginDatabase {
         });
     }
 
+    // --- NEW PARKOUR LEADERBOARD METHODS ---
+
+    public void incrementParkourCompletions(UUID uuid) {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            if (getConnection() == null) return;
+            // SQLite upsert to increment count
+            String sql = "INSERT INTO login_parkour_completions (uuid, count) VALUES (?, 1) ON CONFLICT(uuid) DO UPDATE SET count = count + 1";
+            try (PreparedStatement ps = getConnection().prepareStatement(sql)) {
+                ps.setString(1, uuid.toString());
+                ps.executeUpdate();
+            } catch (SQLException e) { e.printStackTrace(); }
+        });
+    }
+
+    public Map<String, Double> getTopParkourCompletions(int limit) {
+        Map<String, Double> results = new LinkedHashMap<>();
+        if (getConnection() == null) return results;
+
+        try (PreparedStatement ps = getConnection().prepareStatement("SELECT uuid, count FROM login_parkour_completions ORDER BY count DESC LIMIT ?")) {
+            ps.setInt(1, limit);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                String uuidStr = rs.getString("uuid");
+                double count = rs.getInt("count");
+                try {
+                    OfflinePlayer p = Bukkit.getOfflinePlayer(UUID.fromString(uuidStr));
+                    if (p.getName() != null) {
+                        results.put(p.getName(), count);
+                    }
+                } catch (Exception ignored) {}
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return results;
+    }
+
+    // Records
     public record PlayerAuthData(String uuid, String hashedPassword, String registrationIp, String lastLoginIp, long lastLoginTimestamp) {}
     public record ParkourPoint(String type, int index) {}
     public record ParkourPointData(String world, int x, int y, int z, String type, int index) {}

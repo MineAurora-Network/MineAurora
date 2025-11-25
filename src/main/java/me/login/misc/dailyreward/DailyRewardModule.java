@@ -2,6 +2,7 @@ package me.login.misc.dailyreward;
 
 import me.login.Login;
 import net.milkbowl.vault.economy.Economy;
+import me.login.misc.tokens.TokenManager;
 import org.bukkit.Bukkit;
 
 public class DailyRewardModule {
@@ -14,12 +15,12 @@ public class DailyRewardModule {
     private final DailyRewardCommand command;
     private final DailyRewardNPCListener npcListener;
 
-    // --- UPDATED CONSTRUCTOR ---
-    public DailyRewardModule(Login plugin, Economy economy, DailyRewardDatabase database) {
+    public DailyRewardModule(Login plugin, Economy economy, DailyRewardDatabase database, TokenManager tokenManager) {
+        // ...
         this.plugin = plugin;
         this.database = database; // Use the one from Login.java
         this.logger = new DailyRewardLogger(plugin);
-        this.manager = new DailyRewardManager(plugin, database, logger, economy);
+        this.manager = new DailyRewardManager(plugin, database, logger, economy, tokenManager);
         this.gui = new DailyRewardGUI(plugin, manager);
         this.command = new DailyRewardCommand(plugin, manager);
         this.npcListener = new DailyRewardNPCListener(plugin, manager);

@@ -47,15 +47,12 @@ public class DungeonManager {
         return pendingSetups.containsKey(player.getUniqueId());
     }
 
-    // Called for Doors (Block Break)
     public void handleBlockBreak(Player player, Location location) {
         if (!pendingSetups.containsKey(player.getUniqueId())) return;
         SetupContext ctx = pendingSetups.get(player.getUniqueId());
-        if (ctx.type.equalsIgnoreCase("chest")) return; // Ignore chest setup on break
+        if (ctx.type.equalsIgnoreCase("chest")) return;
 
         pendingSetups.remove(player.getUniqueId());
-        // ... (Existing logic for doors logic preserved here but omitted to focus on changes) ...
-        // Re-implementing critical door logic to ensure file completeness
 
         Location[] selection = selectionCache.computeIfAbsent(player.getUniqueId(), k -> new Location[2]);
         if (ctx.point.equalsIgnoreCase("pos1")) selection[0] = location; else selection[1] = location;
@@ -80,7 +77,6 @@ public class DungeonManager {
         }
     }
 
-    // Called for Chests (Right Click)
     public void handleInteract(Player player, Block block) {
         if (!pendingSetups.containsKey(player.getUniqueId())) return;
         SetupContext ctx = pendingSetups.get(player.getUniqueId());
@@ -92,7 +88,6 @@ public class DungeonManager {
                 dungeon.addChestLocation(block.getLocation());
                 saveDungeon(dungeon);
                 DungeonUtils.msg(player, "<gold>Chest added to Dungeon " + ctx.dungeonId + "!</gold>");
-                plugin.getLogger().info("[Dungeon Setup] Added chest at " + block.getLocation() + " for Dungeon " + ctx.dungeonId);
             }
         }
     }
@@ -116,7 +111,8 @@ public class DungeonManager {
         dungeons.remove(id);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                String[] qs = { "DELETE FROM dungeons WHERE id = ?", "DELETE FROM dungeon_rooms WHERE dungeon_id = ?", "DELETE FROM dungeon_room_spawns WHERE dungeon_id = ?", "DELETE FROM dungeon_chests WHERE dungeon_id = ?" };
+                // REMOVED dungeon_room_spawns from delete query
+                String[] qs = { "DELETE FROM dungeons WHERE id = ?", "DELETE FROM dungeon_rooms WHERE dungeon_id = ?", "DELETE FROM dungeon_chests WHERE dungeon_id = ?" };
                 for (String q : qs) {
                     try (PreparedStatement ps = database.getConnection().prepareStatement(q)) { ps.setInt(1, id); ps.executeUpdate(); }
                 }
@@ -125,7 +121,6 @@ public class DungeonManager {
     }
 
     public List<Integer> removeLastRooms(int dungeonId, int amount) {
-        // ... (Same as before) ...
         Dungeon dungeon = getDungeon(dungeonId);
         List<Integer> removedIds = new ArrayList<>();
         if (dungeon == null) return removedIds;
@@ -148,9 +143,7 @@ public class DungeonManager {
                 try (PreparedStatement ps = database.getConnection().prepareStatement("DELETE FROM dungeon_rooms WHERE dungeon_id = ? AND room_id = ?")) {
                     ps.setInt(1, dungeonId); ps.setInt(2, roomId); ps.executeUpdate();
                 }
-                try (PreparedStatement ps = database.getConnection().prepareStatement("DELETE FROM dungeon_room_spawns WHERE dungeon_id = ? AND room_id = ?")) {
-                    ps.setInt(1, dungeonId); ps.setInt(2, roomId); ps.executeUpdate();
-                }
+                // REMOVED spawn deletion
             } catch (SQLException e) { e.printStackTrace(); }
         });
     }
@@ -160,7 +153,6 @@ public class DungeonManager {
     public void saveDungeon(Dungeon dungeon) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                // ... (Dungeon, Rooms, Spawns saving logic same as before) ...
                 String sql = "INSERT OR REPLACE INTO dungeons (id, world, spawn_x, spawn_y, spawn_z, spawn_yaw, spawn_pitch, entry_world, entry_min_x, entry_min_y, entry_min_z, entry_max_x, entry_max_y, entry_max_z, boss_world, boss_x, boss_y, boss_z, chest_world, chest_x, chest_y, chest_z, bdoor_world, bdoor_min_x, bdoor_min_y, bdoor_min_z, bdoor_max_x, bdoor_max_y, bdoor_max_z, rdoor_world, rdoor_min_x, rdoor_min_y, rdoor_min_z, rdoor_max_x, rdoor_max_y, rdoor_max_z) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 try (PreparedStatement ps = database.getConnection().prepareStatement(sql)) {
                     ps.setInt(1, dungeon.getId());
@@ -178,7 +170,6 @@ public class DungeonManager {
                     ps.executeUpdate();
                 }
 
-                // Save Rooms
                 String roomSql = "INSERT OR REPLACE INTO dungeon_rooms (dungeon_id, room_id, door_min_x, door_min_y, door_min_z, door_max_x, door_max_y, door_max_z, door_world) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 try (PreparedStatement ps = database.getConnection().prepareStatement(roomSql)) {
                     for (DungeonRoom room : dungeon.getRooms().values()) {
@@ -191,18 +182,8 @@ public class DungeonManager {
                     ps.executeBatch();
                 }
 
-                // Save Spawns
-                try (PreparedStatement ps = database.getConnection().prepareStatement("DELETE FROM dungeon_room_spawns WHERE dungeon_id = ?")) { ps.setInt(1, dungeon.getId()); ps.executeUpdate(); }
-                try (PreparedStatement ps = database.getConnection().prepareStatement("INSERT INTO dungeon_room_spawns (dungeon_id, room_id, world, x, y, z) VALUES (?, ?, ?, ?, ?, ?)")) {
-                    for (DungeonRoom room : dungeon.getRooms().values()) {
-                        for (Location loc : room.getMobSpawnLocations()) {
-                            ps.setInt(1, dungeon.getId()); ps.setInt(2, room.getRoomId()); ps.setString(3, loc.getWorld().getName()); ps.setDouble(4, loc.getX()); ps.setDouble(5, loc.getY()); ps.setDouble(6, loc.getZ()); ps.addBatch();
-                        }
-                    }
-                    ps.executeBatch();
-                }
+                // REMOVED SPAWN SAVING
 
-                // SAVE CHESTS
                 try (PreparedStatement ps = database.getConnection().prepareStatement("DELETE FROM dungeon_chests WHERE dungeon_id = ?")) { ps.setInt(1, dungeon.getId()); ps.executeUpdate(); }
                 try (PreparedStatement ps = database.getConnection().prepareStatement("INSERT INTO dungeon_chests (dungeon_id, world, x, y, z) VALUES (?, ?, ?, ?, ?)")) {
                     for (Location loc : dungeon.getChestLocations()) {
@@ -268,20 +249,8 @@ public class DungeonManager {
             }
             rsRooms.close();
 
-            ResultSet rsSpawns = st.executeQuery("SELECT * FROM dungeon_room_spawns");
-            while (rsSpawns.next()) {
-                int dId = rsSpawns.getInt("dungeon_id");
-                Dungeon d = dungeons.get(dId);
-                if (d != null) {
-                    int rId = rsSpawns.getInt("room_id");
-                    DungeonRoom room = d.getRoom(rId);
-                    String wName = rsSpawns.getString("world");
-                    if (wName != null && Bukkit.getWorld(wName) != null) { room.addMobSpawnLocation(new Location(Bukkit.getWorld(wName), rsSpawns.getDouble("x"), rsSpawns.getDouble("y"), rsSpawns.getDouble("z"))); }
-                }
-            }
-            rsSpawns.close();
+            // REMOVED SPAWN LOADING
 
-            // LOAD CHESTS
             ResultSet rsChests = st.executeQuery("SELECT * FROM dungeon_chests");
             while (rsChests.next()) {
                 int dId = rsChests.getInt("dungeon_id");

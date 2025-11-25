@@ -17,6 +17,7 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -36,6 +37,13 @@ public class GameSession {
     private final List<Entity> trapMobs = new ArrayList<>();
     private Zombie bossEntity;
     private final List<Entity> minions = new ArrayList<>();
+
+    // --- Marker Restore System ---
+    private static class MarkerData {
+        Location loc; int roomId;
+        MarkerData(Location l, int r) { loc = l; roomId = r; }
+    }
+    private final List<MarkerData> storedMarkers = new ArrayList<>();
 
     private boolean isBossRoom = false;
     private boolean bossPhase1Triggered = false;
@@ -98,7 +106,6 @@ public class GameSession {
         }
         usedChests.add(loc);
 
-        // FIX: 50/50 Chance - Buff or Trap (No Empty)
         if (Math.random() < 0.50) {
             spawnBuffOrb(loc);
             DungeonUtils.msg(player, "<green><b>A Mysterious Orb appears!</b> <gray>Grab it!");
@@ -202,24 +209,39 @@ public class GameSession {
     }
 
     public void startRoom() {
-        // FIX: Room 7 / Boss Room Logic
         if (isBossRoom) {
-            // Boss room doesn't use standard spawns, just trigger boss if not active
             if (bossEntity == null) {
                 spawnBoss();
             }
             return;
         }
 
-        DungeonRoom room = dungeon.getRoom(currentRoomId);
-        if (room == null) return;
-        List<Location> spawns = room.getMobSpawnLocations();
-        if (spawns.isEmpty()) { DungeonUtils.error(player, "No spawns for Room " + currentRoomId); return; }
-
         activeMobs.clear();
-        for (Location loc : spawns) {
-            Entity e = MobManager.spawnRoomMob(loc, currentRoomId);
-            if (e != null) activeMobs.add(e);
+
+        Location center = dungeon.getSpawnLocation();
+        if (center == null) { DungeonUtils.error(player, "Dungeon spawn not set!"); return; }
+
+        // Scan for TEXT DISPLAY markers
+        Collection<Entity> nearby = center.getWorld().getNearbyEntities(center, 300, 300, 300);
+
+        int found = 0;
+        for (Entity e : nearby) {
+            // Check for TextDisplay specifically
+            if (e instanceof TextDisplay && e.getPersistentDataContainer().has(MobManager.MARKER_KEY, PersistentDataType.INTEGER)) {
+                int markerRoomId = e.getPersistentDataContainer().get(MobManager.MARKER_KEY, PersistentDataType.INTEGER);
+
+                if (markerRoomId == currentRoomId) {
+                    Location loc = e.getLocation();
+
+                    storedMarkers.add(new MarkerData(loc.clone(), markerRoomId));
+                    e.remove();
+
+                    Entity mob = MobManager.spawnRoomMob(loc, currentRoomId);
+                    if (mob != null) activeMobs.add(mob);
+
+                    found++;
+                }
+            }
         }
     }
 
@@ -288,7 +310,6 @@ public class GameSession {
         }
     }
 
-    // ... (rest of methods)
     private void spawnBoss() { if (dungeon.getBossSpawnLocation() == null) return; DungeonUtils.msg(player, "<dark_red><b>BOSS SPAWNED!</b>"); bossEntity = MobManager.spawnBoss(dungeon.getBossSpawnLocation()); }
     public void checkBossHealth() {
         if (bossEntity == null || bossEntity.isDead()) return;
@@ -355,6 +376,14 @@ public class GameSession {
         minions.forEach(Entity::remove);
         minions.clear();
         if (bossEntity != null) bossEntity.remove();
+
+        // --- RESTORE MARKERS ---
+        // Respawn TEXT DISPLAYS
+        for (MarkerData data : storedMarkers) {
+            MobManager.spawnMarker(data.loc, data.roomId);
+        }
+        storedMarkers.clear();
+
         resetDoors(Material.COAL_BLOCK);
         if (dungeon.getRewardChestLocation() != null) {
             dungeon.getRewardChestLocation().getBlock().setType(Material.AIR);
