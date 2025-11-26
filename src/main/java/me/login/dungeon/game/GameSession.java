@@ -36,6 +36,7 @@ public class GameSession {
     private final List<Entity> activeMobs = new ArrayList<>();
     private final List<Entity> trapMobs = new ArrayList<>();
     private Zombie bossEntity;
+    private Zombie bossGuard;
     private final List<Entity> minions = new ArrayList<>();
 
     // --- Marker Restore System ---
@@ -49,6 +50,10 @@ public class GameSession {
     private boolean bossPhase1Triggered = false;
     private boolean bossPhase2Triggered = false;
     private boolean isBossInvulnerable = false;
+
+    // Boss cutscene states
+    private boolean guardDefeated = false;
+    private boolean bossSpawned = false;
 
     // --- Timer & Key Logic ---
     private ArmorStand keyStand;
@@ -97,6 +102,25 @@ public class GameSession {
 
     public boolean isChestUsed(Location loc) {
         return usedChests.contains(loc);
+    }
+
+    public void triggerMiniRewardChest(Location loc) {
+        if (usedChests.contains(loc)) {
+            DungeonUtils.error(player, "This chest is already looted!");
+            return;
+        }
+        usedChests.add(loc);
+
+        // 30% Chance for 2000 coins
+        if (Math.random() < 0.30) {
+            // Placeholder for economy logic
+            DungeonUtils.msg(player, "<green><b>JACKPOT!</b> <yellow>You found 2,000 Coins!");
+            // me.login.misc.tokens.TokenManager.giveTokens(player, 2000); // Example if you have tokens
+            player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
+        } else {
+            DungeonUtils.msg(player, "<gray>The chest was empty...");
+            player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_CHEST_OPEN, 1f, 0.5f);
+        }
     }
 
     public void triggerChest(Location loc) {
@@ -158,12 +182,13 @@ public class GameSession {
     public int getCurrentRoomId() { return currentRoomId; }
     public Player getPlayer() { return player; }
     public boolean isBossActive() { return bossEntity != null && !bossEntity.isDead(); }
+    public boolean isGuardActive() { return bossGuard != null && !bossGuard.isDead(); }
     public Zombie getBossEntity() { return bossEntity; }
     public boolean isBossInvulnerable() { return isBossInvulnerable; }
     public boolean isBossDead() { return bossDead; }
 
     public boolean hasMob(Entity entity) {
-        return activeMobs.contains(entity) || minions.contains(entity) || trapMobs.contains(entity) || (bossEntity != null && bossEntity.equals(entity));
+        return activeMobs.contains(entity) || minions.contains(entity) || trapMobs.contains(entity) || (bossEntity != null && bossEntity.equals(entity)) || (bossGuard != null && bossGuard.equals(entity));
     }
 
     public boolean isKeyEntity(Entity entity) {
@@ -173,6 +198,7 @@ public class GameSession {
     public int getMobsLeft() {
         int count = activeMobs.size();
         if (isBossActive()) count++;
+        if (isGuardActive()) count++;
         count += minions.size();
         return count;
     }
@@ -193,6 +219,7 @@ public class GameSession {
         List<Entity> allMobs = new ArrayList<>(activeMobs);
         allMobs.addAll(minions);
         if (isBossActive()) allMobs.add(bossEntity);
+        if (isGuardActive()) allMobs.add(bossGuard);
         for (Entity e : allMobs) {
             if (e instanceof LivingEntity) {
                 ((LivingEntity) e).addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 100, 0, false, false));
@@ -210,39 +237,57 @@ public class GameSession {
 
     public void startRoom() {
         if (isBossRoom) {
-            if (bossEntity == null) {
-                spawnBoss();
+            if (!bossSpawned && !guardDefeated) {
+                startBossSequence();
             }
             return;
         }
 
         activeMobs.clear();
-
         Location center = dungeon.getSpawnLocation();
         if (center == null) { DungeonUtils.error(player, "Dungeon spawn not set!"); return; }
 
-        // Scan for TEXT DISPLAY markers
-        Collection<Entity> nearby = center.getWorld().getNearbyEntities(center, 300, 300, 300);
+        Collection<Entity> nearby = center.getWorld().getNearbyEntities(center, 250, 50, 250);
 
         int found = 0;
         for (Entity e : nearby) {
-            // Check for TextDisplay specifically
             if (e instanceof TextDisplay && e.getPersistentDataContainer().has(MobManager.MARKER_KEY, PersistentDataType.INTEGER)) {
                 int markerRoomId = e.getPersistentDataContainer().get(MobManager.MARKER_KEY, PersistentDataType.INTEGER);
 
                 if (markerRoomId == currentRoomId) {
                     Location loc = e.getLocation();
-
                     storedMarkers.add(new MarkerData(loc.clone(), markerRoomId));
                     e.remove();
-
                     Entity mob = MobManager.spawnRoomMob(loc, currentRoomId);
                     if (mob != null) activeMobs.add(mob);
-
                     found++;
                 }
             }
         }
+    }
+
+    // --- BOSS SEQUENCE LOGIC ---
+    private void startBossSequence() {
+        if (dungeon.getBossSpawnLocation() == null) return;
+
+        new BukkitRunnable() {
+            int tick = 0;
+            @Override
+            public void run() {
+                if (!player.isOnline()) { cancel(); return; }
+
+                if (tick == 0) DungeonUtils.msg(player, "&c&lBOSS&7: &fWho dares enter my domain?");
+                if (tick == 3) DungeonUtils.msg(player, "&c&lBOSS&7: &fYou think you can challenge me?");
+                if (tick == 6) DungeonUtils.msg(player, "&c&lBOSS&7: &fMy loyal guard will dispose of you!");
+
+                if (tick == 8) {
+                    DungeonUtils.msg(player, "&4&l(!) &cBoss Guard Spawned!");
+                    bossGuard = MobManager.spawnBossGuard(dungeon.getBossSpawnLocation());
+                    cancel();
+                }
+                tick++;
+            }
+        }.runTaskTimer(Login.getPlugin(Login.class), 0L, 40L); // 2 seconds per msg
     }
 
     public void spawnTrapHead(Location loc) {
@@ -280,6 +325,32 @@ public class GameSession {
     }
 
     public void handleMobDeath(Entity entity) {
+        // Boss Guard Logic
+        if (bossGuard != null && entity.equals(bossGuard)) {
+            guardDefeated = true;
+            bossGuard = null;
+            DungeonUtils.msg(player, "&c&lBOSS&7: &fUseless servant! I will do it myself!");
+
+            // Start Boss Spawn Sequence
+            new BukkitRunnable() {
+                int tick = 0;
+                @Override
+                public void run() {
+                    if (!player.isOnline()) { cancel(); return; }
+
+                    if (tick == 2) DungeonUtils.msg(player, "&c&lBOSS&7: &fPrepare to die!");
+                    if (tick == 4) DungeonUtils.msg(player, "&c&lBOSS&7: &fARISE!");
+
+                    if (tick == 5) {
+                        spawnBossWithEffects();
+                        cancel();
+                    }
+                    tick++;
+                }
+            }.runTaskTimer(Login.getPlugin(Login.class), 40L, 40L);
+            return;
+        }
+
         if (trapMobs.contains(entity)) {
             trapMobs.remove(entity);
             return;
@@ -289,7 +360,7 @@ public class GameSession {
             minions.remove(entity);
             if (minions.isEmpty() && isBossActive()) {
                 isBossInvulnerable = false;
-                DungeonUtils.msg(player, "<red>Boss Vulnerable!");
+                DungeonUtils.msg(player, "&cBoss Vulnerable! Attack now!");
             }
             return;
         }
@@ -303,25 +374,60 @@ public class GameSession {
                 if (!isBossRoom) {
                     dropKey(entity.getLocation());
                 }
-                if (isBossRoom && bossEntity == null) {
-                    spawnBoss();
-                }
             }
         }
     }
 
-    private void spawnBoss() { if (dungeon.getBossSpawnLocation() == null) return; DungeonUtils.msg(player, "<dark_red><b>BOSS SPAWNED!</b>"); bossEntity = MobManager.spawnBoss(dungeon.getBossSpawnLocation()); }
+    private void spawnBossWithEffects() {
+        Location loc = dungeon.getBossSpawnLocation();
+        // Burst Particles
+        loc.getWorld().spawnParticle(Particle.DUST, loc.add(0, 1, 0), 50, 1, 1, 1, new Particle.DustOptions(org.bukkit.Color.BLACK, 2));
+        loc.getWorld().spawnParticle(Particle.DUST, loc, 50, 1, 1, 1, new Particle.DustOptions(org.bukkit.Color.BLUE, 2));
+        loc.getWorld().playSound(loc, org.bukkit.Sound.ENTITY_WITHER_SPAWN, 1f, 0.5f);
+
+        bossEntity = MobManager.spawnBoss(loc);
+        bossSpawned = true;
+        DungeonUtils.msg(player, "&4&l(!) &cTHE BOSS HAS AWAKENED!");
+    }
+
     public void checkBossHealth() {
         if (bossEntity == null || bossEntity.isDead()) return;
         double health = bossEntity.getHealth();
-        if (health <= 200 && !bossPhase1Triggered) { bossPhase1Triggered = true; triggerMinionPhase(5); } else if (health <= 75 && !bossPhase2Triggered) { bossPhase2Triggered = true; triggerMinionPhase(7); }
+
+        // Phase 1: 250 HP
+        if (health <= 250 && !bossPhase1Triggered) {
+            bossPhase1Triggered = true;
+            isBossInvulnerable = true;
+            DungeonUtils.msg(player, "&c&lBOSS&7: &fMinions! Shield me!");
+            DungeonUtils.msg(player, "&eBoss is invulnerable until minions die!");
+            for (int i = 0; i < 3; i++) minions.add(MobManager.spawnWeakMinion(bossEntity.getLocation()));
+        }
+        // Phase 2: 100 HP
+        else if (health <= 100 && !bossPhase2Triggered) {
+            bossPhase2Triggered = true;
+            isBossInvulnerable = true;
+            DungeonUtils.msg(player, "&c&lBOSS&7: &fElite Guards! Destroy them!");
+            DungeonUtils.msg(player, "&eBoss is invulnerable until minions die!");
+            for (int i = 0; i < 5; i++) minions.add(MobManager.spawnStrongMinion(bossEntity.getLocation()));
+        }
     }
-    private void triggerMinionPhase(int count) { isBossInvulnerable = true; DungeonUtils.msg(player, "<yellow>Boss Invulnerable! Kill minions!"); for (int i = 0; i < count; i++) { minions.add(MobManager.spawnMinion(bossEntity.getLocation())); } }
+
     public void handleBossDeath() {
-        bossDead = true; DungeonUtils.msg(player, "<gold><b>Dungeon Cleared!</b></gold>");
-        if (dungeon.getRewardDoor() != null) { openDoor(dungeon.getRewardDoor()); DungeonUtils.msg(player, "<green>Treasure Room Open!"); }
-        if (dungeon.getRewardChestLocation() != null) { dungeon.getRewardChestLocation().getBlock().setType(Material.CHEST); }
+        bossDead = true;
+        bossEntity = null;
+
+        DungeonUtils.msg(player, "&c&lBOSS&7: &fImpossible... my power...");
+        DungeonUtils.msg(player, "&6&l(!) &eDungeon Cleared!");
+
+        if (dungeon.getRewardDoor() != null) {
+            openDoor(dungeon.getRewardDoor());
+            DungeonUtils.msg(player, "&aTreasure Room Open!");
+        }
+        if (dungeon.getRewardChestLocation() != null) {
+            dungeon.getRewardChestLocation().getBlock().setType(Material.CHEST);
+        }
     }
+
     private void dropKey(Location deathLoc) {
         cleanupKey(); MobManager.IS_SPAWNING = true;
         try {
@@ -376,9 +482,8 @@ public class GameSession {
         minions.forEach(Entity::remove);
         minions.clear();
         if (bossEntity != null) bossEntity.remove();
+        if (bossGuard != null) bossGuard.remove();
 
-        // --- RESTORE MARKERS ---
-        // Respawn TEXT DISPLAYS
         for (MarkerData data : storedMarkers) {
             MobManager.spawnMarker(data.loc, data.roomId);
         }

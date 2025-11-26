@@ -56,7 +56,7 @@ public class MobManager {
         MobMutation(String name, Color color) { this.name = name; this.color = color; }
     }
 
-    // --- NEW METHOD: SPAWN TEXT DISPLAY MARKER ---
+    // --- SPAWN MARKER (Text Display with hidden name) ---
     public static void spawnMarker(Location loc, int roomId) {
         TextDisplay display = (TextDisplay) loc.getWorld().spawnEntity(loc, EntityType.TEXT_DISPLAY);
         display.setCustomName("Mob Spawn " + roomId);
@@ -72,8 +72,93 @@ public class MobManager {
     private static void applyArmor(LivingEntity entity, Color color) { if (color == null) return; entity.getEquipment().setHelmet(createColoredArmor(Material.LEATHER_HELMET, color)); entity.getEquipment().setChestplate(createColoredArmor(Material.LEATHER_CHESTPLATE, color)); entity.getEquipment().setLeggings(createColoredArmor(Material.LEATHER_LEGGINGS, color)); entity.getEquipment().setBoots(createColoredArmor(Material.LEATHER_BOOTS, color)); }
     private static ItemStack createColoredArmor(Material mat, Color color) { ItemStack item = new ItemStack(mat); LeatherArmorMeta meta = (LeatherArmorMeta) item.getItemMeta(); meta.setColor(color); item.setItemMeta(meta); return item; }
     private static void setAttribute(LivingEntity entity, Attribute attr, double value) { if (entity.getAttribute(attr) != null) { entity.getAttribute(attr).setBaseValue(value); } }
-    public static Zombie spawnBoss(Location loc) { IS_SPAWNING = true; try { Zombie boss = (Zombie) loc.getWorld().spawnEntity(loc, EntityType.ZOMBIE); boss.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1); boss.setAdult(); boss.setRemoveWhenFarAway(false); setAttribute(boss, Attribute.GENERIC_MAX_HEALTH, 500.0); boss.setHealth(500.0); setAttribute(boss, Attribute.GENERIC_MOVEMENT_SPEED, 0.25); setAttribute(boss, Attribute.GENERIC_ATTACK_DAMAGE, 12.0); boss.getEquipment().setHelmet(new ItemStack(Material.DIAMOND_HELMET)); boss.getEquipment().setChestplate(new ItemStack(Material.DIAMOND_CHESTPLATE)); boss.getEquipment().setItemInMainHand(new ItemStack(Material.DIAMOND_SWORD)); boss.customName(Component.text("§c§lDungeon Boss §7[HP: 500]")); boss.setCustomNameVisible(true); return boss; } finally { IS_SPAWNING = false; } }
-    public static Entity spawnMinion(Location loc) { IS_SPAWNING = true; try { Zombie minion = (Zombie) loc.getWorld().spawnEntity(loc, EntityType.ZOMBIE); minion.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1); minion.setBaby(true); setAttribute(minion, Attribute.GENERIC_MAX_HEALTH, 20.0); minion.customName(Component.text("§cMinion")); return minion; } finally { IS_SPAWNING = false; } }
+
+    public static Zombie spawnBoss(Location loc) {
+        IS_SPAWNING = true;
+        try {
+            Zombie boss = (Zombie) loc.getWorld().spawnEntity(loc, EntityType.ZOMBIE);
+            boss.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1);
+            boss.setAdult();
+            boss.setRemoveWhenFarAway(false);
+            setAttribute(boss, Attribute.GENERIC_MAX_HEALTH, 500.0);
+            boss.setHealth(500.0);
+            setAttribute(boss, Attribute.GENERIC_MOVEMENT_SPEED, 0.25);
+            setAttribute(boss, Attribute.GENERIC_ATTACK_DAMAGE, 12.0);
+            boss.getEquipment().setHelmet(new ItemStack(Material.DIAMOND_HELMET));
+            boss.getEquipment().setChestplate(new ItemStack(Material.DIAMOND_CHESTPLATE));
+            boss.getEquipment().setItemInMainHand(new ItemStack(Material.DIAMOND_SWORD));
+            boss.customName(Component.text("§c§lDungeon Boss §7[HP: 500]"));
+            boss.setCustomNameVisible(true);
+            return boss;
+        } finally { IS_SPAWNING = false; }
+    }
+
+    // --- NEW BOSS GUARD AND MINION LOGIC ---
+
+    public static Zombie spawnBossGuard(Location loc) {
+        IS_SPAWNING = true;
+        try {
+            Zombie guard = (Zombie) loc.getWorld().spawnEntity(loc, EntityType.ZOMBIE);
+            guard.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1);
+            guard.setAdult();
+            guard.setRemoveWhenFarAway(false);
+
+            setAttribute(guard, Attribute.GENERIC_MAX_HEALTH, 150.0);
+            guard.setHealth(150.0);
+            setAttribute(guard, Attribute.GENERIC_ATTACK_DAMAGE, 8.0);
+            setAttribute(guard, Attribute.GENERIC_MOVEMENT_SPEED, 0.3);
+
+            guard.getEquipment().setHelmet(new ItemStack(Material.DIAMOND_HELMET));
+            guard.getEquipment().setChestplate(new ItemStack(Material.DIAMOND_CHESTPLATE));
+            guard.getEquipment().setLeggings(new ItemStack(Material.DIAMOND_LEGGINGS));
+            guard.getEquipment().setBoots(new ItemStack(Material.DIAMOND_BOOTS));
+            guard.getEquipment().setItemInMainHand(new ItemStack(Material.IRON_SWORD));
+
+            guard.customName(Component.text("§4§lBOSS GUARD §7[HP: 150]"));
+            guard.setCustomNameVisible(true);
+            return guard;
+        } finally { IS_SPAWNING = false; }
+    }
+
+    public static Zombie spawnWeakMinion(Location loc) {
+        IS_SPAWNING = true;
+        try {
+            Zombie minion = (Zombie) loc.getWorld().spawnEntity(loc, EntityType.ZOMBIE);
+            minion.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1);
+            minion.setBaby(true);
+
+            setAttribute(minion, Attribute.GENERIC_MAX_HEALTH, 40.0);
+            minion.setHealth(40.0);
+
+            minion.getEquipment().setHelmet(new ItemStack(Material.CHAINMAIL_HELMET));
+            minion.getEquipment().setChestplate(new ItemStack(Material.CHAINMAIL_CHESTPLATE));
+            minion.getEquipment().setItemInMainHand(new ItemStack(Material.STONE_SWORD));
+
+            minion.customName(Component.text("§cWeak Minion"));
+            minion.setCustomNameVisible(true);
+            return minion;
+        } finally { IS_SPAWNING = false; }
+    }
+
+    public static Zombie spawnStrongMinion(Location loc) {
+        IS_SPAWNING = true;
+        try {
+            Zombie minion = (Zombie) loc.getWorld().spawnEntity(loc, EntityType.ZOMBIE);
+            minion.getPersistentDataContainer().set(DUNGEON_MOB_KEY, PersistentDataType.BYTE, (byte) 1);
+            minion.setBaby(true);
+
+            setAttribute(minion, Attribute.GENERIC_MAX_HEALTH, 80.0);
+            minion.setHealth(80.0);
+
+            minion.getEquipment().setHelmet(new ItemStack(Material.DIAMOND_HELMET));
+            minion.getEquipment().setChestplate(new ItemStack(Material.DIAMOND_CHESTPLATE));
+            minion.getEquipment().setItemInMainHand(new ItemStack(Material.IRON_SWORD));
+
+            minion.customName(Component.text("§4Elite Minion"));
+            minion.setCustomNameVisible(true);
+            return minion;
+        } finally { IS_SPAWNING = false; }
+    }
 
     public static Entity spawnUndeadSkeleton(Location loc) {
         IS_SPAWNING = true;

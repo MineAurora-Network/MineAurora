@@ -16,10 +16,11 @@ import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.TextDisplay; // Imported TextDisplay
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
@@ -61,6 +62,18 @@ public class AdminCommands implements CommandExecutor {
 
         String sub = args[0].toLowerCase();
 
+        if (sub.equals("info")) {
+            if (args.length < 2) { DungeonUtils.error(player, "Usage: /dungeon info <id>"); return true; }
+            try {
+                int id = Integer.parseInt(args[1]);
+                Dungeon d = dungeonManager.getDungeon(id);
+                if (d == null) { DungeonUtils.error(player, "Dungeon not found."); return true; }
+
+                player.sendMessage(dungeonManager.getDungeonInfo(id));
+            } catch(NumberFormatException e) { DungeonUtils.error(player, "Invalid ID."); }
+            return true;
+        }
+
         if (sub.equals("showremaining")) {
             GameSession session = gameManager.getSession(player);
             if (session == null) {
@@ -76,12 +89,10 @@ public class AdminCommands implements CommandExecutor {
             return true;
         }
 
-        // --- UPDATED: Remove closest mob spawn marker (TEXT DISPLAY) ---
         if (sub.equals("removemobspawn")) {
             double closestDist = 4.0;
             Entity target = null;
             for (Entity e : player.getNearbyEntities(2, 2, 2)) {
-                // Check for TextDisplay
                 if (e instanceof TextDisplay && e.getPersistentDataContainer().has(MobManager.MARKER_KEY, org.bukkit.persistence.PersistentDataType.INTEGER)) {
                     double dist = e.getLocation().distanceSquared(player.getLocation());
                     if (dist < closestDist) {
@@ -200,17 +211,24 @@ public class AdminCommands implements CommandExecutor {
                 Dungeon d = dungeonManager.getDungeon(id);
                 if (d != null) {
                     int count = 0;
-                    for (Entity e : player.getNearbyEntities(50, 50, 50)) {
-                        // Check for TextDisplay
+                    for (Entity e : player.getNearbyEntities(250, 250, 250)) {
                         if (e instanceof TextDisplay && e.getPersistentDataContainer().has(MobManager.MARKER_KEY, org.bukkit.persistence.PersistentDataType.INTEGER)) {
                             int rId = e.getPersistentDataContainer().get(MobManager.MARKER_KEY, org.bukkit.persistence.PersistentDataType.INTEGER);
                             if (rId == roomId) {
-                                e.setGlowing(true);
+                                Location loc = e.getLocation();
+                                ArmorStand as = (ArmorStand) loc.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
+                                as.setGravity(false);
+                                as.setCanPickupItems(false);
+                                as.setCustomNameVisible(true);
+                                as.setCustomName("§cSpawn Room " + rId);
+                                as.setGlowing(true);
+                                as.getEquipment().setHelmet(new ItemStack(Material.GOLDEN_HELMET));
+                                new BukkitRunnable() { @Override public void run() { as.remove(); } }.runTaskLater(plugin, 200L);
                                 count++;
                             }
                         }
                     }
-                    DungeonUtils.msg(player, "Highlighted " + count + " markers nearby for Room " + roomId);
+                    DungeonUtils.msg(player, "Showing " + count + " markers for Room " + roomId + " (Lasts 10s)");
                 } else {
                     DungeonUtils.error(player, "Dungeon not found.");
                 }
@@ -228,7 +246,6 @@ public class AdminCommands implements CommandExecutor {
 
             String type = args[2].toLowerCase();
 
-            // CHEST SETUP
             if (type.equals("chest")) {
                 dungeonManager.startSetup(player, id, 0, "chest", "chest");
                 return true;
@@ -241,7 +258,7 @@ public class AdminCommands implements CommandExecutor {
             }
 
             if (type.equals("lastroom")) {
-                if (args.length < 4) { DungeonUtils.error(player, "Usage: ... lastroom <bossspawn/rewardloc/bossdoor/treasuredoor>"); return true; }
+                if (args.length < 4) { DungeonUtils.error(player, "Usage: ... lastroom <bossspawn/rewardloc/bossdoor/treasuredoor/minirewardchest>"); return true; }
                 String subType = args[3].toLowerCase();
                 Location loc = player.getLocation();
                 String locStr = loc.getWorld().getName() + ", " + loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ();
@@ -250,13 +267,17 @@ public class AdminCommands implements CommandExecutor {
                     dungeon.setBossSpawnLocation(loc);
                     dungeonManager.saveDungeon(dungeon);
                     DungeonUtils.msg(player, "Set Boss Spawn to your location.");
-                    plugin.getLogger().info("[Dungeon Setup] " + player.getName() + " set Boss Spawn for Dungeon " + id + " at " + locStr);
                 }
                 else if (subType.equals("rewardloc")) {
                     dungeon.setRewardChestLocation(loc);
                     dungeonManager.saveDungeon(dungeon);
                     DungeonUtils.msg(player, "Set Reward Chest Location to your location.");
-                    plugin.getLogger().info("[Dungeon Setup] " + player.getName() + " set Reward Chest for Dungeon " + id + " at " + locStr);
+                }
+                else if (subType.equals("minirewardchest")) { // NEW MINI CHEST SETUP
+                    dungeon.setMiniRewardChestLocation(loc);
+                    dungeonManager.saveDungeon(dungeon);
+                    DungeonUtils.msg(player, "Set Mini Reward Chest Location to your location.");
+                    plugin.getLogger().info("[Dungeon Setup] " + player.getName() + " set Mini Chest for Dungeon " + id + " at " + locStr);
                 }
                 else if (subType.equals("bossdoor")) {
                     if (args.length < 5) { DungeonUtils.error(player, "Usage: ... bossdoor <pos1/pos2>"); return true; }
@@ -278,9 +299,7 @@ public class AdminCommands implements CommandExecutor {
 
                     if (roomAction.equals("mobspawn")) {
                         Location loc = player.getLocation();
-                        // This uses the updated MobManager which spawns TextDisplay
                         MobManager.spawnMarker(loc, roomId);
-
                         DungeonUtils.msg(player, "Placed Spawn Marker for Room " + roomId + " at your location.");
                         plugin.getLogger().info("[Dungeon Setup] " + player.getName() + " placed marker for Room " + roomId + " at " + loc);
                     }
@@ -335,16 +354,17 @@ public class AdminCommands implements CommandExecutor {
 
     private void sendHelp(Player p) {
         DungeonUtils.msg(p, "<b>Admin Commands:</b>");
+        DungeonUtils.msg(p, "/dungeon info <id>");
         DungeonUtils.msg(p, "/dungeon setup <id> chest - Right click a chest");
         DungeonUtils.msg(p, "/dungeon showremaining - Highlights mobs");
         DungeonUtils.msg(p, "/dungeon create <id>");
         DungeonUtils.msg(p, "/dungeon delete <id>");
         DungeonUtils.msg(p, "/dungeon redo <id> <amount>");
         DungeonUtils.msg(p, "/dungeon setup <id> entrydoor <pos1/pos2>");
-        DungeonUtils.msg(p, "/dungeon setup <id> room <room> mobspawn - <b>Spawns Marker Stand</b>");
-        DungeonUtils.msg(p, "/dungeon removemobspawn - <b>Removes nearest marker</b>");
+        DungeonUtils.msg(p, "/dungeon setup <id> room <room> mobspawn");
+        DungeonUtils.msg(p, "/dungeon removemobspawn");
         DungeonUtils.msg(p, "/dungeon setup <id> room <room> door <pos1/pos2>");
-        DungeonUtils.msg(p, "/dungeon setup <id> lastroom <bossspawn/rewardloc>");
+        DungeonUtils.msg(p, "/dungeon setup <id> lastroom <bossspawn/rewardloc/minirewardchest>");
         DungeonUtils.msg(p, "/dungeon setup <id> lastroom <bossdoor/treasuredoor> <pos1/pos2>");
         DungeonUtils.msg(p, "/dungeon check <id> room <room> mobspawn");
         DungeonUtils.msg(p, "/dungeon start <id>");

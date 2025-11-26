@@ -3,6 +3,7 @@ package me.login.misc.tokens;
 import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.model.user.User;
 import org.bukkit.Bukkit;
@@ -18,14 +19,13 @@ import java.util.Optional;
 
 public class TokenManager {
     private final Login plugin;
-    private final TokenDatabase database; // CHANGED
+    private final TokenDatabase database;
     private final TokenLogger logger;
     private final LuckPerms luckPerms;
     private final ItemManager itemManager;
     private final MiniMessage mm;
     private final Component prefix;
 
-    // CHANGED: Constructor now accepts TokenDatabase
     public TokenManager(Login plugin, TokenDatabase database, TokenLogger logger, LuckPerms luckPerms, ItemManager itemManager) {
         this.plugin = plugin;
         this.database = database;
@@ -33,8 +33,26 @@ public class TokenManager {
         this.luckPerms = luckPerms;
         this.itemManager = itemManager;
         this.mm = MiniMessage.miniMessage();
-        String prefixString = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>:");
-        this.prefix = mm.deserialize(prefixString + " ");
+
+        String p1Raw = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>");
+        String p2Raw = plugin.getConfig().getString("server_prefix_2", "<white>:");
+
+        Component p1 = parseMixedContent(p1Raw);
+        Component p2 = parseMixedContent(p2Raw);
+
+        this.prefix = p1.append(p2).append(Component.text(" "));
+    }
+
+    private Component parseMixedContent(String input) {
+        if (input == null) return Component.empty();
+        if (input.contains("&") || input.contains("§")) {
+            return LegacyComponentSerializer.legacyAmpersand().deserialize(input);
+        }
+        try {
+            return mm.deserialize(input);
+        } catch (Exception e) {
+            return Component.text(input);
+        }
     }
 
     public MiniMessage getMiniMessage() {
@@ -53,6 +71,8 @@ public class TokenManager {
         return logger;
     }
 
+    public TokenDatabase getDatabase() { return database; }
+
     public CompletableFuture<Long> getTokenBalance(UUID uuid) {
         return database.getTokenBalance(uuid);
     }
@@ -67,7 +87,7 @@ public class TokenManager {
         }
     }
 
-    public void purchaseItem(Player player, String itemKey, long cost) {
+    public void purchaseItem(Player player, String itemKey, long cost, TokenShopGUI guiToUpdate) {
         database.removeTokens(player.getUniqueId(), cost).thenAccept(success -> {
             if (success) {
                 ItemStack item = itemManager.getItem(itemKey);
@@ -77,13 +97,22 @@ public class TokenManager {
                     logger.logAdmin("`" + player.getName() + "` failed to buy item `"+itemKey+"` (missing in items.yml). Refunded `" + cost + "` tokens.");
                     return;
                 }
-                player.getInventory().addItem(item);
+
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    player.getInventory().addItem(item);
+                    if (guiToUpdate != null) {
+                        guiToUpdate.updateBalanceItem(player);
+                    }
+                });
+
                 Component displayName = item.displayName().decoration(TextDecoration.ITALIC, false);
                 sendMsg(player, Component.text("You purchased ", NamedTextColor.GREEN)
                         .append(displayName.colorIfAbsent(NamedTextColor.WHITE))
                         .append(mm.deserialize(" for <gold>" + cost + " ☆</gold>!</green>")));
-                player.closeInventory();
-                logger.logShop("`" + player.getName() + "` purchased `" + itemKey + "` for `" + cost + "` tokens.");
+
+                String logMsg = "`" + player.getName() + "` purchased `" + itemKey + "` for `" + cost + "` tokens.";
+                logger.logShop(logMsg);
+
             } else {
                 sendMsg(player, "<red>You do not have enough tokens to purchase this!</red>");
             }
@@ -139,7 +168,7 @@ public class TokenManager {
             }
             canModify(sender, targetUUID).thenAccept(canModify -> {
                 if (!canModify) {
-                    sendMsg(sender, "<red>You cannot modify the token balance of a player with an equal or higher rank.</red>");
+                    sendMsg(sender, "<red>You cannot modify the token balance of a player with a higher rank.</red>");
                     return;
                 }
                 database.setTokens(targetUUID, amount);
@@ -161,11 +190,10 @@ public class TokenManager {
             return CompletableFuture.completedFuture(true);
         }
         Player senderPlayer = (Player) sender;
-        if (senderPlayer.getUniqueId().equals(targetUUID) && !senderPlayer.isOp()) {
-            return CompletableFuture.completedFuture(true);
-        }
+
         CompletableFuture<User> senderUserFuture = luckPerms.getUserManager().loadUser(senderPlayer.getUniqueId());
         CompletableFuture<User> targetUserFuture = luckPerms.getUserManager().loadUser(targetUUID);
+
         return senderUserFuture.thenCombine(targetUserFuture, (senderUser, targetUser) -> {
             String senderGroup = senderUser.getPrimaryGroup();
             String targetGroup = targetUser.getPrimaryGroup();
@@ -175,7 +203,8 @@ public class TokenManager {
             int targetWeight = Optional.ofNullable(luckPerms.getGroupManager().getGroup(targetGroup))
                     .map(group -> group.getWeight().orElse(0))
                     .orElse(0);
-            return senderWeight > targetWeight;
+
+            return senderWeight >= targetWeight;
         }).exceptionally(ex -> {
             plugin.getLogger().warning("Failed to perform LuckPerms rank check: " + ex.getMessage());
             return false;

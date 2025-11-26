@@ -55,7 +55,6 @@ public class DungeonListener implements Listener {
     // --- NEW: PROTECT MARKERS ---
     @EventHandler(priority = EventPriority.LOWEST)
     public void onMarkerDamage(EntityDamageEvent event) {
-        // Prevent markers from being destroyed by explosions, players, etc.
         if (event.getEntity().getPersistentDataContainer().has(MobManager.MARKER_KEY, PersistentDataType.INTEGER)) {
             event.setCancelled(true);
         }
@@ -63,7 +62,6 @@ public class DungeonListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onMarkerInteract(PlayerInteractAtEntityEvent event) {
-        // Prevent right-clicking markers
         if (event.getRightClicked().getPersistentDataContainer().has(MobManager.MARKER_KEY, PersistentDataType.INTEGER)) {
             event.setCancelled(true);
         }
@@ -71,18 +69,15 @@ public class DungeonListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onEntityTeleport(EntityTeleportEvent event) {
-        // Prevent dungeon mobs (like Endermen) from teleporting out of rooms
         if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
             event.setCancelled(true);
         }
     }
 
-    // --- BLOCK RESTORATION LOGIC ---
     @EventHandler(priority = EventPriority.LOWEST)
     public void onDungeonBlockBreak(BlockBreakEvent event) {
         if (dungeonManager.isSettingUp(event.getPlayer())) return;
 
-        // Record any block break in a dungeon world for restoration later
         for (GameSession s : gameManager.getAllSessions()) {
             if (s.getDungeon().getSpawnLocation().getWorld().equals(event.getBlock().getWorld())) {
                 s.recordBlockChange(event.getBlock());
@@ -117,6 +112,23 @@ public class DungeonListener implements Listener {
 
     @EventHandler
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        // Boss / Minion Invulnerability Check
+        if (event.getEntity() instanceof LivingEntity) {
+            LivingEntity victim = (LivingEntity) event.getEntity();
+            if (victim.getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
+                GameSession session = gameManager.getSessionByMob(victim);
+                if (session != null) {
+                    if (session.isBossActive() && session.getBossEntity().equals(victim) && session.isBossInvulnerable()) {
+                        event.setCancelled(true);
+                        if (event.getDamager() instanceof Player) {
+                            DungeonUtils.msg((Player) event.getDamager(), "&cBoss is currently invulnerable! Kill minions first.");
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
         if (event.getEntity().getPersistentDataContainer().has(MobManager.DUNGEON_MOB_KEY, PersistentDataType.BYTE)) {
             boolean isPlayer = event.getDamager() instanceof Player;
             boolean isPet = false;
@@ -323,6 +335,12 @@ public class DungeonListener implements Listener {
             if (session.isChestUsed(block.getLocation()) || session.getDungeon().getChestLocations().contains(block.getLocation())) {
                 event.setCancelled(true);
                 session.triggerChest(block.getLocation());
+                return;
+            }
+            // MINI REWARD CHEST CHECK
+            if (block.getLocation().equals(session.getDungeon().getMiniRewardChestLocation())) {
+                event.setCancelled(true);
+                session.triggerMiniRewardChest(block.getLocation());
                 return;
             }
         }

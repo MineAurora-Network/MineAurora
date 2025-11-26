@@ -29,7 +29,7 @@ public class DungeonTabCompleter implements TabCompleter {
         if (args.length == 1) {
             return filter(Arrays.asList(
                     "create", "delete", "setup", "start", "stop", "check",
-                    "redo", "tempopen", "rngmeter", "give",
+                    "redo", "tempopen", "rngmeter", "give", "info",
                     "removemobspawn", "showremaining"
             ), args[0]);
         }
@@ -46,7 +46,7 @@ public class DungeonTabCompleter implements TabCompleter {
             }
             if (sub.equals("create") || sub.equals("delete") || sub.equals("start") ||
                     sub.equals("setup") || sub.equals("redo") || sub.equals("check") ||
-                    sub.equals("tempopen")) {
+                    sub.equals("tempopen") || sub.equals("info")) {
                 return Collections.singletonList("<id>");
             }
         }
@@ -81,7 +81,7 @@ public class DungeonTabCompleter implements TabCompleter {
                     return Collections.singletonList("<roomID>");
                 }
                 if (type.equals("lastroom")) {
-                    return filter(Arrays.asList("bossspawn", "rewardloc", "bossdoor", "treasuredoor"), args[3]);
+                    return filter(Arrays.asList("bossspawn", "rewardloc", "bossdoor", "treasuredoor", "minirewardchest"), args[3]);
                 }
                 if (type.equals("entrydoor")) {
                     return filter(Arrays.asList("pos1", "pos2"), args[3]);

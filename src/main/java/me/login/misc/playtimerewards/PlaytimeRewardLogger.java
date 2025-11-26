@@ -8,42 +8,49 @@ public class PlaytimeRewardLogger {
 
     private final Login plugin;
     private final JDA jda;
-    private final long channelId;
+    private final long logChannelId;
 
+    // 1-arg constructor (Used if no JDA passed)
+    public PlaytimeRewardLogger(Login plugin) {
+        this(plugin, null);
+    }
+
+    // FIXED: 2-arg constructor required by PlaytimeRewardModule
     public PlaytimeRewardLogger(Login plugin, JDA jda) {
         this.plugin = plugin;
-        this.jda = jda; // This JDA is shared from LagClearLogger
-        this.channelId = plugin.getConfig().getLong("playtime-reward-channel-id", 0);
 
-        if (this.jda == null) {
-            plugin.getLogger().warning("PlaytimeRewardLogger: JDA is null. Discord logging will be disabled.");
-        } else if (this.channelId == 0) {
-            plugin.getLogger().warning("PlaytimeRewardLogger: 'playtime-reward-channel-id' is not set in config.yml. Discord logging will be disabled.");
+        if (jda != null) {
+            this.jda = jda;
+        } else if (plugin.getLagClearLogger() != null) {
+            this.jda = plugin.getLagClearLogger().getJDA();
+        } else {
+            this.jda = null;
+            plugin.getLogger().warning("LagClearLogger not found. PlaytimeReward Discord logging disabled.");
+        }
+
+        this.logChannelId = plugin.getConfig().getLong("playtimereward-log-channel-id", 0);
+
+        if (logChannelId == 0) {
+            plugin.getLogger().warning("PlaytimeRewardLogger: 'playtimereward-log-channel-id' not set in config.yml. Discord logging disabled.");
         }
     }
 
-    public void log(String message) {
-        // Also log to console
-        plugin.getLogger().info("[PlaytimeReward Log] " + message);
+    public void logClaim(String playerName, int level, int coins, int tokens) {
+        String discordLog = "[PlaytimeReward Log] `" + playerName + "` claimed Playtime Level `" + level + "` (`" + coins + "` coins, `" + tokens + "` tokens).";
+        log(discordLog);
+    }
 
-        if (jda == null || jda.getStatus() != JDA.Status.CONNECTED || channelId == 0) {
-            return; // Don't even try if JDA is bad or channel ID is missing
-        }
+    private void log(String message) {
+        String consoleMessage = message.replace("`", "");
+        plugin.getLogger().info(consoleMessage);
 
-        try {
-            MessageChannel channel = jda.getTextChannelById(channelId);
+        if (jda != null && jda.getStatus() == JDA.Status.CONNECTED && logChannelId != 0) {
+            MessageChannel channel = jda.getTextChannelById(logChannelId);
             if (channel != null) {
-                channel.sendMessage("[PlaytimeReward] " + message).queue(
-                        null, // Success
-                        error -> plugin.getLogger().warning("Failed to send PlaytimeReward log: " + error.getMessage())
+                channel.sendMessage(message).queue(null, error ->
+                        plugin.getLogger().warning("Failed to send PlaytimeReward log: " + error.getMessage())
                 );
-            } else {
-                plugin.getLogger().warning("PlaytimeReward log channel (" + channelId + ") not found.");
             }
-        } catch (Exception e) {
-            plugin.getLogger().warning("An error occurred while sending PlaytimeReward log: " + e.getMessage());
         }
     }
-
-    // No shutdown() method needed as we are sharing the JDA from LagClearLogger
 }

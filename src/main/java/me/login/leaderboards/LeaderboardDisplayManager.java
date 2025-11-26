@@ -42,6 +42,24 @@ public class LeaderboardDisplayManager {
         loadLeaderboards();
     }
 
+    // Called on Server Stop
+    public void disable() {
+        // We just un-force chunks so we don't leave ghost chunks loaded when plugin is off
+        for (UUID uuid : activeLeaderboards.keySet()) {
+            Entity e = Bukkit.getEntity(uuid);
+            if (e != null) {
+                e.getChunk().setForceLoaded(false);
+            } else {
+                LeaderboardInfo info = activeLeaderboards.get(uuid);
+                if (info != null) {
+                    Location loc = info.getLocation();
+                    if (loc != null) loc.getChunk().setForceLoaded(false);
+                }
+            }
+        }
+        // DO NOT clear activeLeaderboards map here, or we lose data.
+    }
+
     public void reloadConfigAndUpdateAll() {
         loadLeaderboards();
         updateAllDisplays();
@@ -51,7 +69,7 @@ public class LeaderboardDisplayManager {
         location.setPitch(0);
         TextDisplay textDisplay = spawnNewDisplay(location, type);
         if (textDisplay == null) {
-            creator.sendMessage("Failed to spawn entity.");
+            creator.sendMessage("Failed to spawn entity. Is the world loaded?");
             return;
         }
 
@@ -71,9 +89,11 @@ public class LeaderboardDisplayManager {
 
     private TextDisplay spawnNewDisplay(Location location, String type) {
         if (location == null || location.getWorld() == null) return null;
+
+        // --- KEY FIX: Force Load Chunk ---
         Chunk chunk = location.getChunk();
         if (!chunk.isLoaded()) chunk.load();
-        chunk.setForceLoaded(true);
+        chunk.setForceLoaded(true); // Keep this chunk loaded always
 
         TextDisplay textDisplay = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
         textDisplay.setCustomName("leaderboard_" + type);
@@ -89,6 +109,7 @@ public class LeaderboardDisplayManager {
 
     public void updateAllDisplays() {
         if (activeLeaderboards.isEmpty()) return;
+        // Copy keyset to avoid ConcurrentModificationException if we remove/re-add
         new HashSet<>(activeLeaderboards.keySet()).forEach(this::updateDisplay);
     }
 
@@ -101,8 +122,9 @@ public class LeaderboardDisplayManager {
         }
         String type = info.type();
         Location loc = info.getLocation();
-        if (loc == null) return;
+        if (loc == null) return; // World likely unloaded
 
+        // Ensure chunk is loaded before checking for entity
         if (!loc.getChunk().isForceLoaded()) {
             loc.getChunk().load();
             loc.getChunk().setForceLoaded(true);
@@ -111,12 +133,17 @@ public class LeaderboardDisplayManager {
         Entity entity = Bukkit.getEntity(uuid);
         TextDisplay textDisplay;
 
+        // --- KEY FIX: Respawn if missing ---
         if (entity == null || !entity.isValid() || !(entity instanceof TextDisplay)) {
-            plugin.getLogger().info("Respawning leaderboard " + type);
+            plugin.getLogger().warning("Leaderboard " + type + " was missing at " + loc + ". Respawning...");
             textDisplay = spawnNewDisplay(loc, type);
             if (textDisplay == null) return;
+
+            // Remove old UUID reference
             activeLeaderboards.remove(uuid);
+            // Add new UUID reference
             activeLeaderboards.put(textDisplay.getUniqueId(), info);
+            // Save immediately so config has new UUID
             saveLeaderboards();
         } else {
             textDisplay = (TextDisplay) entity;
@@ -133,6 +160,7 @@ public class LeaderboardDisplayManager {
         String emptyLineFormat = plugin.getConfig().getString("leaderboards." + configKey + ".empty-line-format", "<gray>Empty</gray>");
         String footerFormat = plugin.getConfig().getString("leaderboards." + configKey + ".footer", "");
 
+        // Async Fetch
         CompletableFuture<Map<String, Double>> future;
         switch (configKey) {
             case "kills": future = fetcher.getTopStats(Statistic.PLAYER_KILLS, 10); break;
@@ -186,10 +214,9 @@ public class LeaderboardDisplayManager {
 
             String finalStr = text.toString();
             if (papiEnabled) finalStr = PlaceholderAPI.setPlaceholders(null, finalStr);
-
             String finalText = finalStr.replace("%nl%", "<newline>");
 
-            // Switch to main thread to update entity
+            // Sync update to entity
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (display.isValid()) {
                     display.text(miniMessage.deserialize(finalText));

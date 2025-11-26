@@ -18,6 +18,7 @@ public class PlaytimeRewardDatabase {
 
     public PlaytimeRewardDatabase(Login plugin) {
         this.plugin = plugin;
+        // Requirement 5: Ensure DB is in plugins/Login/database
         File dbFolder = new File(plugin.getDataFolder(), "database");
         if (!dbFolder.exists()) {
             dbFolder.mkdirs();
@@ -30,6 +31,7 @@ public class PlaytimeRewardDatabase {
             Class.forName("org.sqlite.JDBC");
             connection = DriverManager.getConnection(url);
             plugin.getLogger().info("Connecting PlaytimeReward DB...");
+            createTables();
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to connect PlaytimeReward DB!", e);
             this.connection = null;
@@ -94,19 +96,12 @@ public class PlaytimeRewardDatabase {
         }, runnable -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, runnable));
     }
 
-    /**
-     * Async save method (Normal use)
-     */
     public void savePlayerPlaytimeData(UUID uuid, long totalPlaytimeSeconds, int lastClaimedLevel, int notifiedLevel) {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () ->
                 savePlayerPlaytimeDataSync(uuid, totalPlaytimeSeconds, lastClaimedLevel, notifiedLevel)
         );
     }
 
-    /**
-     * Synchronous save method (For shutdown)
-     * This runs on the current thread and does not schedule a new task.
-     */
     public void savePlayerPlaytimeDataSync(UUID uuid, long totalPlaytimeSeconds, int lastClaimedLevel, int notifiedLevel) {
         String sql = "INSERT INTO player_playtime (player_uuid, total_playtime_seconds, last_claimed_level, notified_level) VALUES (?, ?, ?, ?) " +
                 "ON CONFLICT(player_uuid) DO UPDATE SET " +
@@ -118,7 +113,6 @@ public class PlaytimeRewardDatabase {
             ps.setLong(2, totalPlaytimeSeconds);
             ps.setInt(3, lastClaimedLevel);
             ps.setInt(4, notifiedLevel);
-            // On conflict
             ps.setLong(5, totalPlaytimeSeconds);
             ps.setInt(6, lastClaimedLevel);
             ps.setInt(7, notifiedLevel);

@@ -30,7 +30,8 @@ public class PlaytimeRewardModule {
             // 1. Initialize Database
             this.database = new PlaytimeRewardDatabase(plugin);
             this.database.connect();
-            this.database.createTables();
+            // createTables is called inside connect(), so this is redundant but safe
+            // this.database.createTables();
 
             // 2. Initialize Logger (shares JDA)
             if (plugin.getLagClearLogger() == null || plugin.getLagClearLogger().getJDA() == null) {
@@ -40,13 +41,15 @@ public class PlaytimeRewardModule {
                 this.logger = new PlaytimeRewardLogger(plugin, plugin.getLagClearLogger().getJDA());
             }
 
-            // 3. Verify TokenManager (was previously DailyRewardDatabase check)
+            // 3. Verify TokenManager (The fix for "[Login]: TokenManager is not initialized!")
+            // In the previous error log, it seems this check failed.
+            // Ensure TokenModule is initialized BEFORE PlaytimeRewardModule in Login.java's onEnable.
             if (tokenManager == null) {
                 plugin.getLogger().severe("TokenManager is not initialized! PlaytimeReward token rewards will fail.");
                 return false;
             }
 
-            // 4. Initialize Manager (Core Logic) - passing tokenManager now
+            // 4. Initialize Manager (Core Logic)
             this.manager = new PlaytimeRewardManager(plugin, database, logger, economy, tokenManager);
             plugin.getServer().getPluginManager().registerEvents(manager, plugin);
 
@@ -57,7 +60,10 @@ public class PlaytimeRewardModule {
             // 6. Initialize Command
             this.command = new PlaytimeRewardCommand(gui, manager);
             plugin.getCommand("playtimerewards").setExecutor(command);
-            plugin.getCommand("playtimerewards").setAliases(java.util.Arrays.asList("ptrewards"));
+            // Check for aliases to avoid NPE if not in plugin.yml (though it usually is)
+            if (plugin.getCommand("playtimerewards").getAliases() != null) {
+                // plugin.getCommand("playtimerewards").setAliases(java.util.Arrays.asList("ptrewards")); // Usually handled by plugin.yml
+            }
 
             // 7. Initialize NPC Listener
             if (plugin.getServer().getPluginManager().getPlugin("Citizens") != null) {

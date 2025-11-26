@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent; // Added Import
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -23,11 +24,11 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections; // <-- ADDED IMPORT
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import net.kyori.adventure.text.format.TextDecoration; // <-- ADDED IMPORT
-import java.util.stream.Stream; // <-- ADDED IMPORT
+import net.kyori.adventure.text.format.TextDecoration;
+import java.util.stream.Stream;
 
 public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
 
@@ -64,7 +65,6 @@ public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
             return true;
         }
 
-        // Admin commands
         if (!sender.hasPermission("token.admin")) {
             sendMsg(sender, "<red>Unknown command. Usage: /token or /token balance</red>");
             return true;
@@ -81,19 +81,17 @@ public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
 
         try {
             amount = Long.parseLong(amountStr);
-            // --- FIX: Cleaned up logic ---
             if (subCommand.equals("set")) {
                 if (amount < 0) {
                     sendMsg(sender, "<red>Amount must be a positive number.</red>");
                     return true;
                 }
-            } else { // add or remove
+            } else {
                 if (amount <= 0) {
                     sendMsg(sender, "<red>Amount must be a positive number greater than 0.</red>");
                     return true;
                 }
             }
-            // --- END FIX ---
         } catch (NumberFormatException e) {
             sendMsg(sender, "<red>'" + amountStr + "' is not a valid number.</red>");
             return true;
@@ -118,17 +116,15 @@ public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
     private void handleBalance(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             sendMsg(sender, "<red>This command can only be run by a player.");
-            return; // This is line 113, return; is correct.
+            return;
         }
         manager.getTokenBalance(player.getUniqueId()).thenAccept(balance -> {
-            // --- FIX: Replaced unicode ---
             sendMsg(player, "<gray>Your token balance: <gold>" + balance + " ☆</gold></gray>");
         });
     }
 
     private void openTokenMenu(Player player) {
-        // --- FIX: Replaced unicode ---
-        Inventory gui = Bukkit.createInventory(null, 36, mm.deserialize("<dark_gray>Token Menu</dark_gray>")); // 4 rows
+        Inventory gui = Bukkit.createInventory(null, 36, mm.deserialize("<dark_gray>Token Menu</dark_gray>"));
 
         // How to get
         ItemStack howTo = new ItemStack(Material.SUNFLOWER);
@@ -158,7 +154,18 @@ public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
         ItemMeta closeMeta = close.getItemMeta();
         closeMeta.displayName(mm.deserialize("<red><bold>Close</bold></red>").decoration(TextDecoration.ITALIC, false));
         close.setItemMeta(closeMeta);
-        gui.setItem(31, close); // Slot 31
+        gui.setItem(31, close);
+
+        // Fill empty slots with gray glass pane
+        ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta fillerMeta = filler.getItemMeta();
+        fillerMeta.displayName(Component.empty());
+        filler.setItemMeta(fillerMeta);
+        for (int i = 0; i < 36; i++) {
+            if (gui.getItem(i) == null) {
+                gui.setItem(i, filler);
+            }
+        }
 
         player.setMetadata(TOKEN_MENU_METADATA, new FixedMetadataValue(plugin, true));
         player.openInventory(gui);
@@ -175,10 +182,18 @@ public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
 
         if (clicked.getType() == Material.CHEST) {
             // Open Token Shop
-            player.closeInventory();
+            player.closeInventory(); // Metadata cleared in onClose
             tokenShopGUI.openGUI(player);
         } else if (clicked.getType() == Material.BARRIER) {
             player.closeInventory();
+        }
+    }
+
+    @EventHandler
+    public void onClose(InventoryCloseEvent event) {
+        // Requirement 3: Ensure metadata removal
+        if (event.getPlayer().hasMetadata(TOKEN_MENU_METADATA)) {
+            event.getPlayer().removeMetadata(TOKEN_MENU_METADATA, plugin);
         }
     }
 
@@ -187,7 +202,6 @@ public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         if (!sender.hasPermission("token.admin")) {
             if (args.length == 1) {
-                // --- FIX: Use Stream.of ---
                 return Stream.of("balance")
                         .filter(s -> s.startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
@@ -196,7 +210,6 @@ public class TokenCommands implements CommandExecutor, TabCompleter, Listener {
         }
 
         if (args.length == 1) {
-            // --- FIX: Use Stream.of ---
             return Stream.of("add", "remove", "set", "balance")
                     .filter(s -> s.startsWith(args[0].toLowerCase()))
                     .collect(Collectors.toList());

@@ -1,9 +1,10 @@
 package me.login.misc.dailyreward;
 
 import me.login.Login;
-import me.login.misc.tokens.TokenManager; // Import TokenManager
+import me.login.misc.tokens.TokenManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.entity.Player;
 
@@ -18,26 +19,33 @@ public class DailyRewardManager {
     private final DailyRewardDatabase database;
     private final DailyRewardLogger logger;
     private final Economy economy;
-    private final TokenManager tokenManager; // CHANGED: Added TokenManager
-    private final Component serverPrefix;
+    private final TokenManager tokenManager;
     private final MiniMessage miniMessage;
+    private final Component serverPrefix;
 
     private static final long COOLDOWN_MS = TimeUnit.HOURS.toMillis(24);
+    private static final long STREAK_WINDOW_MS = TimeUnit.HOURS.toMillis(30);
+
     private final Map<String, Reward> rankRewards = new LinkedHashMap<>();
 
     public record Reward(String permission, int coins, int tokens, String prettyName) {}
 
-    // CHANGED: Constructor now accepts TokenManager
     public DailyRewardManager(Login plugin, DailyRewardDatabase database, DailyRewardLogger logger, Economy economy, TokenManager tokenManager) {
         this.plugin = plugin;
         this.database = database;
         this.logger = logger;
         this.economy = economy;
-        this.tokenManager = tokenManager; // Store it
+        this.tokenManager = tokenManager;
 
         this.miniMessage = MiniMessage.miniMessage();
-        String prefixString = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>:");
-        this.serverPrefix = miniMessage.deserialize(prefixString + " ");
+
+        String p1Raw = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>");
+        String p2Raw = plugin.getConfig().getString("server_prefix_2", "<white>:");
+
+        Component p1 = parseMixedContent(p1Raw);
+        Component p2 = parseMixedContent(p2Raw);
+
+        this.serverPrefix = p1.append(p2).append(Component.text(" "));
 
         rankRewards.put("elite", new Reward("mineaurora.dailyreward.elite", 1750, 2, "<green>Elite</green>"));
         rankRewards.put("ace", new Reward("mineaurora.dailyreward.ace", 2500, 2, "<blue>Ace</blue>"));
@@ -47,6 +55,18 @@ public class DailyRewardManager {
         rankRewards.put("phantom", new Reward("mineaurora.dailyreward.phantom", 8500, 8, "<dark_purple>Phantom</dark_purple>"));
     }
 
+    private Component parseMixedContent(String input) {
+        if (input == null) return Component.empty();
+        if (input.contains("&") || input.contains("§")) {
+            return LegacyComponentSerializer.legacyAmpersand().deserialize(input);
+        }
+        try {
+            return miniMessage.deserialize(input);
+        } catch (Exception e) {
+            return Component.text(input);
+        }
+    }
+
     public Component getPrefix() { return serverPrefix; }
     public MiniMessage getMiniMessage() { return miniMessage; }
     public Map<String, Reward> getRankRewards() { return rankRewards; }
@@ -54,16 +74,10 @@ public class DailyRewardManager {
 
     public void attemptClaim(Player player) {
         if (player.hasPermission("mineaurora.dailyreward.rank")) {
-            plugin.getServer().getScheduler().runTask(plugin, () ->
-                    plugin.getServer().dispatchCommand(player, "dailyreward gui")
-            );
+            new DailyRewardGUI(plugin, this, player).open();
         } else {
             claimDefaultReward(player);
         }
-    }
-
-    public long getStartOfCurrentDay() {
-        return System.currentTimeMillis() - COOLDOWN_MS;
     }
 
     private long getCooldownExpiry(long lastClaim) {
@@ -71,9 +85,9 @@ public class DailyRewardManager {
     }
 
     public void claimDefaultReward(Player player) {
-        database.getLastClaimTime(player.getUniqueId(), "default").thenAccept(lastClaim -> {
+        database.getClaimData(player.getUniqueId(), "default").thenAccept(data -> {
             long now = System.currentTimeMillis();
-            long expiry = getCooldownExpiry(lastClaim);
+            long expiry = getCooldownExpiry(data.lastClaimTime());
 
             if (now < expiry) {
                 long timeLeftMs = expiry - now;
@@ -81,47 +95,69 @@ public class DailyRewardManager {
                 return;
             }
 
-            int coins = 750;
+            int streak = calculateNewStreak(data.lastClaimTime(), now, data.streak());
+
+            int baseCoins = 750;
             int tokens = 1;
 
-            economy.depositPlayer(player, coins);
+            double multiplier = 1.0 + (streak * 0.10);
+            int finalCoins = (int) (baseCoins * multiplier);
 
-            // CHANGED: Use TokenManager
+            economy.depositPlayer(player, finalCoins);
             tokenManager.addTokens(player.getUniqueId(), tokens);
 
-            database.setLastClaimTime(player.getUniqueId(), now, "default");
+            database.saveClaim(player.getUniqueId(), "default", now, streak);
 
             sendMsg(player, "<green>You claimed your daily reward!</green>");
-            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + coins + " Coins</white></gray>"));
+            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + finalCoins + " Coins</white> <gray>(" + (int)(streak * 10) + "% Streak Bonus)</gray></gray>"));
             player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + tokens + " Token</white></gray>"));
+            player.sendMessage(miniMessage.deserialize("<yellow>Current Streak: <white>" + streak + " Days</white></yellow>"));
+
+            logger.logDefault(player.getName(), finalCoins, tokens, streak);
         });
     }
 
     public CompletableFuture<Boolean> claimRankedReward(Player player, String rankKey, Reward reward) {
-        return database.getLastClaimTime(player.getUniqueId(), rankKey).thenApply(lastClaim -> {
+        return database.getClaimData(player.getUniqueId(), rankKey).thenApply(data -> {
             long now = System.currentTimeMillis();
-            long expiry = getCooldownExpiry(lastClaim);
+            long expiry = getCooldownExpiry(data.lastClaimTime());
 
             if (now < expiry) {
                 sendMsg(player, "<red>You have already claimed this reward! Come back in " + formatTimeLeft(expiry - now) + ".</red>");
                 return false;
             }
 
-            economy.depositPlayer(player, reward.coins);
+            int streak = calculateNewStreak(data.lastClaimTime(), now, data.streak());
 
-            // CHANGED: Use TokenManager
-            tokenManager.addTokens(player.getUniqueId(), reward.tokens);
+            double multiplier = 1.0 + (streak * 0.10);
+            int finalCoins = (int) (reward.coins() * multiplier);
 
-            database.setLastClaimTime(player.getUniqueId(), now, rankKey);
+            economy.depositPlayer(player, finalCoins);
+            tokenManager.addTokens(player.getUniqueId(), reward.tokens());
 
-            sendMsg(player, "<green>You claimed your " + reward.prettyName + " <green>daily reward!</green>");
-            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + reward.coins + " Coins</white></gray>"));
-            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + reward.tokens + (reward.tokens > 1 ? " Tokens" : " Token") + "</white></gray>"));
+            database.saveClaim(player.getUniqueId(), rankKey, now, streak);
 
-            logger.log("`" + player.getName() + "` claimed their " + reward.prettyName + " reward (`" + reward.coins + "` coins, `" + reward.tokens + "` tokens).");
+            sendMsg(player, "<green>You claimed your " + reward.prettyName() + " <green>daily reward!</green>");
+            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + finalCoins + " Coins</white> <gray>(" + (int)(streak * 10) + "% Streak Bonus)</gray></gray>"));
+            player.sendMessage(miniMessage.deserialize("<gray>+ <white>" + reward.tokens() + (reward.tokens() > 1 ? " Tokens" : " Token") + "</white></gray>"));
+            player.sendMessage(miniMessage.deserialize("<yellow>Current Streak: <white>" + streak + " Days</white></yellow>"));
+
+            logger.logRanked(player.getName(), reward.prettyName(), finalCoins, reward.tokens(), streak);
 
             return true;
         });
+    }
+
+    private int calculateNewStreak(long lastClaimTime, long now, int currentStreak) {
+        if (lastClaimTime == 0) return 1;
+
+        long timeSince = now - lastClaimTime;
+
+        if (timeSince <= STREAK_WINDOW_MS) {
+            return currentStreak + 1;
+        } else {
+            return 1;
+        }
     }
 
     public String formatTimeLeft(long millis) {

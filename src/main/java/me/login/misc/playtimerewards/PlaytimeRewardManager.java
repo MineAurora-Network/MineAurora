@@ -1,9 +1,10 @@
 package me.login.misc.playtimerewards;
 
 import me.login.Login;
-import me.login.misc.tokens.TokenManager; // Correct Import
+import me.login.misc.tokens.TokenManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.Statistic;
@@ -27,7 +28,7 @@ public class PlaytimeRewardManager implements Listener {
     private final PlaytimeRewardDatabase database;
     private final PlaytimeRewardLogger logger;
     private final Economy economy;
-    private final TokenManager tokenManager; // Changed from DailyRewardDatabase
+    private final TokenManager tokenManager;
     private final Component serverPrefix;
     private final MiniMessage miniMessage;
 
@@ -45,13 +46,39 @@ public class PlaytimeRewardManager implements Listener {
         this.tokenManager = tokenManager;
 
         this.miniMessage = MiniMessage.miniMessage();
-        String prefixString = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b><white>:");
-        this.serverPrefix = miniMessage.deserialize(prefixString + " ");
+
+        // FIX: Robust Prefix Handling (Supports MiniMessage AND Legacy)
+        String p1Raw = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>");
+        String p2Raw = plugin.getConfig().getString("server_prefix_2", "<white>:");
+
+        Component p1 = parseMixedContent(p1Raw);
+        Component p2 = parseMixedContent(p2Raw);
+
+        this.serverPrefix = p1.append(p2).append(Component.text(" "));
 
         this.rewardLevels = new ArrayList<>(MAX_LEVEL);
         generateRewardLevels();
 
         startPlaytimeTracker();
+    }
+
+    // Helper to handle Strings that might contain BOTH MiniMessage tags AND legacy (&/§) codes
+    private Component parseMixedContent(String input) {
+        if (input == null) return Component.empty();
+
+        // 1. If it contains legacy codes (& or §), convert them to MiniMessage format first OR use LegacySerializer
+        // Using LegacyComponentSerializer to deserialize legacy parts into a Component
+        if (input.contains("&") || input.contains("§")) {
+            return LegacyComponentSerializer.legacyAmpersand().deserialize(input);
+        }
+
+        // 2. Otherwise, treat as standard MiniMessage
+        try {
+            return miniMessage.deserialize(input);
+        } catch (Exception e) {
+            // Fallback for broken MiniMessage syntax
+            return Component.text(input);
+        }
     }
 
     private void generateRewardLevels() {
@@ -75,7 +102,6 @@ public class PlaytimeRewardManager implements Listener {
             currentCoinReward += 750;
             rewardLevels.add(new PlaytimeRewardLevel(level, currentPlaytime, currentCoinReward, 3));
         }
-        plugin.getLogger().info("Generated " + rewardLevels.size() + " playtime reward levels.");
     }
 
     private void startPlaytimeTracker() {
@@ -145,7 +171,6 @@ public class PlaytimeRewardManager implements Listener {
         });
     }
 
-    // --- NEW METHOD: Synchronous save for onDisable ---
     public void saveAllPlayerDataSync() {
         playerDataCache.forEach((uuid, data) -> {
             database.savePlayerPlaytimeDataSync(uuid, data.totalPlaytimeSeconds(), data.lastClaimedLevel(), data.notifiedLevel());
@@ -186,19 +211,19 @@ public class PlaytimeRewardManager implements Listener {
         return playerDataCache.get(uuid);
     }
 
-    public void claimReward(Player player, int levelToClaim) {
+    public boolean claimReward(Player player, int levelToClaim) {
         UUID uuid = player.getUniqueId();
         PlaytimeRewardDatabase.PlayerPlaytimeData data = playerDataCache.get(uuid);
 
         if (data == null) {
             sendMsg(player, "<red>Your playtime data is not loaded. Please re-log.</red>");
-            return;
+            return false;
         }
 
         PlaytimeRewardLevel levelInfo = getLevelInfo(levelToClaim);
         if (levelInfo == null) {
             sendMsg(player, "<red>An error occurred: Invalid reward level.</red>");
-            return;
+            return false;
         }
 
         if (levelToClaim != data.lastClaimedLevel() + 1) {
@@ -207,17 +232,17 @@ public class PlaytimeRewardManager implements Listener {
             } else {
                 sendMsg(player, "<red>You must claim previous levels first!</red>");
             }
-            return;
+            return false;
         }
 
         if (data.totalPlaytimeSeconds() < levelInfo.timeRequiredSeconds()) {
             long remaining = levelInfo.timeRequiredSeconds() - data.totalPlaytimeSeconds();
             sendMsg(player, "<red>You have not unlocked this level yet. Time remaining: " + formatPlaytime(remaining) + "</red>");
-            return;
+            return false;
         }
 
         economy.depositPlayer(player, levelInfo.coinReward());
-        tokenManager.addTokens(uuid, levelInfo.tokenReward()); // Updated to use TokenManager
+        tokenManager.addTokens(uuid, levelInfo.tokenReward());
 
         PlaytimeRewardDatabase.PlayerPlaytimeData newData = new PlaytimeRewardDatabase.PlayerPlaytimeData(
                 data.totalPlaytimeSeconds(),
@@ -233,10 +258,9 @@ public class PlaytimeRewardManager implements Listener {
                 "<gray>+ <white>" + levelInfo.tokenReward() + " Tokens</white></gray>";
         sendMsg(player, message);
 
-        logger.log("`" + player.getName() + "` claimed Playtime Level `" + levelInfo.level() + "` (`" +
-                levelInfo.coinReward() + "` coins, `" + levelInfo.tokenReward() + "` tokens).");
+        logger.logClaim(player.getName(), levelInfo.level(), (int) levelInfo.coinReward(), levelInfo.tokenReward());
 
-        checkRewardEligibility(player, newData);
+        return true;
     }
 
     public String formatPlaytime(long totalSeconds) {
@@ -246,6 +270,7 @@ public class PlaytimeRewardManager implements Listener {
     }
 
     private void sendMsg(Player player, String message) {
+        // Combine our safe prefix with the message
         player.sendMessage(serverPrefix.append(miniMessage.deserialize(message)));
     }
 

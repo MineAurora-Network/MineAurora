@@ -7,10 +7,12 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -19,7 +21,9 @@ import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public class PlaytimeRewardGUI implements Listener {
 
@@ -32,12 +36,9 @@ public class PlaytimeRewardGUI implements Listener {
     private final NamespacedKey pageKey;
 
     private static final String GUI_METADATA = "PlaytimeRewardsGUI";
-    private static final int GUI_SIZE = 54; // 6 rows
-    private static final int LEVELS_PER_PAGE = 21; // 3 rows of 7
-    // Slots for rewards:
-    // Row 2: 10-16
-    // Row 3: 19-25
-    // Row 4: 28-34
+    private static final int GUI_SIZE = 54;
+    private static final int LEVELS_PER_PAGE = 21;
+
     private static final int[] LEVEL_SLOTS = {
             10, 11, 12, 13, 14, 15, 16, // Row 2
             19, 20, 21, 22, 23, 24, 25, // Row 3
@@ -48,7 +49,6 @@ public class PlaytimeRewardGUI implements Listener {
     private static final int PLAYER_INFO_SLOT = 40;
     private static final int NEXT_PAGE_SLOT = 41;
 
-    // Materials for the 7 reward items in a row
     private final Map<Integer, Material> RAINBOW_MATERIALS = Map.of(
             0, Material.RED_CONCRETE,
             1, Material.ORANGE_CONCRETE,
@@ -66,18 +66,19 @@ public class PlaytimeRewardGUI implements Listener {
         this.levelKey = new NamespacedKey(plugin, "ptreward_level");
         this.pageKey = new NamespacedKey(plugin, "ptreward_page");
 
-        // Calculate total pages dynamically
         this.TOTAL_PAGES = (int) Math.ceil((double) PlaytimeRewardManager.MAX_LEVEL / LEVELS_PER_PAGE);
+
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
     public void openGUI(Player player, int page) {
+        // FIX: Clamp page logic
         if (page < 0) page = 0;
         if (page >= TOTAL_PAGES) page = TOTAL_PAGES - 1;
 
         Component title = mm.deserialize("<dark_gray>Playtime Levels [" + (page + 1) + "/" + TOTAL_PAGES + "]</dark_gray>");
         Inventory gui = Bukkit.createInventory(null, GUI_SIZE, title);
 
-        // --- Get Player Data ---
         Component serverPrefix = manager.getPrefix();
         PlaytimeRewardDatabase.PlayerPlaytimeData data = manager.getPlayerData(player.getUniqueId());
         if (data == null) {
@@ -85,26 +86,15 @@ public class PlaytimeRewardGUI implements Listener {
             return;
         }
 
-        // --- Fill all slots with filler glass first ---
         ItemStack filler = createDecorationItem(Material.GRAY_STAINED_GLASS_PANE, Component.empty());
         for (int i = 0; i < GUI_SIZE; i++) {
             gui.setItem(i, filler);
         }
 
-        // --- Navigation & Info ---
-        // Always display previous page button, but gray it out if on page 0
-        gui.setItem(PREVIOUS_PAGE_SLOT, createNavItem(Material.RED_CANDLE, "<red>Previous Page</red>", page, page > 0));
+        gui.setItem(PREVIOUS_PAGE_SLOT, createNavItem(Material.RED_CANDLE, "<red>Previous Page</red>", page - 1, page > 0));
+        gui.setItem(PLAYER_INFO_SLOT, createPlayerInfoItem(player, data));
+        gui.setItem(NEXT_PAGE_SLOT, createNavItem(Material.GREEN_CANDLE, "<green>Next Page</green>", page + 1, page < TOTAL_PAGES - 1));
 
-        gui.setItem(PLAYER_INFO_SLOT, createPlayerInfoItem(player, data)); // Player head
-        if (page < TOTAL_PAGES - 1) {
-            gui.setItem(NEXT_PAGE_SLOT, createNavItem(Material.GREEN_CANDLE, "<green>Next Page</green>", page, true));
-        } else {
-            // If on the last page, put a grayed-out "next page" indicator
-            gui.setItem(NEXT_PAGE_SLOT, createNavItem(Material.GRAY_CANDLE, "<gray>Next Page</gray>", page, false));
-        }
-
-
-        // --- Fill Level Items ---
         int levelStart = (page * LEVELS_PER_PAGE) + 1;
 
         for (int i = 0; i < LEVEL_SLOTS.length; i++) {
@@ -131,19 +121,15 @@ public class PlaytimeRewardGUI implements Listener {
         Material rainbowMat = RAINBOW_MATERIALS.getOrDefault(materialIndex, Material.STONE);
 
         if (level.level() <= data.lastClaimedLevel()) {
-            // --- CLAIMED ---
             mat = Material.GRAY_CONCRETE;
-            // FIX: Corrected claimed level name and added gap
             name = mm.deserialize("<strikethrough><gray>Level " + level.level() + "</gray></strikethrough>").decoration(TextDecoration.ITALIC, false);
-            lore.add(Component.empty()); // Gap
+            lore.add(Component.empty());
             lore.add(mm.deserialize("<green>REWARD CLAIMED</green>").decoration(TextDecoration.ITALIC, false));
 
         } else {
-            // --- NOT CLAIMED (LOCKED OR CLAIMABLE) ---
             mat = rainbowMat;
 
             if (level.level() == data.lastClaimedLevel() + 1 && data.totalPlaytimeSeconds() >= level.timeRequiredSeconds()) {
-                // --- CLAIMABLE ---
                 name = mm.deserialize("<green><bold>Level " + level.level() + "</bold> - Click to Claim!</green>").decoration(TextDecoration.ITALIC, false);
                 lore.add(Component.empty());
                 lore.add(mm.deserialize("<gray>+ <white>" + level.coinReward() + " Coins</white>").decoration(TextDecoration.ITALIC, false));
@@ -151,8 +137,6 @@ public class PlaytimeRewardGUI implements Listener {
                 glow = true;
 
             } else {
-                // --- LOCKED ---
-                // THIS IS THE FIX: Removed "DRAFT:" from the string
                 name = mm.deserialize("<red>Level " + level.level() + " - LOCKED</red>").decoration(TextDecoration.ITALIC, false);
                 lore.add(Component.empty());
                 lore.add(mm.deserialize("<gray>Requires: <white>" + manager.formatPlaytime(level.timeRequiredSeconds()) + "</white>").decoration(TextDecoration.ITALIC, false));
@@ -164,19 +148,12 @@ public class PlaytimeRewardGUI implements Listener {
         }
 
         ItemBuilder builder = new ItemBuilder(mat).displayName(name).lore(lore);
-
-        if (glow) {
-            builder.glow();
-        }
-
+        if (glow) builder.glow();
         builder.pdc(levelKey, PersistentDataType.INTEGER, level.level());
 
         return builder.build();
     }
 
-    /**
-     * Creates the player info head item.
-     */
     private ItemStack createPlayerInfoItem(Player player, PlaytimeRewardDatabase.PlayerPlaytimeData data) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
@@ -197,17 +174,13 @@ public class PlaytimeRewardGUI implements Listener {
         lore.add(mm.deserialize("<dark_gray>┃ <white>LEVEL: <aqua>" + data.lastClaimedLevel() + "</aqua></white>").decoration(TextDecoration.ITALIC, false));
         lore.add(mm.deserialize("<dark_gray>┃ <white>PLAYTIME: <aqua>" + manager.formatPlaytime(data.totalPlaytimeSeconds()) + "</aqua></white>").decoration(TextDecoration.ITALIC, false));
 
-        meta.lore(lore); // Fixed: assign the modified lore directly
+        meta.lore(lore);
         head.setItemMeta(meta);
         return head;
     }
 
-    /**
-     * Creates a navigation item (e.g., next/prev page).
-     * @param enabled If true, it's a normal candle; if false, it's a gray candle with gray text.
-     */
-    private ItemStack createNavItem(Material mat, String name, int currentPage, boolean enabled) {
-        ItemStack item = new ItemStack(enabled ? mat : Material.GRAY_CANDLE); // Use gray candle if not enabled
+    private ItemStack createNavItem(Material mat, String name, int targetPage, boolean enabled) {
+        ItemStack item = new ItemStack(enabled ? mat : Material.GRAY_CANDLE);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
 
@@ -216,27 +189,29 @@ public class PlaytimeRewardGUI implements Listener {
             displayName = mm.deserialize("<gray>" + mm.serialize(displayName) + "</gray>").decoration(TextDecoration.ITALIC, false);
         }
         meta.displayName(displayName);
-        meta.getPersistentDataContainer().set(pageKey, PersistentDataType.INTEGER, currentPage);
+        if (enabled) {
+            // Only add page data if enabled
+            meta.getPersistentDataContainer().set(pageKey, PersistentDataType.INTEGER, targetPage);
+        }
         item.setItemMeta(meta);
         return item;
     }
 
-    /**
-     * Creates a decorative item (like the concrete border).
-     */
     private ItemStack createDecorationItem(Material material, Component name) {
-        return new ItemBuilder(material)
-                .displayName(name.decoration(TextDecoration.ITALIC, false)) // Also remove italics
-                .build();
+        return new ItemBuilder(material).displayName(name.decoration(TextDecoration.ITALIC, false)).build();
     }
-
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        Player player = (Player) event.getWhoClicked();
+        // FIX: Security check - Cancel event immediately if metadata exists
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+
+        // Check metadata first
         if (!player.hasMetadata(GUI_METADATA)) return;
 
+        // FIX: Strictly cancel all clicks in this GUI
         event.setCancelled(true);
+
         if (event.getClickedInventory() == null || !event.getClickedInventory().equals(player.getOpenInventory().getTopInventory())) {
             return;
         }
@@ -248,34 +223,34 @@ public class PlaytimeRewardGUI implements Listener {
         if (meta == null) return;
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        int slot = event.getSlot();
 
         if (pdc.has(levelKey, PersistentDataType.INTEGER)) {
-            // Clicked on a reward
             Integer level = pdc.get(levelKey, PersistentDataType.INTEGER);
             if (level != null) {
-                manager.claimReward(player, level);
-                // Re-open GUI to show new state
-                int currentPage = player.getMetadata(GUI_METADATA).getFirst().asInt();
-                openGUI(player, currentPage); // FIX: Ensure current page is passed
+                boolean success = manager.claimReward(player, level);
+                if (success) {
+                    player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
+                    int currentPage = player.getMetadata(GUI_METADATA).getFirst().asInt();
+                    openGUI(player, currentPage);
+                } else {
+                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
+                }
             }
 
         } else if (pdc.has(pageKey, PersistentDataType.INTEGER)) {
-            // Clicked on navigation
-            Integer currentPage = pdc.get(pageKey, PersistentDataType.INTEGER);
-            if (currentPage != null) {
-                if (slot == NEXT_PAGE_SLOT) {
-                    openGUI(player, currentPage + 1);
-                } else if (slot == PREVIOUS_PAGE_SLOT) {
-                    // Only navigate if not on the first page
-                    if (currentPage > 0) {
-                        openGUI(player, currentPage - 1);
-                    } else {
-                        // For showcase, do nothing if trying to go back from page 0
-                        // player.sendMessage(manager.getPrefix().append(mm.deserialize("<red>You are already on the first page!</red>"))); // Commented out for less spam
-                    }
-                }
+            Integer targetPage = pdc.get(pageKey, PersistentDataType.INTEGER);
+            if (targetPage != null) {
+                openGUI(player, targetPage);
+                player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
             }
+        }
+    }
+
+    @EventHandler
+    public void onClose(InventoryCloseEvent event) {
+        // FIX: Correctly remove metadata using event player
+        if (event.getPlayer().hasMetadata(GUI_METADATA)) {
+            event.getPlayer().removeMetadata(GUI_METADATA, plugin);
         }
     }
 }

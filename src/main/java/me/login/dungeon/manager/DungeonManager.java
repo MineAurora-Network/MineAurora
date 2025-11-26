@@ -10,7 +10,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
+import me.login.dungeon.game.MobManager;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -30,6 +34,37 @@ public class DungeonManager {
         this.plugin = plugin;
         this.database = database;
         loadDungeons();
+    }
+
+    public String getDungeonInfo(int id) {
+        Dungeon d = dungeons.get(id);
+        if (d == null) return "§cDungeon " + id + " not found.";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("§6--- Dungeon ").append(id).append(" Info ---").append("\n");
+        sb.append("§eSpawn: ").append(locToStr(d.getSpawnLocation())).append("\n");
+        sb.append("§eRooms: ").append(d.getRooms().size()).append("\n");
+        sb.append("§eEntry Door: ").append(d.getEntryDoor() != null ? "Set" : "§cNot Set").append("\n");
+        sb.append("§eBoss Spawn: ").append(d.getBossSpawnLocation() != null ? "Set" : "§cNot Set").append("\n");
+        sb.append("§eReward Chest: ").append(d.getRewardChestLocation() != null ? "Set" : "§cNot Set").append("\n");
+        sb.append("§eMini Reward Chest: ").append(d.getMiniRewardChestLocation() != null ? "Set" : "§cNot Set").append("\n");
+
+        // Count total mob spawns via markers nearby
+        if (d.getSpawnLocation() != null) {
+            int count = 0;
+            for (Entity e : d.getSpawnLocation().getWorld().getNearbyEntities(d.getSpawnLocation(), 250, 50, 250)) {
+                if (e instanceof TextDisplay && e.getPersistentDataContainer().has(MobManager.MARKER_KEY, PersistentDataType.INTEGER)) {
+                    count++;
+                }
+            }
+            sb.append("§eTotal Mob Markers Found: ").append(count);
+        }
+        return sb.toString();
+    }
+
+    private String locToStr(Location loc) {
+        if (loc == null) return "§cNone";
+        return loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ();
     }
 
     // --- Setup Mode Logic ---
@@ -111,7 +146,6 @@ public class DungeonManager {
         dungeons.remove(id);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                // REMOVED dungeon_room_spawns from delete query
                 String[] qs = { "DELETE FROM dungeons WHERE id = ?", "DELETE FROM dungeon_rooms WHERE dungeon_id = ?", "DELETE FROM dungeon_chests WHERE dungeon_id = ?" };
                 for (String q : qs) {
                     try (PreparedStatement ps = database.getConnection().prepareStatement(q)) { ps.setInt(1, id); ps.executeUpdate(); }
@@ -143,7 +177,6 @@ public class DungeonManager {
                 try (PreparedStatement ps = database.getConnection().prepareStatement("DELETE FROM dungeon_rooms WHERE dungeon_id = ? AND room_id = ?")) {
                     ps.setInt(1, dungeonId); ps.setInt(2, roomId); ps.executeUpdate();
                 }
-                // REMOVED spawn deletion
             } catch (SQLException e) { e.printStackTrace(); }
         });
     }
@@ -153,7 +186,8 @@ public class DungeonManager {
     public void saveDungeon(Dungeon dungeon) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                String sql = "INSERT OR REPLACE INTO dungeons (id, world, spawn_x, spawn_y, spawn_z, spawn_yaw, spawn_pitch, entry_world, entry_min_x, entry_min_y, entry_min_z, entry_max_x, entry_max_y, entry_max_z, boss_world, boss_x, boss_y, boss_z, chest_world, chest_x, chest_y, chest_z, bdoor_world, bdoor_min_x, bdoor_min_y, bdoor_min_z, bdoor_max_x, bdoor_max_y, bdoor_max_z, rdoor_world, rdoor_min_x, rdoor_min_y, rdoor_min_z, rdoor_max_x, rdoor_max_y, rdoor_max_z) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                // Updated SQL to include Mini Chest
+                String sql = "INSERT OR REPLACE INTO dungeons (id, world, spawn_x, spawn_y, spawn_z, spawn_yaw, spawn_pitch, entry_world, entry_min_x, entry_min_y, entry_min_z, entry_max_x, entry_max_y, entry_max_z, boss_world, boss_x, boss_y, boss_z, chest_world, chest_x, chest_y, chest_z, bdoor_world, bdoor_min_x, bdoor_min_y, bdoor_min_z, bdoor_max_x, bdoor_max_y, bdoor_max_z, rdoor_world, rdoor_min_x, rdoor_min_y, rdoor_min_z, rdoor_max_x, rdoor_max_y, rdoor_max_z, minic_world, minic_x, minic_y, minic_z) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 try (PreparedStatement ps = database.getConnection().prepareStatement(sql)) {
                     ps.setInt(1, dungeon.getId());
                     Location spawn = dungeon.getSpawnLocation();
@@ -167,6 +201,17 @@ public class DungeonManager {
                         ps.setString(19, dungeon.getRewardChestLocation().getWorld().getName()); ps.setDouble(20, dungeon.getRewardChestLocation().getX()); ps.setDouble(21, dungeon.getRewardChestLocation().getY()); ps.setDouble(22, dungeon.getRewardChestLocation().getZ());
                     } else { ps.setString(19, null); ps.setDouble(20,0); ps.setDouble(21,0); ps.setDouble(22,0); }
                     saveCuboid(ps, 23, dungeon.getBossRoomDoor()); saveCuboid(ps, 30, dungeon.getRewardDoor());
+
+                    // Mini Chest
+                    if (dungeon.getMiniRewardChestLocation() != null) {
+                        ps.setString(37, dungeon.getMiniRewardChestLocation().getWorld().getName());
+                        ps.setDouble(38, dungeon.getMiniRewardChestLocation().getX());
+                        ps.setDouble(39, dungeon.getMiniRewardChestLocation().getY());
+                        ps.setDouble(40, dungeon.getMiniRewardChestLocation().getZ());
+                    } else {
+                        ps.setString(37, null); ps.setDouble(38, 0); ps.setDouble(39, 0); ps.setDouble(40, 0);
+                    }
+
                     ps.executeUpdate();
                 }
 
@@ -181,8 +226,6 @@ public class DungeonManager {
                     }
                     ps.executeBatch();
                 }
-
-                // REMOVED SPAWN SAVING
 
                 try (PreparedStatement ps = database.getConnection().prepareStatement("DELETE FROM dungeon_chests WHERE dungeon_id = ?")) { ps.setInt(1, dungeon.getId()); ps.executeUpdate(); }
                 try (PreparedStatement ps = database.getConnection().prepareStatement("INSERT INTO dungeon_chests (dungeon_id, world, x, y, z) VALUES (?, ?, ?, ?, ?)")) {
@@ -229,6 +272,13 @@ public class DungeonManager {
                 if (bDoorW != null) dungeon.setBossRoomDoor(new Cuboid(bDoorW, rs.getDouble("bdoor_min_x"), rs.getDouble("bdoor_min_y"), rs.getDouble("bdoor_min_z"), rs.getDouble("bdoor_max_x"), rs.getDouble("bdoor_max_y"), rs.getDouble("bdoor_max_z")));
                 String rDoorW = rs.getString("rdoor_world");
                 if (rDoorW != null) dungeon.setRewardDoor(new Cuboid(rDoorW, rs.getDouble("rdoor_min_x"), rs.getDouble("rdoor_min_y"), rs.getDouble("rdoor_min_z"), rs.getDouble("rdoor_max_x"), rs.getDouble("rdoor_max_y"), rs.getDouble("rdoor_max_z")));
+
+                // Load Mini Chest
+                String minicW = rs.getString("minic_world");
+                if (minicW != null && Bukkit.getWorld(minicW) != null) {
+                    dungeon.setMiniRewardChestLocation(new Location(Bukkit.getWorld(minicW), rs.getDouble("minic_x"), rs.getDouble("minic_y"), rs.getDouble("minic_z")));
+                }
+
                 dungeons.put(id, dungeon);
             }
             rs.close();
@@ -248,8 +298,6 @@ public class DungeonManager {
                 }
             }
             rsRooms.close();
-
-            // REMOVED SPAWN LOADING
 
             ResultSet rsChests = st.executeQuery("SELECT * FROM dungeon_chests");
             while (rsChests.next()) {
