@@ -16,24 +16,26 @@ public class DailyRewardModule {
     private final DailyRewardNPCListener npcListener;
 
     public DailyRewardModule(Login plugin, Economy economy, DailyRewardDatabase database, TokenManager tokenManager) {
-        // ...
         this.plugin = plugin;
-        this.database = database; // Use the one from Login.java
+        this.database = database;
         this.logger = new DailyRewardLogger(plugin);
         this.manager = new DailyRewardManager(plugin, database, logger, economy, tokenManager);
+
+        // Initialize GUI once
         this.gui = new DailyRewardGUI(plugin, manager);
-        this.command = new DailyRewardCommand(plugin, manager);
-        this.npcListener = new DailyRewardNPCListener(plugin, manager);
+
+        // Pass singleton GUI to command
+        this.command = new DailyRewardCommand(plugin, manager, gui);
+
+        // Pass singleton GUI to NPC listener
+        this.npcListener = new DailyRewardNPCListener(plugin, manager, gui);
     }
 
     public boolean init() {
         try {
-            // --- REMOVED DB CONNECTION/TABLES (Done in Login.java) ---
-            // this.database.connect();
-            // this.database.createTables();
-
-            // Register Events
+            // Register GUI Events ONCE
             plugin.getServer().getPluginManager().registerEvents(gui, plugin);
+
             if (Bukkit.getPluginManager().isPluginEnabled("Citizens")) {
                 plugin.getServer().getPluginManager().registerEvents(npcListener, plugin);
                 plugin.getLogger().info("DailyReward NPC Listener registered.");
@@ -64,7 +66,6 @@ public class DailyRewardModule {
         plugin.getLogger().info("DailyRewardModule disabled.");
     }
 
-    // Getters if other modules need to interact
     public DailyRewardManager getManager() {
         return manager;
     }

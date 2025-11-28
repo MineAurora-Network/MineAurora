@@ -1,4 +1,4 @@
-package me.login.premimumfeatures.credits;
+package me.login.premiumfeatures.credits;
 
 import me.login.Login;
 
@@ -13,13 +13,13 @@ public class CreditsModule {
     }
 
     public void enable() {
-        // Initialize Database
+        // 1. Initialize Database (Shared with CreatorCode)
         this.database = new CreditsDatabase(plugin);
 
-        // Initialize Manager (Handles logic and logging)
+        // 2. Initialize Manager
         this.manager = new CreditsManager(plugin, database);
 
-        // Register Command
+        // 3. Register Command
         plugin.getCommand("credits").setExecutor(new CreditsCommand(plugin, manager));
 
         plugin.getLogger().info("Credits Module Enabled!");
@@ -34,5 +34,10 @@ public class CreditsModule {
 
     public CreditsManager getManager() {
         return manager;
+    }
+
+    // Expose database for CreatorCodeModule to use
+    public CreditsDatabase getDatabase() {
+        return database;
     }
 }

@@ -1,6 +1,5 @@
 package me.login.misc.tab;
 
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
@@ -17,25 +16,29 @@ public class TabListener implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        // Update all players because someone new joined
-        // This ensures the new player sees the right list
-        // and everyone else sees the new player (if they should)
+        // Immediate update to hide/show correct players
         tabManager.updateAllPlayers();
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // Run update on next tick to ensure player is gone
         tabManager.getPlugin().getServer().getScheduler().runTaskLater(tabManager.getPlugin(), () -> {
-            // Update all players because someone left
             tabManager.updateAllPlayers();
         }, 1L);
     }
 
     @EventHandler
     public void onWorldChange(PlayerChangedWorldEvent event) {
-        // Update all players because someone moved
-        // This ensures their old world and new world lists are correct
+        boolean wasManaged = tabManager.isManagedWorld(event.getFrom());
+        boolean isManaged = tabManager.isManagedWorld(event.getPlayer().getWorld());
+
+        // If player moved FROM Hub/Login TO Lifesteal/etc.
+        if (wasManaged && !isManaged) {
+            // We must RESET them so they can see players again (and let TAB take over)
+            tabManager.resetTabList(event.getPlayer());
+        }
+
+        // Update everyone else (e.g., remove this player from Hub tablist)
         tabManager.updateAllPlayers();
     }
 }

@@ -34,8 +34,8 @@ public class PlaytimeRewardNPCListener implements Listener {
                 return;
             }
 
-            // Open the GUI to page 1
-            gui.openGUI(player, 1);
+            // FIX: Open page 0 (Page 1), not page 1 (Page 2)
+            gui.openGUI(player, 0);
         }
     }
 }

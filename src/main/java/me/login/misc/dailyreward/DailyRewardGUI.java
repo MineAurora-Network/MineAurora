@@ -12,6 +12,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -29,33 +30,19 @@ public class DailyRewardGUI implements Listener {
     private final MiniMessage mm;
     private static final String GUI_METADATA = "DailyRewardGUI";
 
-    private final Player explicitPlayer;
-
     public DailyRewardGUI(Login plugin, DailyRewardManager manager) {
-        this(plugin, manager, null);
-    }
-
-    public DailyRewardGUI(Login plugin, DailyRewardManager manager, Player player) {
         this.plugin = plugin;
         this.manager = manager;
-        this.explicitPlayer = player;
         this.mm = MiniMessage.miniMessage();
-
-        if (player == null) {
-            plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        }
-    }
-
-    public void open() {
-        if (explicitPlayer != null) {
-            openGUI(explicitPlayer);
-        } else {
-            plugin.getLogger().warning("Attempted to call open() on DailyRewardGUI without a player context.");
-        }
+        // DO NOT register events in constructor if this is called multiple times.
+        // Registration is handled in DailyRewardModule once.
     }
 
     public void openGUI(Player player) {
-        manager.getDatabase().getClaimData(player.getUniqueId(), "default").thenAccept(defaultData -> {
+        // Determine which streak to show (Default or Highest Rank)
+        String rankKey = manager.getHighestRankKey(player);
+
+        manager.getDatabase().getClaimData(player.getUniqueId(), rankKey).thenAccept(data -> {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 Inventory gui = Bukkit.createInventory(null, 27, mm.deserialize("<black>Daily Rewards</black>"));
 
@@ -68,7 +55,8 @@ public class DailyRewardGUI implements Listener {
                     gui.setItem(i, filler);
                 }
 
-                gui.setItem(4, getPlayerHead(player, defaultData.streak()));
+                // Slot 4 now shows the streak for the player's highest rank
+                gui.setItem(4, getPlayerHead(player, data.streak()));
 
                 Map<String, DailyRewardManager.Reward> rewards = manager.getRankRewards();
                 String[] rankKeys = {"elite", "ace", "overlord", "immortal", "supreme", "phantom"};
@@ -110,7 +98,7 @@ public class DailyRewardGUI implements Listener {
         lore.add(mm.deserialize("<gray>Streaks increase your <gold>Money</gold></gray>").decoration(TextDecoration.ITALIC, false));
         lore.add(mm.deserialize("<gray>reward by <green>10%</green> per day!</gray>").decoration(TextDecoration.ITALIC, false));
         lore.add(Component.empty());
-        lore.add(mm.deserialize("<gray>Global Streak: <white>" + streak + " Days</white></gray>").decoration(TextDecoration.ITALIC, false));
+        lore.add(mm.deserialize("<gray>Current Streak: <white>" + streak + " Days</white></gray>").decoration(TextDecoration.ITALIC, false));
 
         meta.lore(lore);
         head.setItemMeta(meta);
@@ -152,7 +140,7 @@ public class DailyRewardGUI implements Listener {
         if (!(event.getWhoClicked() instanceof Player p)) return;
         if (!p.hasMetadata(GUI_METADATA)) return;
 
-        // FIX 2: Cancel event immediately to prevent stealing
+        // STRICTLY cancel all clicks for players with metadata open
         event.setCancelled(true);
 
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
@@ -176,6 +164,15 @@ public class DailyRewardGUI implements Listener {
                 }
                 return;
             }
+        }
+    }
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player p)) return;
+        if (p.hasMetadata(GUI_METADATA)) {
+            // Prevent any item dragging while this GUI is open
+            event.setCancelled(true);
         }
     }
 

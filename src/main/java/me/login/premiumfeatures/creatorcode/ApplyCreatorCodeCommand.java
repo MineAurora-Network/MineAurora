@@ -1,8 +1,7 @@
-package me.login.misc.creatorcode;
+package me.login.premiumfeatures.creatorcode;
 
 import de.rapha149.signgui.SignGUI;
-import me.clip.placeholderapi.PlaceholderAPI;
-import me.login.Login; // <-- IMPORT THE LOGIN CLASS
+import me.login.Login;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -19,20 +18,14 @@ public class ApplyCreatorCodeCommand implements CommandExecutor {
     private final CreatorCodeManager manager;
     private final CreatorCodeLogger logger;
     private final Component serverPrefix;
+    private final Login plugin;
     private final MiniMessage mm = MiniMessage.miniMessage();
-    private final Login plugin; // <-- ADD THIS FIELD
 
-    private final boolean skriptEnabled;
-    private final boolean papiEnabled;
-
-    // THIS CONSTRUCTOR IS THE FIX
     public ApplyCreatorCodeCommand(CreatorCodeManager manager, CreatorCodeLogger logger, Component serverPrefix, Login plugin) {
         this.manager = manager;
         this.logger = logger;
         this.serverPrefix = serverPrefix;
-        this.plugin = plugin; // <-- ADD THIS LINE
-        this.skriptEnabled = Bukkit.getPluginManager().getPlugin("Skript") != null;
-        this.papiEnabled = Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null;
+        this.plugin = plugin;
     }
 
     @Override
@@ -47,26 +40,12 @@ public class ApplyCreatorCodeCommand implements CommandExecutor {
             return true;
         }
 
-        // --- Check Dependencies ---
-        if (!skriptEnabled) {
-            player.sendMessage(serverPrefix.append(mm.deserialize("<red>The Skript plugin is not enabled. This feature is disabled.</red>")));
-            return true;
-        }
-        if (!papiEnabled) {
-            player.sendMessage(serverPrefix.append(mm.deserialize("<red>PlaceholderAPI is not enabled. This feature is disabled.</red>")));
-            return true;
-        }
-
-        // Open the Sign GUI instead of checking args
+        // Open the Sign GUI
         openCreatorCodeSignInput(player);
         return true;
     }
 
-    /**
-     * Opens the SignGUI for the player to input their creator code.
-     */
     private void openCreatorCodeSignInput(Player player) {
-        // We use the LegacyComponentSerializer to set colored lines, just like in your CoinflipMenu
         final LegacyComponentSerializer serializer = LegacyComponentSerializer.legacySection();
 
         Component line1 = Component.empty();
@@ -85,8 +64,7 @@ public class ApplyCreatorCodeCommand implements CommandExecutor {
                     .setHandler((p, result) -> {
                         String codeToApply = result.getLine(0).trim();
 
-                        // Run the logic back on the main thread
-                        // THIS LINE IS THE FIX
+                        // Run logic on main thread then async for DB if needed
                         Bukkit.getScheduler().runTask(plugin, () -> {
 
                             if (codeToApply.isEmpty() || codeToApply.equalsIgnoreCase("cancel")) {
@@ -94,40 +72,42 @@ public class ApplyCreatorCodeCommand implements CommandExecutor {
                                 return;
                             }
 
-                            // --- 1. Check if code is valid ---
+                            // 1. Check validity
                             if (!manager.isCodeValid(codeToApply)) {
                                 p.sendMessage(serverPrefix.append(mm.deserialize("<red>That is not a valid creator code.</red>")));
                                 return;
                             }
 
-                            String code = codeToApply.toLowerCase(); // Use lowercase for comparison and setting
+                            String code = codeToApply.toLowerCase();
 
-                            // --- 2. Check if player already has a code ---
-                            String varName = "credits." + p.getUniqueId() + ".creatorcode";
-                            String existingValue = PlaceholderAPI.setPlaceholders(p, "{" + varName + "}");
+                            // 2. Async check for existing code to prevent lag
+                            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                                String existingCode = manager.getPlayerCode(p.getUniqueId());
 
-                            if (existingValue != null && !existingValue.isEmpty() && !existingValue.equals("{" + varName + "}")) {
-                                p.sendMessage(serverPrefix.append(mm.deserialize("<red>You have already applied a creator code: </red><yellow>" + existingValue + "</yellow>")));
-                                return;
-                            }
+                                if (existingCode != null) {
+                                    // Player already has a code
+                                    Component msg = serverPrefix.append(mm.deserialize("<red>You have already applied a creator code: </red><yellow>" + existingCode + "</yellow>"));
+                                    p.sendMessage(msg);
+                                    return;
+                                }
 
-                            // --- 3. All checks passed. Apply the code ---
-                            // --- FIX: Replaced 'sk set' with your requested 'setskriptvariable' command ---
-                            String skriptCommand = "setskriptvariable " + p.getName() + " " + code;
-                            // --- END FIX ---
-                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), skriptCommand);
+                                // 3. Apply Code (Save to DB)
+                                manager.setPlayerCode(p.getUniqueId(), code);
 
-                            p.sendMessage(serverPrefix.append(mm.deserialize("<green>You have successfully applied creator code: </green><yellow>" + code + "</yellow>")));
-                            logger.logUsage("Player `" + p.getName() + "` applied creator code: `" + code + "`");
+                                // Notify Player
+                                Component successMsg = serverPrefix.append(mm.deserialize("<green>You have successfully applied creator code: </green><yellow>" + code + "</yellow>"));
+                                p.sendMessage(successMsg);
+
+                                // Log
+                                logger.logUsage("Player `" + p.getName() + "` applied creator code: `" + code + "`");
+                            });
                         });
-
-                        return null; // Close the GUI
+                        return null;
                     })
                     .build()
                     .open(player);
 
         } catch (Exception e) {
-            // THIS LINE IS THE FIX
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error opening Creator Code SignGUI", e);
             player.sendMessage(serverPrefix.append(mm.deserialize("<red>An error occurred while opening the input menu.</red>")));
         }

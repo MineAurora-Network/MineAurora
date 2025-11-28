@@ -1,9 +1,7 @@
-package me.login.premimumfeatures.credits;
+package me.login.premiumfeatures.credits;
 
 import me.login.Login;
 import org.bukkit.OfflinePlayer;
-
-import java.util.UUID;
 
 public class CreditsManager {
 
@@ -15,23 +13,23 @@ public class CreditsManager {
         this.logger = new CreditsLogger(plugin);
     }
 
-    public double getBalance(OfflinePlayer player) {
+    public int getBalance(OfflinePlayer player) {
         return database.getCredits(player.getUniqueId());
     }
 
-    public void addCredits(String adminName, OfflinePlayer target, double amount) {
+    public void addCredits(String adminName, OfflinePlayer target, int amount) {
         database.addCredits(target.getUniqueId(), amount);
-        double newBalance = getBalance(target);
+        int newBalance = getBalance(target);
         logger.logTransaction(adminName, target.getName(), "ADD", amount, newBalance);
     }
 
-    public void removeCredits(String adminName, OfflinePlayer target, double amount) {
+    public void removeCredits(String adminName, OfflinePlayer target, int amount) {
         database.removeCredits(target.getUniqueId(), amount);
-        double newBalance = getBalance(target);
+        int newBalance = getBalance(target);
         logger.logTransaction(adminName, target.getName(), "REMOVE", amount, newBalance);
     }
 
-    public void setCredits(String adminName, OfflinePlayer target, double amount) {
+    public void setCredits(String adminName, OfflinePlayer target, int amount) {
         database.setCredits(target.getUniqueId(), amount);
         logger.logTransaction(adminName, target.getName(), "SET", amount, amount);
     }

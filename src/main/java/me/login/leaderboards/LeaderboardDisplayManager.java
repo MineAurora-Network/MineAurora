@@ -42,9 +42,7 @@ public class LeaderboardDisplayManager {
         loadLeaderboards();
     }
 
-    // Called on Server Stop
     public void disable() {
-        // We just un-force chunks so we don't leave ghost chunks loaded when plugin is off
         for (UUID uuid : activeLeaderboards.keySet()) {
             Entity e = Bukkit.getEntity(uuid);
             if (e != null) {
@@ -57,7 +55,6 @@ public class LeaderboardDisplayManager {
                 }
             }
         }
-        // DO NOT clear activeLeaderboards map here, or we lose data.
     }
 
     public void reloadConfigAndUpdateAll() {
@@ -90,10 +87,9 @@ public class LeaderboardDisplayManager {
     private TextDisplay spawnNewDisplay(Location location, String type) {
         if (location == null || location.getWorld() == null) return null;
 
-        // --- KEY FIX: Force Load Chunk ---
         Chunk chunk = location.getChunk();
         if (!chunk.isLoaded()) chunk.load();
-        chunk.setForceLoaded(true); // Keep this chunk loaded always
+        chunk.setForceLoaded(true);
 
         TextDisplay textDisplay = (TextDisplay) location.getWorld().spawnEntity(location, EntityType.TEXT_DISPLAY);
         textDisplay.setCustomName("leaderboard_" + type);
@@ -109,7 +105,6 @@ public class LeaderboardDisplayManager {
 
     public void updateAllDisplays() {
         if (activeLeaderboards.isEmpty()) return;
-        // Copy keyset to avoid ConcurrentModificationException if we remove/re-add
         new HashSet<>(activeLeaderboards.keySet()).forEach(this::updateDisplay);
     }
 
@@ -122,9 +117,8 @@ public class LeaderboardDisplayManager {
         }
         String type = info.type();
         Location loc = info.getLocation();
-        if (loc == null) return; // World likely unloaded
+        if (loc == null) return;
 
-        // Ensure chunk is loaded before checking for entity
         if (!loc.getChunk().isForceLoaded()) {
             loc.getChunk().load();
             loc.getChunk().setForceLoaded(true);
@@ -133,17 +127,12 @@ public class LeaderboardDisplayManager {
         Entity entity = Bukkit.getEntity(uuid);
         TextDisplay textDisplay;
 
-        // --- KEY FIX: Respawn if missing ---
         if (entity == null || !entity.isValid() || !(entity instanceof TextDisplay)) {
             plugin.getLogger().warning("Leaderboard " + type + " was missing at " + loc + ". Respawning...");
             textDisplay = spawnNewDisplay(loc, type);
             if (textDisplay == null) return;
-
-            // Remove old UUID reference
             activeLeaderboards.remove(uuid);
-            // Add new UUID reference
             activeLeaderboards.put(textDisplay.getUniqueId(), info);
-            // Save immediately so config has new UUID
             saveLeaderboards();
         } else {
             textDisplay = (TextDisplay) entity;
@@ -160,7 +149,6 @@ public class LeaderboardDisplayManager {
         String emptyLineFormat = plugin.getConfig().getString("leaderboards." + configKey + ".empty-line-format", "<gray>Empty</gray>");
         String footerFormat = plugin.getConfig().getString("leaderboards." + configKey + ".footer", "");
 
-        // Async Fetch
         CompletableFuture<Map<String, Double>> future;
         switch (configKey) {
             case "kills": future = fetcher.getTopStats(Statistic.PLAYER_KILLS, 10); break;
@@ -194,6 +182,7 @@ public class LeaderboardDisplayManager {
                         long hours = (long) (entry.getValue() / 20 / 3600);
                         value = String.valueOf(hours);
                     } else if (configKey.equals("balance") || configKey.equals("credits")) {
+                        // Apply money formatting for Balance and Credits
                         value = smallValue;
                     } else {
                         value = fullValue;
@@ -216,7 +205,6 @@ public class LeaderboardDisplayManager {
             if (papiEnabled) finalStr = PlaceholderAPI.setPlaceholders(null, finalStr);
             String finalText = finalStr.replace("%nl%", "<newline>");
 
-            // Sync update to entity
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (display.isValid()) {
                     display.text(miniMessage.deserialize(finalText));

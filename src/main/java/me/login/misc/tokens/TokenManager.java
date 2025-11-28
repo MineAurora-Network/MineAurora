@@ -34,17 +34,19 @@ public class TokenManager {
         this.itemManager = itemManager;
         this.mm = MiniMessage.miniMessage();
 
-        String p1Raw = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>");
-        String p2Raw = plugin.getConfig().getString("server_prefix_2", "<white>:");
+        // Only load 'server_prefix' to prevent double prefixes.
+        // Ignored 'server_prefix_2' intentionally to fix duplication issues.
+        String p1Raw = plugin.getConfig().getString("server_prefix");
+        if (p1Raw == null) {
+            p1Raw = "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b> <dark_gray>•</dark_gray>";
+        }
 
-        Component p1 = parseMixedContent(p1Raw);
-        Component p2 = parseMixedContent(p2Raw);
-
-        this.prefix = p1.append(p2).append(Component.text(" "));
+        // Append a single space after the prefix
+        this.prefix = parseMixedContent(p1Raw).append(Component.text(" "));
     }
 
     private Component parseMixedContent(String input) {
-        if (input == null) return Component.empty();
+        if (input == null || input.isEmpty()) return Component.empty();
         if (input.contains("&") || input.contains("§")) {
             return LegacyComponentSerializer.legacyAmpersand().deserialize(input);
         }
@@ -94,7 +96,9 @@ public class TokenManager {
                 if (item == null) {
                     sendMsg(player, "<red>Error: The item '"+itemKey+"' is not configured in items.yml! Refunding tokens.</red>");
                     database.addTokens(player.getUniqueId(), (int) cost);
-                    logger.logAdmin("`" + player.getName() + "` failed to buy item `"+itemKey+"` (missing in items.yml). Refunded `" + cost + "` tokens.");
+
+                    // FIX: Updated to match the 4-argument signature of logAdmin
+                    logger.logAdmin("System", "Refund (Item Missing: " + itemKey + ")", player.getName(), cost);
                     return;
                 }
 
@@ -127,7 +131,9 @@ public class TokenManager {
             }
             database.addTokens(uuid, (int) amount);
             sendMsg(sender, "<green>Added <white>" + amount + "</white> tokens to <white>" + targetName + "</white>.</green>");
-            logger.logAdmin("`" + sender.getName() + "` added `" + amount + "` tokens to `" + targetName + "`.");
+
+            logger.logAdmin(sender.getName(), "Added", targetName, amount);
+
             Player targetPlayer = Bukkit.getPlayer(uuid);
             if (targetPlayer != null && targetPlayer.isOnline()) {
                 sendMsg(targetPlayer, "<gray>An admin added <gold>" + amount + " ☆</gold> to your balance.</gray>");
@@ -144,7 +150,9 @@ public class TokenManager {
             database.removeTokens(uuid, amount).thenAccept(success -> {
                 if (success) {
                     sendMsg(sender, "<green>Removed <white>" + amount + "</white> tokens from <white>" + targetName + "</white>.</green>");
-                    logger.logAdmin("`" + sender.getName() + "` removed `" + amount + "` tokens from `" + targetName + "`.");
+
+                    logger.logAdmin(sender.getName(), "Removed", targetName, amount);
+
                     Player targetPlayer = Bukkit.getPlayer(uuid);
                     if (targetPlayer != null && targetPlayer.isOnline()) {
                         sendMsg(targetPlayer, "<red>An admin removed <white>" + amount + "</white> tokens from your balance.</red>");
@@ -173,7 +181,9 @@ public class TokenManager {
                 }
                 database.setTokens(targetUUID, amount);
                 sendMsg(sender, "<green>Set <white>" + targetName + "</white>'s token balance to <white>" + amount + "</white>.</green>");
-                logger.logAdmin("`" + sender.getName() + "` set `" + targetName + "`'s token balance to `" + amount + "`.");
+
+                logger.logAdmin(sender.getName(), "Set", targetName, amount);
+
                 Player targetPlayer = Bukkit.getPlayer(targetUUID);
                 if (targetPlayer != null && targetPlayer.isOnline()) {
                     sendMsg(targetPlayer, "<gray>An admin set your token balance to <gold>" + amount + " ☆</gold>.</gray>");
@@ -183,45 +193,23 @@ public class TokenManager {
     }
 
     private CompletableFuture<Boolean> canModify(CommandSender sender, UUID targetUUID) {
-        if (luckPerms == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-        if (!(sender instanceof Player)) {
-            return CompletableFuture.completedFuture(true);
-        }
+        if (luckPerms == null) return CompletableFuture.completedFuture(false);
+        if (!(sender instanceof Player)) return CompletableFuture.completedFuture(true);
         Player senderPlayer = (Player) sender;
-
-        CompletableFuture<User> senderUserFuture = luckPerms.getUserManager().loadUser(senderPlayer.getUniqueId());
-        CompletableFuture<User> targetUserFuture = luckPerms.getUserManager().loadUser(targetUUID);
-
-        return senderUserFuture.thenCombine(targetUserFuture, (senderUser, targetUser) -> {
-            String senderGroup = senderUser.getPrimaryGroup();
-            String targetGroup = targetUser.getPrimaryGroup();
-            int senderWeight = Optional.ofNullable(luckPerms.getGroupManager().getGroup(senderGroup))
-                    .map(group -> group.getWeight().orElse(0))
-                    .orElse(0);
-            int targetWeight = Optional.ofNullable(luckPerms.getGroupManager().getGroup(targetGroup))
-                    .map(group -> group.getWeight().orElse(0))
-                    .orElse(0);
-
-            return senderWeight >= targetWeight;
-        }).exceptionally(ex -> {
-            plugin.getLogger().warning("Failed to perform LuckPerms rank check: " + ex.getMessage());
-            return false;
-        });
+        return luckPerms.getUserManager().loadUser(senderPlayer.getUniqueId())
+                .thenCombine(luckPerms.getUserManager().loadUser(targetUUID), (senderUser, targetUser) -> {
+                    int senderWeight = Optional.ofNullable(luckPerms.getGroupManager().getGroup(senderUser.getPrimaryGroup())).map(g -> g.getWeight().orElse(0)).orElse(0);
+                    int targetWeight = Optional.ofNullable(luckPerms.getGroupManager().getGroup(targetUser.getPrimaryGroup())).map(g -> g.getWeight().orElse(0)).orElse(0);
+                    return senderWeight >= targetWeight;
+                }).exceptionally(e -> false);
     }
 
     private CompletableFuture<UUID> getTargetUUID(String playerName) {
         return CompletableFuture.supplyAsync(() -> {
             Player target = Bukkit.getPlayerExact(playerName);
-            if (target != null) {
-                return target.getUniqueId();
-            }
-            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerName);
-            if (offlinePlayer.hasPlayedBefore()) {
-                return offlinePlayer.getUniqueId();
-            }
-            return null;
+            if (target != null) return target.getUniqueId();
+            OfflinePlayer off = Bukkit.getOfflinePlayer(playerName);
+            return off.hasPlayedBefore() ? off.getUniqueId() : null;
         }, runnable -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, runnable));
     }
 

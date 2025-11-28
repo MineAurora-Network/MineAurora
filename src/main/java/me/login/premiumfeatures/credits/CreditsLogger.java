@@ -1,4 +1,4 @@
-package me.login.premimumfeatures.credits;
+package me.login.premiumfeatures.credits;
 
 import me.login.Login;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -19,16 +19,16 @@ public class CreditsLogger {
         this.plugin = plugin;
         this.channelId = plugin.getConfig().getString("credit-log-channel-id", "");
 
-        // Use the shared JDA instance from LagClearLogger
+        // Safely get JDA from LagClearLogger
         if (plugin.getLagClearLogger() != null) {
             this.jda = plugin.getLagClearLogger().getJDA();
         } else {
             this.jda = null;
-            plugin.getLogger().warning("CreditsLogger: LagClearLogger is not initialized. Discord logging will be disabled.");
+            plugin.getLogger().warning("CreditsLogger: LagClearLogger is not initialized or JDA is null.");
         }
     }
 
-    public void logTransaction(String adminName, String targetName, String action, double amount, double newBalance) {
+    public void logTransaction(String adminName, String targetName, String action, int amount, int newBalance) {
         if (channelId == null || channelId.isEmpty()) return;
         if (jda == null || jda.getStatus() != JDA.Status.CONNECTED) return;
 
@@ -36,27 +36,24 @@ public class CreditsLogger {
             try {
                 MessageChannel channel = jda.getTextChannelById(channelId);
                 if (channel == null) {
-                    plugin.getLogger().warning("Credits Log Channel ID is invalid or bot cannot see it: " + channelId);
                     return;
                 }
 
                 EmbedBuilder embed = new EmbedBuilder();
                 embed.setTitle("Credits Transaction");
                 embed.setColor(action.equalsIgnoreCase("add") ? Color.GREEN : Color.RED);
+                if (action.equalsIgnoreCase("set")) embed.setColor(Color.YELLOW);
 
                 embed.addField("Admin", adminName, true);
                 embed.addField("Target", targetName, true);
                 embed.addField("Action", action.toUpperCase(), true);
-                embed.addField("Amount", String.format("%.2f", amount), true);
-                embed.addField("New Balance", String.format("%.2f", newBalance), true);
+                embed.addField("Amount", String.valueOf(amount), true);
+                embed.addField("New Balance", String.valueOf(newBalance), true);
 
                 embed.setTimestamp(Instant.now());
                 embed.setFooter("MineAurora Network Credit System");
 
-                channel.sendMessageEmbeds(embed.build()).queue(
-                        null,
-                        error -> plugin.getLogger().warning("Failed to send Credits log: " + error.getMessage())
-                );
+                channel.sendMessageEmbeds(embed.build()).queue();
 
             } catch (Exception e) {
                 e.printStackTrace();

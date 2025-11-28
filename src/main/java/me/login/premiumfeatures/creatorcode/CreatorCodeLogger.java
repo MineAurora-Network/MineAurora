@@ -1,4 +1,4 @@
-package me.login.misc.creatorcode;
+package me.login.premiumfeatures.creatorcode;
 
 import me.login.Login;
 import net.dv8tion.jda.api.JDA;
@@ -20,7 +20,7 @@ public class CreatorCodeLogger {
     private final Map<Long, String> lastMessageId = new HashMap<>();
     private final Map<Long, Integer> messageCount = new HashMap<>();
     private final Map<Long, BukkitTask> flushTasks = new HashMap<>();
-    private final long FLUSH_DELAY_TICKS = 400L; // 20 seconds (20 * 20 ticks)
+    private final long FLUSH_DELAY_TICKS = 400L; // 20 seconds
 
     public CreatorCodeLogger(Login plugin) {
         this.plugin = plugin;
@@ -32,27 +32,15 @@ public class CreatorCodeLogger {
         if (logChannelId == 0) {
             plugin.getLogger().warning("Creator Code Log Channel ID ('creator-code-channel-id') not set in config.yml!");
         }
-        if (this.jda == null) {
-            plugin.getLogger().severe("CreatorCodeLogger received a null JDA instance! Logging will be disabled.");
-        }
     }
 
-    /**
-     * Logs a message related to player code usage.
-     * @param message The message to log.
-     */
     public void logUsage(String message) {
         sendLog(logChannelId, "[Creator Code] " + message, "Usage");
     }
 
-    /**
-     * Logs a message related to admin actions.
-     * @param message The message to log.
-     */
     public void logAdmin(String message) {
         sendLog(logChannelId, "[Creator Admin] " + message, "Admin");
     }
-
 
     private void sendLog(long channelId, String message, String logType) {
         if (jda == null || jda.getStatus() != JDA.Status.CONNECTED || channelId == 0) {
@@ -62,7 +50,6 @@ public class CreatorCodeLogger {
         String last = lastMessage.get(channelId);
 
         if (message.equals(last)) {
-            // Stack it
             messageCount.put(channelId, messageCount.getOrDefault(channelId, 1) + 1);
             BukkitTask existingTask = flushTasks.remove(channelId);
             if (existingTask != null) existingTask.cancel();
@@ -76,7 +63,6 @@ public class CreatorCodeLogger {
             flushTasks.put(channelId, newTask);
 
         } else {
-            // Flush previous stack and start a new one
             flushLog(channelId, logType);
 
             lastMessage.put(channelId, message);
@@ -106,27 +92,19 @@ public class CreatorCodeLogger {
         if (task != null) task.cancel();
 
         MessageChannel channel = jda.getTextChannelById(channelId);
-        if (channel == null) {
-            plugin.getLogger().warning("Creator Code " + logType + " log channel (" + channelId + ") not found.");
-            return;
-        }
+        if (channel == null) return;
 
         String finalMessage = message + (count > 1 ? " `(x" + count + ")`" : "");
 
         if (messageId != null && count > 1) {
-            // Edit existing message
             channel.editMessageById(messageId, finalMessage).queue(
                     null,
-                    error -> {
-                        // Failed to edit (e.g., deleted), send new
-                        channel.sendMessage(finalMessage).queue(
-                                (newMessage) -> lastMessageId.put(channelId, newMessage.getId()),
-                                (sendError) -> plugin.getLogger().warning("Failed to (re)send Creator Code " + logType + " log: " + sendError.getMessage())
-                        );
-                    }
+                    error -> channel.sendMessage(finalMessage).queue(
+                            (newMessage) -> lastMessageId.put(channelId, newMessage.getId()),
+                            (sendError) -> plugin.getLogger().warning("Failed to log: " + sendError.getMessage())
+                    )
             );
         } else {
-            // Send new message
             channel.sendMessage(finalMessage).queue(
                     (newMessage) -> {
                         if (count == 1) {
@@ -135,7 +113,7 @@ public class CreatorCodeLogger {
                             lastMessageId.put(channelId, newMessage.getId());
                         }
                     },
-                    error -> plugin.getLogger().warning("Failed to send Creator Code " + logType + " log: " + error.getMessage())
+                    error -> plugin.getLogger().warning("Failed to log: " + error.getMessage())
             );
         }
     }

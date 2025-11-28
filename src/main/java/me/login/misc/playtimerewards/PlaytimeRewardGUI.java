@@ -13,6 +13,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -68,7 +69,9 @@ public class PlaytimeRewardGUI implements Listener {
 
         this.TOTAL_PAGES = (int) Math.ceil((double) PlaytimeRewardManager.MAX_LEVEL / LEVELS_PER_PAGE);
 
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        // FIX 3: Removed double registration.
+        // This listener is already registered in PlaytimeRewardModule.
+        // plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
     public void openGUI(Player player, int page) {
@@ -107,8 +110,12 @@ public class PlaytimeRewardGUI implements Listener {
             gui.setItem(LEVEL_SLOTS[i], createLevelItem(levelInfo, data));
         }
 
-        player.setMetadata(GUI_METADATA, new FixedMetadataValue(plugin, page));
+        // FIX 2: Open inventory BEFORE setting metadata.
+        // When openInventory() is called, it closes the previous inventory (if any).
+        // This triggers onClose(), which removes the metadata.
+        // By setting metadata AFTER opening, we ensure it persists for the new inventory.
         player.openInventory(gui);
+        player.setMetadata(GUI_METADATA, new FixedMetadataValue(plugin, page));
     }
 
     private ItemStack createLevelItem(PlaytimeRewardLevel level, PlaytimeRewardDatabase.PlayerPlaytimeData data) {
@@ -190,7 +197,6 @@ public class PlaytimeRewardGUI implements Listener {
         }
         meta.displayName(displayName);
         if (enabled) {
-            // Only add page data if enabled
             meta.getPersistentDataContainer().set(pageKey, PersistentDataType.INTEGER, targetPage);
         }
         item.setItemMeta(meta);
@@ -243,6 +249,14 @@ public class PlaytimeRewardGUI implements Listener {
                 openGUI(player, targetPage);
                 player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
             }
+        }
+    }
+
+    // FIX 2b: Add drag handler to prevent dragging items into or out of the GUI
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getWhoClicked() instanceof Player player && player.hasMetadata(GUI_METADATA)) {
+            event.setCancelled(true);
         }
     }
 

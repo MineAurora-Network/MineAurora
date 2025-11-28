@@ -1,9 +1,8 @@
 package me.login.leaderboards;
 
 import me.login.Login;
-import me.login.loginsystem.LoginModule;
 import me.login.misc.tokens.TokenModule;
-import me.login.premimumfeatures.credits.CreditsModule;
+import me.login.premiumfeatures.credits.CreditsModule;
 import me.login.scoreboard.SkriptUtils;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
@@ -107,15 +106,27 @@ public class StatsFetcher {
     public CompletableFuture<Map<String, Double>> getTopTokens(int limit) {
         return CompletableFuture.supplyAsync(() -> {
             Map<String, Double> statsMap = new HashMap<>();
-            if (tokenModule == null || tokenModule.getTokenDatabase() == null) return statsMap;
 
-            try (PreparedStatement ps = tokenModule.getTokenDatabase().getConnection().prepareStatement(
-                    "SELECT player_uuid, token_balance FROM player_tokens ORDER BY token_balance DESC LIMIT ?")) {
-                ps.setInt(1, limit * 2);
+            // We verify the module is active, but we connect to the FILE directly for safety in async threads
+            if (tokenModule == null) return statsMap;
+
+            File dbFile = new File(plugin.getDataFolder(), "database/tokens.db");
+            if (!dbFile.exists()) return statsMap;
+
+            String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
+
+            // Query matches your TokenDatabase: table 'player_tokens', column 'tokens'
+            String query = "SELECT player_uuid, tokens FROM player_tokens ORDER BY tokens DESC LIMIT ?";
+
+            try (Connection conn = DriverManager.getConnection(url);
+                 PreparedStatement ps = conn.prepareStatement(query)) {
+
+                ps.setInt(1, limit * 2); // Fetch extra in case of OPs we need to filter
                 ResultSet rs = ps.executeQuery();
+
                 while (rs.next()) {
                     String uuidStr = rs.getString("player_uuid");
-                    long balance = rs.getLong("token_balance");
+                    long balance = rs.getLong("tokens");
                     try {
                         OfflinePlayer p = Bukkit.getOfflinePlayer(UUID.fromString(uuidStr));
                         if (p.getName() != null) {
@@ -123,6 +134,7 @@ public class StatsFetcher {
                             statsMap.put(p.getName(), (double) balance);
                         }
                     } catch (IllegalArgumentException ignored) {}
+
                     if (statsMap.size() >= limit) break;
                 }
             } catch (Exception e) {
@@ -136,14 +148,23 @@ public class StatsFetcher {
     public CompletableFuture<Map<String, Double>> getTopCredits(int limit) {
         return CompletableFuture.supplyAsync(() -> {
             Map<String, Double> statsMap = new HashMap<>();
+
+            if (creditsModule == null) return statsMap;
+
             File dbFile = new File(plugin.getDataFolder(), "database/credits.db");
             if (!dbFile.exists()) return statsMap;
 
             String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
+
+            // Query matches your CreditsDatabase: table 'player_credits', columns 'uuid' and 'amount'
+            String query = "SELECT uuid, amount FROM player_credits ORDER BY amount DESC LIMIT ?";
+
             try (Connection conn = DriverManager.getConnection(url);
-                 PreparedStatement ps = conn.prepareStatement("SELECT uuid, amount FROM player_credits ORDER BY amount DESC LIMIT ?")) {
+                 PreparedStatement ps = conn.prepareStatement(query)) {
+
                 ps.setInt(1, limit * 2);
                 ResultSet rs = ps.executeQuery();
+
                 while (rs.next()) {
                     String uuidStr = rs.getString("uuid");
                     double amount = rs.getDouble("amount");
@@ -154,6 +175,7 @@ public class StatsFetcher {
                             statsMap.put(p.getName(), amount);
                         }
                     } catch (IllegalArgumentException ignored) {}
+
                     if (statsMap.size() >= limit) break;
                 }
             } catch (Exception e) {
@@ -164,17 +186,20 @@ public class StatsFetcher {
     }
 
     // --- SKRIPT VARS (Async) ---
-    // Warning: Accessing Skript vars async might be risky depending on Skript implementation, but usually reading variables is fine.
     public CompletableFuture<Map<String, Double>> getTopSkriptVar(String varPattern, int limit) {
         return CompletableFuture.supplyAsync(() -> {
             Map<String, Double> statsMap = new HashMap<>();
             if (!Bukkit.getPluginManager().isPluginEnabled("Skript")) return statsMap;
 
+            // Note: Skript variable access async can be risky depending on storage backend.
+            // Ensure you are using a SQL backend for Skript if you have many players.
             for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
                 if (player.getName() == null) continue;
                 if (!LeaderboardModule.isShowOps() && player.isOp()) continue;
+
                 String varName = varPattern.replace("%uuid%", player.getUniqueId().toString());
                 try {
+                    // Accessing SkriptUtils
                     Object varValue = SkriptUtils.getVar(varName);
                     if (varValue instanceof Number) {
                         double value = ((Number) varValue).doubleValue();
@@ -189,9 +214,8 @@ public class StatsFetcher {
     // --- PARKOUR (Async SQL) ---
     public CompletableFuture<Map<String, Double>> getTopParkour(int limit) {
         return CompletableFuture.supplyAsync(() -> {
-            LoginModule loginModule = plugin.getLoginModule();
-            if (loginModule != null && loginModule.getLoginDatabase() != null) {
-                return loginModule.getLoginDatabase().getTopParkourCompletions(limit);
+            if (plugin.getLoginModule() != null && plugin.getLoginModule().getLoginDatabase() != null) {
+                return plugin.getLoginModule().getLoginDatabase().getTopParkourCompletions(limit);
             }
             return new HashMap<>();
         });

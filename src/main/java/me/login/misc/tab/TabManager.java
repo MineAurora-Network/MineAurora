@@ -1,79 +1,56 @@
 package me.login.misc.tab;
 
 import me.login.Login;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TabManager {
 
     private final Login plugin;
+    private final MiniMessage miniMessage;
     private BukkitTask tabUpdaterTask;
-    private String hubHeader;
-    private String hubFooter;
+
+    // We store the raw string templates so we can replace placeholders (like %hub_online%) every second
+    private String hubHeaderRaw;
+    private String hubFooterRaw;
+
+    // Pattern to find legacy ampersand codes (e.g., &a, &7, &l)
+    private final Pattern legacyPattern = Pattern.compile("&([0-9a-fk-or])");
 
     public TabManager(Login plugin) {
         this.plugin = plugin;
-        loadConfig(); // Load config first
-        // Register listener AFTER loading config
+        this.miniMessage = MiniMessage.miniMessage();
+        loadConfig();
         plugin.getServer().getPluginManager().registerEvents(new TabListener(this), plugin);
     }
 
-    /**
-     * Loads the header and footer from the plugin's own config.yml.
-     */
     public void loadConfig() {
-        plugin.reloadConfig(); // Make sure we have the latest config
+        plugin.reloadConfig();
         FileConfiguration config = plugin.getConfig();
 
-        // Default values in case the config is missing
-        List<String> defaultHeader = List.of("&bWelcome to the &lHub&r!", "&eplay.yourserver.com");
-        List<String> defaultFooter = List.of("", "&ePlayers in Hub: &f%hub_online%");
+        // Join the list into a single string with newlines
+        // We do NOT translate colors here yet, because we want MiniMessage to handle everything later
+        this.hubHeaderRaw = String.join("<newline>", config.getStringList("tablist.hub.header"));
+        this.hubFooterRaw = String.join("<newline>", config.getStringList("tablist.hub.footer"));
 
-        // Load hub header
-        // This loads from *your* plugin's config.yml, NOT the TAB plugin's config.
-        this.hubHeader = ChatColor.translateAlternateColorCodes('&',
-                String.join("\n", config.getStringList("tablist.hub.header"))
-        );
-
-        // Load hub footer
-        this.hubFooter = ChatColor.translateAlternateColorCodes('&',
-                String.join("\n", config.getStringList("tablist.hub.footer"))
-        );
-
-        // --- FOR DEBUGGING: Log what was loaded ---
-        plugin.getLogger().info("[TabManager] Loaded Hub Header: " + this.hubHeader.replace("\n", " | "));
-        plugin.getLogger().info("[TabManager] Loaded Hub Footer: " + this.hubFooter.replace("\n", " | "));
-
-        // Add this to your config.yml (src/main/resources/config.yml) to customize it:
-        // tablist:
-        //   hub:
-        //     header:
-        //       - "&bWelcome to the &lHub&r!"
-        //       - ""
-        //     footer:
-        //       - ""
-        //       - "&eHave fun!"
+        // Log for debugging
+        plugin.getLogger().info("[TabManager] Header Template: " + hubHeaderRaw);
     }
 
-    /**
-     * Starts the repeating task that updates the tablist for all players.
-     */
     public void startUpdater() {
         if (this.tabUpdaterTask != null && !this.tabUpdaterTask.isCancelled()) {
             this.tabUpdaterTask.cancel();
         }
-        // Run the updater every 20 ticks (1 second)
         this.tabUpdaterTask = new TabUpdater(this).runTaskTimer(plugin, 0L, 20L);
     }
 
-    /**
-     * Stops the tab updater task.
-     */
     public void stopUpdater() {
         if (this.tabUpdaterTask != null && !this.tabUpdaterTask.isCancelled()) {
             this.tabUpdaterTask.cancel();
@@ -81,35 +58,38 @@ public class TabManager {
         }
     }
 
-    /**
-     * This is the main logic method, called by the listener and the updater.
-     * It updates the Header/Footer *and* player visibility for all players.
-     */
     public void updateAllPlayers() {
         int hubOnline = 0;
+        int globalOnline = Bukkit.getOnlinePlayers().size(); // Calculate global count
+
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (p.getWorld().getName().equalsIgnoreCase("hub")) {
                 hubOnline++;
             }
         }
-        String finalHubFooter = hubFooter.replace("%hub_online%", String.valueOf(hubOnline));
+
+        // Pre-calculate footer strings to save performance, replacing placeholders
+        String finalFooterString = hubFooterRaw
+                .replace("%hub_online%", String.valueOf(hubOnline))
+                .replace("%global_online%", String.valueOf(globalOnline));
+
+        // Parse them into Components properly handling Mixed formats (& and <gradient>)
+        Component finalHeaderComp = parseMixedContent(hubHeaderRaw);
+        Component finalFooterComp = parseMixedContent(finalFooterString);
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (!player.isOnline()) continue;
 
-            // 1. Set Header/Footer based on the player's world
-            updatePlayerHeaderFooter(player, finalHubFooter);
+            // 1. Set Header/Footer if in managed world
+            if (isManagedWorld(player.getWorld())) {
+                updatePlayerHeaderFooter(player, finalHeaderComp, finalFooterComp);
+            }
 
-            // 2. Update player visibility (who 'player' can see)
+            // 2. Visibility Logic
             for (Player other : Bukkit.getOnlinePlayers()) {
                 if (!other.isOnline()) continue;
+                if (player.equals(other)) continue;
 
-                if (player.equals(other)) {
-                    player.showPlayer(plugin, other); // Always show self
-                    continue;
-                }
-
-                // Decide if 'player' should be able to see 'other'
                 if (shouldPlayerSeeOther(player, other)) {
                     player.showPlayer(plugin, other);
                 } else {
@@ -120,59 +100,100 @@ public class TabManager {
     }
 
     /**
-     * Helper method to set the header/footer for a single player.
-     * @param player The player to update.
-     * @param dynamicHubFooter The footer with placeholders parsed.
+     * Updates the tablist header/footer for the player using Adventure Components.
+     * This supports RGB/Gradients perfectly.
      */
-    private void updatePlayerHeaderFooter(Player player, String dynamicHubFooter) {
+    private void updatePlayerHeaderFooter(Player player, Component header, Component footer) {
         String playerWorld = player.getWorld().getName();
 
         if (playerWorld.equalsIgnoreCase("login")) {
-            // VANILLA: Set blank header/footer
-            player.setPlayerListHeaderFooter("", "");
+            player.sendPlayerListHeaderAndFooter(Component.empty(), Component.empty());
         } else if (playerWorld.equalsIgnoreCase("hub")) {
-            // HUB: Set custom header/footer
-            player.setPlayerListHeaderFooter(hubHeader, dynamicHubFooter);
-        } else {
-            // OTHER WORLDS (lifesteal, etc.):
-            // DO NOTHING. Let the TAB plugin control the header/footer.
-            // Setting it to "" here would break the TAB plugin.
+            player.sendPlayerListHeaderAndFooter(header, footer);
         }
     }
 
-    /**
-     * The core visibility logic.
-     * @param player The viewing player.
-     * @param other The player being viewed.
-     * @return true if 'player' should see 'other', false otherwise.
-     */
+    public boolean isManagedWorld(org.bukkit.World world) {
+        String name = world.getName();
+        return name.equalsIgnoreCase("hub") || name.equalsIgnoreCase("login");
+    }
+
+    public void resetTabList(Player player) {
+        player.sendPlayerListHeaderAndFooter(Component.empty(), Component.empty());
+        for (Player other : Bukkit.getOnlinePlayers()) {
+            if (other.isOnline() && !other.equals(player)) {
+                player.showPlayer(plugin, other);
+            }
+        }
+    }
+
     private boolean shouldPlayerSeeOther(Player player, Player other) {
         String playerWorld = player.getWorld().getName();
         String otherWorld = other.getWorld().getName();
 
-        // Rule 1: 'login' players see NO ONE (except themselves, handled in updateAllPlayers)
-        if (playerWorld.equalsIgnoreCase("login")) {
-            return false;
-        }
+        if (playerWorld.equalsIgnoreCase("login")) return false;
+        if (otherWorld.equalsIgnoreCase("login")) return false;
 
-        // Rule 2: NO ONE sees 'login' players
-        if (otherWorld.equalsIgnoreCase("login")) {
-            return false;
-        }
-
-        // Rule 3: 'hub' players only see other 'hub' players
         if (playerWorld.equalsIgnoreCase("hub")) {
             return otherWorld.equalsIgnoreCase("hub");
         }
-
-        // Rule 4: 'default' (lifesteal, etc.) players
-        // Let the TAB plugin handle visibility.
-        // We return true, so TAB can decide to show or hide them based on its own config.
-        // (We already handled the 'login' case in Rule 2).
         return true;
     }
 
-    // Getter for the plugin instance
+    /**
+     * Handles strings that contain both Legacy codes (&7) and MiniMessage tags (<gradient>).
+     * It converts legacy codes to MiniMessage tags so the entire string can be parsed safely.
+     */
+    private Component parseMixedContent(String text) {
+        if (text == null || text.isEmpty()) return Component.empty();
+
+        // 1. Convert &7 -> <gray>, &l -> <bold>, etc.
+        String converted = convertLegacyColors(text);
+
+        // 2. Parse with MiniMessage to handle gradients and the newly converted tags
+        return miniMessage.deserialize(converted);
+    }
+
+    /**
+     * Replaces legacy '&' codes with MiniMessage tags.
+     */
+    private String convertLegacyColors(String text) {
+        Matcher matcher = legacyPattern.matcher(text);
+        StringBuilder sb = new StringBuilder();
+
+        while (matcher.find()) {
+            String code = matcher.group(1).toLowerCase();
+            String replacement = switch (code) {
+                case "0" -> "<black>";
+                case "1" -> "<dark_blue>";
+                case "2" -> "<dark_green>";
+                case "3" -> "<dark_aqua>";
+                case "4" -> "<dark_red>";
+                case "5" -> "<dark_purple>";
+                case "6" -> "<gold>";
+                case "7" -> "<gray>";
+                case "8" -> "<dark_gray>";
+                case "9" -> "<blue>";
+                case "a" -> "<green>";
+                case "b" -> "<aqua>";
+                case "c" -> "<red>";
+                case "d" -> "<light_purple>";
+                case "e" -> "<yellow>";
+                case "f" -> "<white>";
+                case "k" -> "<obfuscated>";
+                case "l" -> "<bold>";
+                case "m" -> "<strikethrough>";
+                case "n" -> "<underlined>";
+                case "o" -> "<italic>";
+                case "r" -> "<reset>";
+                default -> "";
+            };
+            matcher.appendReplacement(sb, replacement);
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
     public Login getPlugin() {
         return plugin;
     }

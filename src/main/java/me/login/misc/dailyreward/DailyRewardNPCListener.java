@@ -11,16 +11,15 @@ public class DailyRewardNPCListener implements Listener {
 
     private final Login plugin;
     private final DailyRewardManager manager;
+    private final DailyRewardGUI gui;
     private final int npcId;
 
-    public DailyRewardNPCListener(Login plugin, DailyRewardManager manager) {
+    public DailyRewardNPCListener(Login plugin, DailyRewardManager manager, DailyRewardGUI gui) {
         this.plugin = plugin;
         this.manager = manager;
+        this.gui = gui;
         // Load NPC ID from config
         this.npcId = plugin.getConfig().getInt("daily-reward-npc-id", -1); // Default to -1
-        if (this.npcId == -1) {
-            plugin.getLogger().warning("daily-reward-npc-id is not set in config.yml. NPC clicks won't work.");
-        }
     }
 
     @EventHandler
@@ -29,8 +28,12 @@ public class DailyRewardNPCListener implements Listener {
         NPC clickedNpc = event.getNPC();
 
         if (clickedNpc.getId() == npcId) {
-            // Same logic as the command
-            manager.attemptClaim(player);
+            // Open GUI directly if they have permission, otherwise claim default
+            if (player.hasPermission("mineaurora.dailyreward.rank")) {
+                gui.openGUI(player);
+            } else {
+                manager.claimDefaultReward(player);
+            }
         }
     }
 }

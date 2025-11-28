@@ -14,7 +14,8 @@ import me.login.misc.playtimerewards.PlaytimeRewardModule;
 import me.login.misc.tab.TabManager;
 import me.login.misc.tokens.TokenManager;
 import me.login.misc.tokens.TokenModule;
-import me.login.misc.creatorcode.CreatorCodeModule;
+// --- FIX 1: Updated Import ---
+import me.login.premiumfeatures.creatorcode.CreatorCodeModule;
 import me.login.misc.rank.RankManager;
 import me.login.misc.rank.RankModule;
 import me.login.misc.dailyquests.QuestsModule;
@@ -68,7 +69,8 @@ import net.luckperms.api.LuckPerms;
 public class Login extends JavaPlugin implements Listener {
     private DungeonModule dungeonModule;
     private me.login.misc.hub.HubHeadModule hubHeadModule;
-    private me.login.premimumfeatures.credits.CreditsModule creditsModule;
+    // --- FIX 2: Correct Package Usage ---
+    private me.login.premiumfeatures.credits.CreditsModule creditsModule;
     private QuestsModule questsModule;
     private HologramModule hologramModule;
     private DiscordLinkingModule discordLinkingModule;
@@ -172,10 +174,6 @@ public class Login extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(damageIndicator, this);
         getServer().getPluginManager().registerEvents(new ModerationListener(this, moderationDatabase), this);
 
-        this.leaderboardModule = new LeaderboardModule(this);
-        if (!this.leaderboardModule.init()) {
-            getLogger().severe("Failed to initialize Leaderboard Module!");
-        }
 
         this.lagClearModule = new LagClearModule(this);
         if (!this.lagClearModule.init()) {
@@ -302,8 +300,6 @@ public class Login extends JavaPlugin implements Listener {
                         getLogger().info("Initializing Coinflip system...");
                         coinflipModule.initLogicAndListeners();
 
-
-                        // 1. Initialize TokenModule FIRST (others depend on it)
                         getLogger().info("Initializing TokenModule...");
                         tokenModule = new TokenModule(Login.this, luckPermsApi);
                         if (!tokenModule.init()) {
@@ -311,14 +307,12 @@ public class Login extends JavaPlugin implements Listener {
                         }
                         tokenManager = tokenModule.getTokenManager();
 
-                        // 2. Initialize DailyRewardModule (Pass TokenManager)
                         getLogger().info("Initializing DailyRewardModule...");
                         dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase, tokenManager);
                         if (!dailyRewardModule.init()) {
                             getLogger().severe("Failed to initialize DailyReward Module!");
                         }
 
-                        // 3. Initialize PlaytimeRewardModule (Pass TokenManager)
                         getLogger().info("Initializing PlaytimeRewardModule...");
                         playtimeRewardModule = new PlaytimeRewardModule(Login.this, vaultEconomy, tokenManager);
                         if (!playtimeRewardModule.init()) {
@@ -332,8 +326,12 @@ public class Login extends JavaPlugin implements Listener {
                         genModule = new GenModule(Login.this, lagClearLogger);
                         genModule.init();
 
+                        getLogger().info("Initializing CreditsModule...");
+                        creditsModule = new me.login.premiumfeatures.credits.CreditsModule(Login.this);
+                        creditsModule.enable();
+
                         getLogger().info("Initializing CreatorCodeModule...");
-                        creatorCodeModule = new CreatorCodeModule(Login.this);
+                        creatorCodeModule = new CreatorCodeModule(Login.this, creditsModule.getDatabase());
                         if (!creatorCodeModule.init(lagClearLogger)) {
                             getLogger().severe("Failed to initialize Creator Code Module!");
                         }
@@ -362,9 +360,11 @@ public class Login extends JavaPlugin implements Listener {
                         adminCommandsModule = new AdminCommandsModule(Login.this);
                         adminCommandsModule.enable();
 
-                        getLogger().info("Initializing CreditsModule...");
-                        creditsModule = new me.login.premimumfeatures.credits.CreditsModule(Login.this);
-                        creditsModule.enable();
+                        getLogger().info("Initializing LeaderboardModule...");
+                        leaderboardModule = new LeaderboardModule(Login.this);
+                        if (!leaderboardModule.init()) {
+                            getLogger().severe("Failed to initialize Leaderboard Module!");
+                        }
 
                         this.cancel();
                         return;
@@ -628,7 +628,8 @@ public class Login extends JavaPlugin implements Listener {
         return this.tokenModule;
     }
 
-    public me.login.premimumfeatures.credits.CreditsModule getCreditsModule() {
+    // --- FIX 5: Updated Getter with correct package return type ---
+    public me.login.premiumfeatures.credits.CreditsModule getCreditsModule() {
         return this.creditsModule;
     }
 

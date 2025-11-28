@@ -39,13 +39,15 @@ public class DailyRewardManager {
 
         this.miniMessage = MiniMessage.miniMessage();
 
-        String p1Raw = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>");
-        String p2Raw = plugin.getConfig().getString("server_prefix_2", "<white>:");
+        // FIX: Only load 'server_prefix' to prevent double prefixes.
+        // Ignored 'server_prefix_2' intentionally.
+        String p1Raw = plugin.getConfig().getString("server_prefix");
+        if (p1Raw == null) {
+            p1Raw = "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b> <dark_gray>•</dark_gray>";
+        }
 
-        Component p1 = parseMixedContent(p1Raw);
-        Component p2 = parseMixedContent(p2Raw);
-
-        this.serverPrefix = p1.append(p2).append(Component.text(" "));
+        // Append a single space after the prefix
+        this.serverPrefix = parseMixedContent(p1Raw).append(Component.text(" "));
 
         rankRewards.put("elite", new Reward("mineaurora.dailyreward.elite", 1750, 2, "<green>Elite</green>"));
         rankRewards.put("ace", new Reward("mineaurora.dailyreward.ace", 2500, 2, "<blue>Ace</blue>"));
@@ -56,7 +58,7 @@ public class DailyRewardManager {
     }
 
     private Component parseMixedContent(String input) {
-        if (input == null) return Component.empty();
+        if (input == null || input.isEmpty()) return Component.empty();
         if (input.contains("&") || input.contains("§")) {
             return LegacyComponentSerializer.legacyAmpersand().deserialize(input);
         }
@@ -74,10 +76,20 @@ public class DailyRewardManager {
 
     public void attemptClaim(Player player) {
         if (player.hasPermission("mineaurora.dailyreward.rank")) {
-            new DailyRewardGUI(plugin, this, player).open();
+            sendMsg(player, "<red>Ranked players should use the Daily Reward Menu (/dailyreward gui).</red>");
         } else {
             claimDefaultReward(player);
         }
+    }
+
+    public String getHighestRankKey(Player player) {
+        String highest = "default";
+        for (Map.Entry<String, Reward> entry : rankRewards.entrySet()) {
+            if (player.hasPermission(entry.getValue().permission())) {
+                highest = entry.getKey();
+            }
+        }
+        return highest;
     }
 
     private long getCooldownExpiry(long lastClaim) {

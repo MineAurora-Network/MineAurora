@@ -47,14 +47,15 @@ public class PlaytimeRewardManager implements Listener {
 
         this.miniMessage = MiniMessage.miniMessage();
 
-        // FIX: Robust Prefix Handling (Supports MiniMessage AND Legacy)
-        String p1Raw = plugin.getConfig().getString("server_prefix", "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b>");
-        String p2Raw = plugin.getConfig().getString("server_prefix_2", "<white>:");
+        // FIX: Only load 'server_prefix' to prevent double prefixes.
+        // Ignored 'server_prefix_2' intentionally.
+        String p1Raw = plugin.getConfig().getString("server_prefix");
+        if (p1Raw == null) {
+            p1Raw = "<b><gradient:#47F0DE:#42ACF1:#0986EF>ᴍɪɴᴇᴀᴜʀᴏʀᴀ</gradient></b> <dark_gray>•</dark_gray>";
+        }
 
-        Component p1 = parseMixedContent(p1Raw);
-        Component p2 = parseMixedContent(p2Raw);
-
-        this.serverPrefix = p1.append(p2).append(Component.text(" "));
+        // Append a single space after the prefix
+        this.serverPrefix = parseMixedContent(p1Raw).append(Component.text(" "));
 
         this.rewardLevels = new ArrayList<>(MAX_LEVEL);
         generateRewardLevels();
@@ -62,21 +63,14 @@ public class PlaytimeRewardManager implements Listener {
         startPlaytimeTracker();
     }
 
-    // Helper to handle Strings that might contain BOTH MiniMessage tags AND legacy (&/§) codes
     private Component parseMixedContent(String input) {
-        if (input == null) return Component.empty();
-
-        // 1. If it contains legacy codes (& or §), convert them to MiniMessage format first OR use LegacySerializer
-        // Using LegacyComponentSerializer to deserialize legacy parts into a Component
+        if (input == null || input.isEmpty()) return Component.empty();
         if (input.contains("&") || input.contains("§")) {
             return LegacyComponentSerializer.legacyAmpersand().deserialize(input);
         }
-
-        // 2. Otherwise, treat as standard MiniMessage
         try {
             return miniMessage.deserialize(input);
         } catch (Exception e) {
-            // Fallback for broken MiniMessage syntax
             return Component.text(input);
         }
     }
@@ -270,7 +264,6 @@ public class PlaytimeRewardManager implements Listener {
     }
 
     private void sendMsg(Player player, String message) {
-        // Combine our safe prefix with the message
         player.sendMessage(serverPrefix.append(miniMessage.deserialize(message)));
     }
 

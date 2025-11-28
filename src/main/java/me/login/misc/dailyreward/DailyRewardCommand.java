@@ -15,10 +15,12 @@ public class DailyRewardCommand implements CommandExecutor, TabCompleter {
 
     private final Login plugin;
     private final DailyRewardManager manager;
+    private final DailyRewardGUI gui; // Singleton GUI instance
 
-    public DailyRewardCommand(Login plugin, DailyRewardManager manager) {
+    public DailyRewardCommand(Login plugin, DailyRewardManager manager, DailyRewardGUI gui) {
         this.plugin = plugin;
         this.manager = manager;
+        this.gui = gui;
     }
 
     @Override
@@ -28,15 +30,9 @@ public class DailyRewardCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // The manager handles logic for ranked vs default
-        // Ranked players get the GUI
-        // Default players get the reward directly
-
         if (args.length > 0 && args[0].equalsIgnoreCase("gui")) {
-            // This is an "internal" command for the manager to open the GUI
-            // This simplifies the logic and ensures ranked players always see the GUI
             if (player.hasPermission("mineaurora.dailyreward.rank")) {
-                DailyRewardGUI gui = new DailyRewardGUI(plugin, manager); // We can create a new instance
+                // Use singleton GUI instead of creating a new one every time
                 gui.openGUI(player);
             } else {
                 player.sendMessage(manager.getPrefix().append(manager.getMiniMessage().deserialize("<red>Only ranked players can use the GUI.</red>")));
@@ -44,13 +40,18 @@ public class DailyRewardCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Default action: /dr or /dailyreward
-        manager.attemptClaim(player);
+        // If ranked player runs /dailyreward without args, what should happen?
+        // Manager's attemptClaim handles the logic (opening GUI if has perm, or claiming default)
+        if (player.hasPermission("mineaurora.dailyreward.rank")) {
+            gui.openGUI(player);
+        } else {
+            manager.claimDefaultReward(player);
+        }
         return true;
     }
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
-        return Collections.emptyList(); // No subcommands to suggest
+        return Collections.emptyList();
     }
 }

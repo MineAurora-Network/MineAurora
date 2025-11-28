@@ -1,9 +1,8 @@
 package me.login.leaderboards;
 
 import me.login.Login;
-import me.login.loginsystem.LoginModule;
 import me.login.misc.tokens.TokenModule;
-import me.login.premimumfeatures.credits.CreditsModule;
+import me.login.premiumfeatures.credits.CreditsModule;
 import org.bukkit.scheduler.BukkitTask;
 
 public class LeaderboardModule {
@@ -22,10 +21,13 @@ public class LeaderboardModule {
     public boolean init() {
         plugin.getLogger().info("Initializing LeaderboardModule...");
 
+        // Retrieve instances of your modules
         TokenModule tokenModule = plugin.getTokenModule();
         CreditsModule creditsModule = plugin.getCreditsModule();
 
+        // Pass them to the fetcher
         this.statsFetcher = new StatsFetcher(plugin, tokenModule, creditsModule);
+
         this.leaderboardManager = new LeaderboardDisplayManager(plugin, statsFetcher);
         this.leaderboardGUI = new LeaderboardGUI(plugin, statsFetcher, leaderboardManager);
 
@@ -41,7 +43,6 @@ public class LeaderboardModule {
         if (this.leaderboardUpdateTask != null && !this.leaderboardUpdateTask.isCancelled()) {
             this.leaderboardUpdateTask.cancel();
         }
-        // CHANGED: Use disable() instead of removeAll() so we don't delete data on stop
         if (leaderboardManager != null) {
             leaderboardManager.disable();
         }
@@ -79,7 +80,7 @@ public class LeaderboardModule {
     }
 
     private void startUpdateTask() {
-        long delay = 20L * 10;
+        long delay = 20L * 10; // 10 seconds delay on start
         long refreshTicks = 20L * plugin.getConfig().getLong("leaderboards.refresh-seconds", 60);
         this.leaderboardUpdateTask = new LeaderboardUpdateTask(this.leaderboardManager).runTaskTimer(plugin, delay, refreshTicks);
     }

@@ -6,12 +6,12 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -28,99 +28,93 @@ public class TokenShopGUI implements Listener {
     private final TokenManager manager;
     private final MiniMessage mm;
     private static final String SHOP_METADATA = "TokenShopGUI";
-    private static final int BALANCE_SLOT = 4;
 
-    // Cache items to avoid rebuilding every time
+    // Layout settings
+    private static final int GUI_SIZE = 27;
+    private static final int START_SLOT = 10; // 2nd Row, 2nd Slot
+    private static final int BALANCE_SLOT = 18; // 3rd Row, 1st Slot
+
     private final Map<Integer, ShopItem> shopItems = new HashMap<>();
-    private int guiSize = 27;
-    private String guiTitle = "<dark_gray>Token Shop</dark_gray>";
+    private final String guiTitle = "<dark_gray>Token Shop</dark_gray>";
 
-    private record ShopItem(String key, ItemStack displayItem, long cost, int slot) {}
+    private record ShopItem(String key, ItemStack displayItem, long cost) {}
 
     public TokenShopGUI(Login plugin, TokenManager manager) {
         this.plugin = plugin;
         this.manager = manager;
         this.mm = manager.getMiniMessage();
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        loadConfig();
+        // Listener registered in Module
+        loadItems();
     }
 
-    public void loadConfig() {
+    public void loadItems() {
         shopItems.clear();
-        // Reload config logic if needed, assuming manager has access to plugin config
-        // For now, using items.yml structure as implied by previous interactions or a specific section
-        // Assuming 'token_shop' section in config.yml or similar
-        ConfigurationSection section = plugin.getConfig().getConfigurationSection("token_shop");
-        if (section == null) return; // Or default setup
+        int currentSlot = START_SLOT;
 
-        this.guiTitle = section.getString("title", "<dark_gray>Token Shop</dark_gray>");
-        this.guiSize = section.getInt("size", 27);
+        for (String key : manager.getItemManager().getShopKeys()) {
+            if (currentSlot >= GUI_SIZE) break;
+            // Avoid slots that wrap oddly or hit reserved areas if needed
+            // For simplicity in a 27 slot GUI, row 2 is 9-17.
+            if (currentSlot == 17) currentSlot = 19; // Skip last slot of row 2, jump to row 3? No, row 3 starts at 18.
+            // The user said "start listing from 2nd slot of 2nd row".
+            // Row 2: 9 10 11 12 13 14 15 16 17
+            // 2nd slot is 10.
 
-        ConfigurationSection itemsSec = section.getConfigurationSection("items");
-        if (itemsSec != null) {
-            for (String key : itemsSec.getKeys(false)) {
-                String itemKey = itemsSec.getString(key + ".item_key"); // Key in items.yml
-                long cost = itemsSec.getLong(key + ".cost");
-                int slot = itemsSec.getInt(key + ".slot");
+            ItemStack base = manager.getItemManager().getItem(key);
+            long price = manager.getItemManager().getPrice(key);
 
-                ItemStack item = manager.getItemManager().getItem(itemKey); // Get display item
-                if (item != null) {
-                    ItemMeta meta = item.getItemMeta();
-                    List<Component> lore = meta.hasLore() ? meta.lore() : new ArrayList<>();
-                    lore.add(Component.empty());
-                    lore.add(mm.deserialize("<gray>Cost: <gold>" + cost + " ☆</gold>").decoration(TextDecoration.ITALIC, false));
-                    lore.add(mm.deserialize("<yellow>Click to purchase!</yellow>").decoration(TextDecoration.ITALIC, false));
-                    meta.lore(lore);
-                    item.setItemMeta(meta);
+            if (base != null) {
+                ItemStack display = base.clone();
+                ItemMeta meta = display.getItemMeta();
+                List<Component> lore = meta.hasLore() ? new ArrayList<>(meta.lore()) : new ArrayList<>();
+                lore.add(Component.empty());
+                lore.add(mm.deserialize("<gray>Price: <gold>" + price + " ☆</gold>").decoration(TextDecoration.ITALIC, false));
+                lore.add(mm.deserialize("<yellow>Click to purchase!</yellow>").decoration(TextDecoration.ITALIC, false));
+                meta.lore(lore);
+                display.setItemMeta(meta);
 
-                    shopItems.put(slot, new ShopItem(itemKey, item, cost, slot));
-                }
+                shopItems.put(currentSlot, new ShopItem(key, display, price));
+                currentSlot++;
             }
         }
     }
 
     public void openGUI(Player player) {
-        Inventory gui = Bukkit.createInventory(null, guiSize, mm.deserialize(guiTitle));
+        Inventory gui = Bukkit.createInventory(null, GUI_SIZE, mm.deserialize(guiTitle));
 
-        // Fill items
-        shopItems.forEach((slot, shopItem) -> gui.setItem(slot, shopItem.displayItem));
-
-        // Add fillers if needed (optional)
+        // Filler
         ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta fMeta = filler.getItemMeta();
         fMeta.displayName(Component.empty());
         filler.setItemMeta(fMeta);
-        for (int i = 0; i < guiSize; i++) {
-            if (gui.getItem(i) == null) gui.setItem(i, filler);
-        }
+        for(int i=0; i<GUI_SIZE; i++) gui.setItem(i, filler);
 
-        // Add Balance Indicator
+        // Items
+        shopItems.forEach((slot, item) -> gui.setItem(slot, item.displayItem));
+
+        // Balance
         updateBalanceItemInInventory(gui, player);
 
-        player.setMetadata(SHOP_METADATA, new FixedMetadataValue(plugin, true));
         player.openInventory(gui);
+        player.setMetadata(SHOP_METADATA, new FixedMetadataValue(plugin, true));
     }
 
-    // Requirement 4: Method to update balance item dynamically
     public void updateBalanceItem(Player player) {
         if (player.getOpenInventory().getTopInventory().getHolder() == null &&
-                player.hasMetadata(SHOP_METADATA)) { // Simple check if shop is open
+                player.hasMetadata(SHOP_METADATA)) {
             updateBalanceItemInInventory(player.getOpenInventory().getTopInventory(), player);
         }
     }
 
     private void updateBalanceItemInInventory(Inventory gui, Player player) {
         manager.getTokenBalance(player.getUniqueId()).thenAccept(balance -> {
-            ItemStack balanceItem = new ItemStack(Material.SUNFLOWER);
-            ItemMeta meta = balanceItem.getItemMeta();
+            ItemStack item = new ItemStack(Material.SUNFLOWER);
+            ItemMeta meta = item.getItemMeta();
             meta.displayName(mm.deserialize("<gold><bold>Your Balance</bold></gold>").decoration(TextDecoration.ITALIC, false));
-            meta.lore(List.of(
-                    mm.deserialize("<gray>You have: <gold>" + balance + " ☆</gold></gray>").decoration(TextDecoration.ITALIC, false)
-            ));
-            balanceItem.setItemMeta(meta);
+            meta.lore(List.of(mm.deserialize("<gray>You have: <gold>" + balance + " ☆</gold>").decoration(TextDecoration.ITALIC, false)));
+            item.setItemMeta(meta);
 
-            // Run on main thread to modify inventory
-            Bukkit.getScheduler().runTask(plugin, () -> gui.setItem(BALANCE_SLOT, balanceItem));
+            Bukkit.getScheduler().runTask(plugin, () -> gui.setItem(BALANCE_SLOT, item));
         });
     }
 
@@ -129,22 +123,24 @@ public class TokenShopGUI implements Listener {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!player.hasMetadata(SHOP_METADATA)) return;
 
-        event.setCancelled(true);
+        event.setCancelled(true); // PREVENT STEALING
 
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
 
-        int slot = event.getSlot();
-        ShopItem item = shopItems.get(slot);
-
+        ShopItem item = shopItems.get(event.getSlot());
         if (item != null) {
             manager.purchaseItem(player, item.key, item.cost, this);
         }
     }
 
     @EventHandler
+    public void onDrag(InventoryDragEvent event) {
+        if (event.getWhoClicked().hasMetadata(SHOP_METADATA)) event.setCancelled(true);
+    }
+
+    @EventHandler
     public void onClose(InventoryCloseEvent event) {
         if (event.getPlayer().hasMetadata(SHOP_METADATA)) {
-            // Requirement 3: Remove metadata on close
             event.getPlayer().removeMetadata(SHOP_METADATA, plugin);
         }
     }

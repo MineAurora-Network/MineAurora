@@ -26,9 +26,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class HubHeadModule implements Listener {
@@ -60,7 +58,7 @@ public class HubHeadModule implements Listener {
             this.discordLoc = null;
             this.storeLoc = null;
         } else {
-            // Spawn at 118
+            // Coordinates
             this.discordLoc = new Location(hub, 174.5, 118, -1.5);
             this.storeLoc = new Location(hub, 174.5, 118, -9.5);
         }
@@ -70,9 +68,13 @@ public class HubHeadModule implements Listener {
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         plugin.getCommand("rotatinghead").setExecutor(new HubHeadCommand(this));
 
-        // Run initial cleanup delayed to ensure chunks loaded
-        Bukkit.getScheduler().runTaskLater(plugin, this::forceCleanupAll, 20L);
+        // Initialize Heads with delay to ensure worlds are fully ready
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            initializeLocation(HEAD_DISCORD, discordLoc, discordHeadUrl, "<blue><bold>Discord</bold></blue>");
+            initializeLocation(HEAD_STORE, storeLoc, storeHeadUrl, "<gold><bold>Store</bold></gold>");
+        });
 
+        // Animation Task
         new BukkitRunnable() {
             double angle = 0;
             @Override
@@ -86,101 +88,85 @@ public class HubHeadModule implements Listener {
                 animateHead(HEAD_STORE, storeLoc, angle);
             }
         }.runTaskTimer(plugin, 40L, 1L);
-
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!plugin.isEnabled()) {
-                    this.cancel();
-                    return;
-                }
-                runStrictWatchdog();
-            }
-        }.runTaskTimer(plugin, 100L, 100L);
     }
 
     public void disable() {
-        forceCleanupAll();
-    }
-
-    public void forceCleanupAll() {
-        World hub = Bukkit.getWorld("hub");
-        if (hub == null) return;
-        for (Entity entity : hub.getEntities()) {
-            if (entity.getType() == EntityType.ARMOR_STAND &&
-                    entity.getPersistentDataContainer().has(ID_KEY, PersistentDataType.STRING)) {
-                entity.remove();
-            }
-        }
+        // We do NOT remove entities here. We leave them persistent.
+        // We only un-force chunks if we want to save memory, but user requested "always active".
+        // To be safe and clean, we stop tracking them, but the entities stay in the world.
         activeHeads.clear();
         activeHolograms.clear();
+
+        // Optional: Un-force chunks on disable to prevent ghost chunks when server is off?
+        // If the server restarts, enable() will re-force them.
+        if (discordLoc != null && discordLoc.getWorld() != null) discordLoc.getChunk().setForceLoaded(false);
+        if (storeLoc != null && storeLoc.getWorld() != null) storeLoc.getChunk().setForceLoaded(false);
     }
 
-    private void runStrictWatchdog() {
-        World hub = Bukkit.getWorld("hub");
-        if (hub == null) return;
+    /**
+     * securely loads the chunk, finds existing entities, or spawns new ones.
+     */
+    private void initializeLocation(String id, Location loc, String texture, String title) {
+        if (loc == null || loc.getWorld() == null) return;
 
-        List<Entity> discordHeads = new ArrayList<>();
-        List<Entity> discordHolos = new ArrayList<>();
-        List<Entity> storeHeads = new ArrayList<>();
-        List<Entity> storeHolos = new ArrayList<>();
+        // 1. Force Load Chunk
+        Chunk chunk = loc.getChunk();
+        if (!chunk.isLoaded()) {
+            chunk.load();
+        }
+        chunk.setForceLoaded(true); // Keep this chunk loaded ALWAYS to prevent "doubling" issues
 
-        for (Entity e : hub.getEntities()) {
-            if (e.getType() != EntityType.ARMOR_STAND) continue;
-            String id = e.getPersistentDataContainer().get(ID_KEY, PersistentDataType.STRING);
-            if (id == null) continue;
-
-            switch (id) {
-                case HEAD_DISCORD -> discordHeads.add(e);
-                case HEAD_DISCORD + "_holo" -> discordHolos.add(e);
-                case HEAD_STORE -> storeHeads.add(e);
-                case HEAD_STORE + "_holo" -> storeHolos.add(e);
+        // 2. Scan for EXISTING entities in this chunk to prevent duplicates
+        // This handles cases where the server crashed or plugin reloaded without running disable()
+        for (Entity entity : chunk.getEntities()) {
+            if (entity.getType() == EntityType.ARMOR_STAND) {
+                String storedId = entity.getPersistentDataContainer().get(ID_KEY, PersistentDataType.STRING);
+                if (storedId != null) {
+                    if (storedId.equals(id)) {
+                        // Found existing Head
+                        if (activeHeads.containsKey(id)) {
+                            entity.remove(); // Duplicate found in same scan
+                        } else {
+                            activeHeads.put(id, (ArmorStand) entity);
+                        }
+                    } else if (storedId.equals(id + "_holo")) {
+                        // Found existing Hologram
+                        if (activeHolograms.containsKey(id)) {
+                            entity.remove(); // Duplicate
+                        } else {
+                            activeHolograms.put(id, (ArmorStand) entity);
+                        }
+                    }
+                }
             }
         }
 
-        enforceSingleEntity(discordHeads);
-        enforceSingleEntity(discordHolos);
-        enforceSingleEntity(storeHeads);
-        enforceSingleEntity(storeHolos);
-
-        if (discordHeads.isEmpty() || discordHolos.isEmpty()) {
-            discordHeads.forEach(Entity::remove);
-            discordHolos.forEach(Entity::remove);
-            spawnHead(HEAD_DISCORD, discordLoc, discordHeadUrl, "<blue><bold>Discord</bold></blue>");
-        } else {
-            activeHeads.put(HEAD_DISCORD, (ArmorStand) discordHeads.get(0));
-            activeHolograms.put(HEAD_DISCORD, (ArmorStand) discordHolos.get(0));
+        // 3. If missing, Spawn
+        if (!activeHeads.containsKey(id)) {
+            spawnHeadEntity(id, loc, texture);
         }
-
-        if (storeHeads.isEmpty() || storeHolos.isEmpty()) {
-            storeHeads.forEach(Entity::remove);
-            storeHolos.forEach(Entity::remove);
-            spawnHead(HEAD_STORE, storeLoc, storeHeadUrl, "<gold><bold>Store</bold></gold>");
-        } else {
-            activeHeads.put(HEAD_STORE, (ArmorStand) storeHeads.get(0));
-            activeHolograms.put(HEAD_STORE, (ArmorStand) storeHolos.get(0));
-        }
-    }
-
-    private void enforceSingleEntity(List<Entity> entities) {
-        if (entities.size() > 1) {
-            for (int i = 1; i < entities.size(); i++) {
-                entities.get(i).remove();
-            }
-            entities.subList(1, entities.size()).clear();
+        if (!activeHolograms.containsKey(id)) {
+            spawnHoloEntity(id, loc, title);
         }
     }
 
     public void spawnHead(String id, Location location, String textureUrl, String title) {
-        if (location == null || location.getWorld() == null) return;
+        // Wrapper for command usage - forces a respawn
+        if (activeHeads.containsKey(id)) activeHeads.get(id).remove();
+        if (activeHolograms.containsKey(id)) activeHolograms.get(id).remove();
 
+        spawnHeadEntity(id, location, textureUrl);
+        spawnHoloEntity(id, location, title);
+    }
+
+    private void spawnHeadEntity(String id, Location location, String textureUrl) {
         ArmorStand headStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
         headStand.setVisible(false);
         headStand.setGravity(false);
         headStand.setBasePlate(false);
         headStand.setInvulnerable(true);
         headStand.setSmall(false);
-        headStand.setMarker(false);
+        headStand.setMarker(false); // Must be false to hold items properly in some versions, or adjust pose
 
         ItemStack headItem = new ItemStack(Material.PLAYER_HEAD);
         headItem = TextureToHead.applyTexture(headItem, textureUrl);
@@ -188,7 +174,9 @@ public class HubHeadModule implements Listener {
 
         headStand.getPersistentDataContainer().set(ID_KEY, PersistentDataType.STRING, id);
         activeHeads.put(id, headStand);
+    }
 
+    private void spawnHoloEntity(String id, Location location, String title) {
         Location holoLoc = location.clone().add(0, 0.5, 0);
         ArmorStand holoStand = (ArmorStand) location.getWorld().spawnEntity(holoLoc, EntityType.ARMOR_STAND);
         holoStand.setVisible(false);
@@ -205,7 +193,12 @@ public class HubHeadModule implements Listener {
         ArmorStand head = activeHeads.get(id);
         ArmorStand holo = activeHolograms.get(id);
 
-        if (head == null || !head.isValid() || origin == null) return;
+        // If entities became invalid (killed by command, etc), try to re-init
+        if (head == null || !head.isValid() || holo == null || !holo.isValid()) {
+            // We can optionally try to respawn here, but be careful of lag loops.
+            // For now, we just skip animation.
+            return;
+        }
 
         double yOffset = (Math.sin(angle) + 1) * 0.5;
         Location newHeadLoc = origin.clone().add(0, yOffset, 0);
@@ -281,17 +274,14 @@ public class HubHeadModule implements Listener {
         Player player = event.getPlayer();
         String prefix = plugin.getConfig().getString("server_prefix", "<gray>[<gold>Server</gold>] ");
 
+        // Check if it's the holo or the head
         if (id.startsWith(HEAD_DISCORD)) {
             String link = plugin.getConfig().getString("discord-server-link", "https://discord.gg/example");
-            if (!link.startsWith("http")) {
-                link = "https://" + link;
-            }
+            if (!link.startsWith("http")) link = "https://" + link;
             sendClickableLink(player, prefix, "<blue>Click here to join our Discord!</blue>", link);
         } else if (id.startsWith(HEAD_STORE)) {
             String link = plugin.getConfig().getString("store-link", "https://store.example.com");
-            if (!link.startsWith("http")) {
-                link = "https://" + link;
-            }
+            if (!link.startsWith("http")) link = "https://" + link;
             sendClickableLink(player, prefix, "<gold>Click here to visit our Store!</gold>", link);
         }
     }

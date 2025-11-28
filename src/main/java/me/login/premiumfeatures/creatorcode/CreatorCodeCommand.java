@@ -1,4 +1,4 @@
-package me.login.misc.creatorcode;
+package me.login.premiumfeatures.creatorcode;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -9,9 +9,10 @@ import org.bukkit.command.TabCompleter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
-import java.util.Set; // <-- THE FIX: Added this import
 import java.util.stream.Collectors;
 
 public class CreatorCodeCommand implements CommandExecutor, TabCompleter {
@@ -30,6 +31,7 @@ public class CreatorCodeCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
 
+        // --- /removecreditcode <name> ---
         if (command.getName().equalsIgnoreCase("removecreditcode")) {
             if (!sender.hasPermission("login.creatorcode.admin")) {
                 sender.sendMessage(serverPrefix.append(mm.deserialize("<red>You do not have permission to use this command.</red>")));
@@ -43,7 +45,7 @@ public class CreatorCodeCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // Handling /creatorcode
+        // --- /creatorcode <add/remove/list> ---
         if (!sender.hasPermission("login.creatorcode.admin")) {
             sender.sendMessage(serverPrefix.append(mm.deserialize("<red>You do not have permission to use this command.</red>")));
             return true;
@@ -98,12 +100,11 @@ public class CreatorCodeCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleList(CommandSender sender) {
-        Set<String> codes = manager.getCodes(); // This line (100) will now compile
-        if (codes.isEmpty()) {
+        if (manager.getCodes().isEmpty()) {
             sender.sendMessage(serverPrefix.append(mm.deserialize("<yellow>There are no creator codes.</yellow>")));
             return;
         }
-        String codeList = String.join("<gray>, </gray>", codes);
+        String codeList = String.join("<gray>, </gray>", manager.getCodes());
         sender.sendMessage(serverPrefix.append(mm.deserialize("<green>Creator Codes:</green> <white>" + codeList + "</white>")));
     }
 
@@ -112,18 +113,29 @@ public class CreatorCodeCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(mm.deserialize("<yellow>/creatorcode add <name></yellow> <gray>- Adds a creator code.</gray>"));
         sender.sendMessage(mm.deserialize("<yellow>/creatorcode remove <name></yellow> <gray>- Removes a creator code.</gray>"));
         sender.sendMessage(mm.deserialize("<yellow>/creatorcode list</yellow> <gray>- Lists all creator codes.</gray>"));
-        sender.sendMessage(mm.deserialize("<yellow>/removecreditcode <name></yellow> <gray>- Alias for remove.</gray>"));
     }
 
     @Nullable
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        // Only Admins see tab complete for management
+        if (!sender.hasPermission("login.creatorcode.admin")) {
+            return Collections.emptyList();
+        }
+
         if (command.getName().equalsIgnoreCase("creatorcode")) {
             if (args.length == 1) {
                 return Arrays.asList("add", "remove", "list").stream()
                         .filter(s -> s.startsWith(args[0].toLowerCase()))
                         .collect(Collectors.toList());
             }
+
+            // If first arg is "add", DO NOT show completions (depends on player input)
+            if (args.length == 2 && args[0].equalsIgnoreCase("add")) {
+                return Collections.emptyList();
+            }
+
+            // If first arg is "remove", show valid codes
             if (args.length == 2 && args[0].equalsIgnoreCase("remove")) {
                 return manager.getCodes().stream()
                         .filter(s -> s.startsWith(args[1].toLowerCase()))
