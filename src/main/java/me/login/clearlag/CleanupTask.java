@@ -16,16 +16,14 @@ import java.time.Duration;
 public class CleanupTask extends BukkitRunnable {
     private final Plugin plugin;
     private final LagClearConfig lagClearConfig;
-    private int secondsUntilCleanup = 3 * 60;
+    private int secondsUntilCleanup = 5 * 60;
 
-    // --- REPLACED/MODIFIED FIELDS ---
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final net.kyori.adventure.title.Title warningTitle;
     private final net.kyori.adventure.title.Title cleanupTitle;
     private final Component warningMessage;
     private final Component cleanupMessage;
     private final Component doneMessagePrefix;
-    // --- END ---
 
     public CleanupTask(Plugin plugin, LagClearConfig lagClearConfig) {
         this.plugin = plugin;

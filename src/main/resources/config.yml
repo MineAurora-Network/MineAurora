@@ -387,6 +387,18 @@ generator:
   admin-log-channel-id: 1425301611391094845
 
 # ============================
+# Milestone Configuration
+# ============================
+milestone-log-channel-id: 123456789012345678
+milestone-npc-id: 51
+
+# ============================
+# Heart Prestige Configuration
+# ============================
+heart-prestige-log-channel-id: 123456789012345678
+prestige-npc-id: 50
+
+# ============================
 # Daily Quests Configuration
 # ============================
 quests-npc-id: -1

@@ -1,21 +1,21 @@
 package me.login.lifesteal;
 
 import me.login.Login;
+import me.login.lifesteal.prestige.HeartPrestigeGUI;
+import me.login.lifesteal.prestige.HeartPrestigeLogger;
+import me.login.lifesteal.prestige.HeartPrestigeManager;
+import me.login.lifesteal.prestige.HeartPrestigeNPCListener;
+import net.dv8tion.jda.api.JDA;
 import net.luckperms.api.LuckPerms;
 import org.bukkit.command.PluginCommand;
 
-/**
- * Main handler class for the Lifesteal module.
- * This class initializes, registers, and shuts down all components
- * related to the Lifesteal system to keep the main plugin class clean.
- */
 public class LifestealModule {
 
     private final Login plugin;
     private final LuckPerms luckPermsApi;
-    private final LifestealLogger logger; // <-- ADDED
+    private final LifestealLogger logger;
 
-    // All Lifesteal components are now stored here
+    // Components
     private DatabaseManager databaseManager;
     private ItemManager itemManager;
     private LifestealManager lifestealManager;
@@ -23,60 +23,61 @@ public class LifestealModule {
     private ReviveMenu reviveMenu;
     private CombatLogManager combatLogManager;
     private LifestealCommands lifestealCommands;
-    private LifestealListener lifestealListener; // <-- ADDED FIELD
+    private LifestealListener lifestealListener;
 
-    // --- CONSTRUCTOR UPDATED ---
+    // Prestige Components
+    private HeartPrestigeManager prestigeManager;
+    private HeartPrestigeGUI prestigeGUI;
+    private HeartPrestigeLogger prestigeLogger;
+    private HeartPrestigeNPCListener prestigeNPCListener;
+
     public LifestealModule(Login plugin, LuckPerms luckPermsApi, LifestealLogger logger) {
         this.plugin = plugin;
         this.luckPermsApi = luckPermsApi;
-        this.logger = logger; // <-- STORE LOGGER
+        this.logger = logger;
     }
 
-    /**
-     * Initializes all Lifesteal components.
-     * @return true if initialization was successful, false otherwise.
-     */
     public boolean init() {
         plugin.getLogger().info("Initializing Lifesteal Module...");
 
-        // 1. Initialize DatabaseManager
+        // 1. Database
         this.databaseManager = new DatabaseManager(plugin);
         if (!this.databaseManager.initializeDatabase()) {
             plugin.getLogger().severe("Failed to initialize Lifesteal database!");
             return false;
         }
         this.databaseManager.createTables();
-        plugin.getLogger().info("Lifesteal DatabaseManager initialized.");
 
-        // 2. Initialize ItemManager (requires main config)
+        // 2. Items
         this.itemManager = new ItemManager(plugin);
-        plugin.getLogger().info("Lifesteal ItemManager initialized.");
 
-        // 3. Initialize LifestealManager (now passes logger)
+        // 3. Manager
         this.lifestealManager = new LifestealManager(plugin, itemManager, databaseManager, logger);
-        plugin.getLogger().info("Lifesteal LifestealManager initialized.");
 
-        // 4. Initialize DeadPlayerManager
+        // 4. Dead Players
         this.deadPlayerManager = new DeadPlayerManager(plugin, databaseManager);
-        plugin.getLogger().info("Lifesteal DeadPlayerManager initialized.");
 
-        // 5. Initialize ReviveMenu (now passes logger)
+        // 5. Menus & Listeners
         this.reviveMenu = new ReviveMenu(plugin, itemManager, deadPlayerManager, logger);
-        plugin.getLogger().info("Lifesteal ReviveMenu initialized.");
-
-        // 6. Initialize CombatLogManager (now passes logger)
         this.combatLogManager = new CombatLogManager(plugin, itemManager, lifestealManager, deadPlayerManager, logger);
-        plugin.getLogger().info("Lifesteal CombatLogManager initialized.");
-
-        // 7. Initialize Commands (now passes logger)
         this.lifestealCommands = new LifestealCommands(plugin, itemManager, lifestealManager, deadPlayerManager, luckPermsApi, logger);
-        plugin.getLogger().info("Lifesteal LifestealCommands initialized.");
-
-        // 8. Initialize Listener (now passes logger)
         this.lifestealListener = new LifestealListener(plugin, itemManager, lifestealManager, deadPlayerManager, reviveMenu, logger);
-        plugin.getLogger().info("Lifesteal LifestealListener initialized.");
 
-        // After all components are created, register listeners and commands
+        // --- PRESTIGE INIT ---
+        JDA jda = (logger != null) ? plugin.getJda() : null; // Get JDA safely
+        this.prestigeLogger = new HeartPrestigeLogger(plugin, jda);
+        this.prestigeManager = new HeartPrestigeManager(plugin, lifestealManager, itemManager, prestigeLogger);
+        this.prestigeGUI = new HeartPrestigeGUI(plugin, prestigeManager, itemManager);
+        this.prestigeNPCListener = new HeartPrestigeNPCListener(plugin, prestigeGUI);
+
+        plugin.getServer().getPluginManager().registerEvents(prestigeGUI, plugin);
+        if (plugin.getServer().getPluginManager().getPlugin("Citizens") != null) {
+            plugin.getServer().getPluginManager().registerEvents(prestigeNPCListener, plugin);
+        } else {
+            plugin.getLogger().warning("Citizens not found - Prestige NPC will not work.");
+        }
+        // ---------------------
+
         registerListeners();
         registerCommands();
 
@@ -84,71 +85,40 @@ public class LifestealModule {
         return true;
     }
 
-    /**
-     * Registers all event listeners for the Lifesteal module.
-     */
     private void registerListeners() {
         plugin.getServer().getPluginManager().registerEvents(lifestealListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(combatLogManager, plugin);
-        plugin.getServer().getPluginManager().registerEvents(reviveMenu, plugin); // <-- ADDED THIS
-        plugin.getLogger().info("Lifesteal listeners registered.");
+        plugin.getServer().getPluginManager().registerEvents(reviveMenu, plugin);
     }
 
-    /**
-     * Registers all commands for the Lifesteal module.
-     */
     private void registerCommands() {
         PluginCommand withdrawCmd = plugin.getCommand("withdrawhearts");
         if (withdrawCmd != null) {
             withdrawCmd.setExecutor(lifestealCommands);
-        } else {
-            plugin.getLogger().warning("Could not find 'withdrawhearts' command in plugin.yml!");
         }
-
         PluginCommand lifestealCmd = plugin.getCommand("lifesteal");
         if (lifestealCmd != null) {
             lifestealCmd.setExecutor(lifestealCommands);
             lifestealCmd.setTabCompleter(lifestealCommands);
-        } else {
-            plugin.getLogger().warning("Could not find 'lifesteal' command in plugin.yml!");
         }
-        plugin.getLogger().info("Lifesteal commands registered.");
     }
 
-    /**
-     * Shuts down all Lifesteal components cleanly.
-     */
     public void shutdown() {
         if (lifestealManager != null) {
             lifestealManager.saveAllOnlinePlayerData();
-            plugin.getLogger().info("Saved all Lifesteal player data.");
         }
         if (combatLogManager != null) {
             combatLogManager.shutdown();
-            plugin.getLogger().info("Lifesteal CombatLogManager shut down.");
         }
-        // --- REMOVED itemManager.closeWebhook() ---
         if (databaseManager != null) {
             databaseManager.closeConnection();
-            plugin.getLogger().info("Lifesteal DatabaseManager connection closed.");
         }
-        plugin.getLogger().info("Lifesteal Module shut down.");
     }
 
-    // --- Public Getters ---
-    public DatabaseManager getDatabaseManager() {
-        return databaseManager;
-    }
-    public ItemManager getItemManager() {
-        return itemManager;
-    }
-    public LifestealManager getLifestealManager() {
-        return lifestealManager;
-    }
-    public DeadPlayerManager getDeadPlayerManager() {
-        return deadPlayerManager;
-    }
-    public CombatLogManager getCombatLogManager() {
-        return combatLogManager;
-    }
+    // Getters
+    public DatabaseManager getDatabaseManager() { return databaseManager; }
+    public ItemManager getItemManager() { return itemManager; }
+    public LifestealManager getLifestealManager() { return lifestealManager; }
+    public DeadPlayerManager getDeadPlayerManager() { return deadPlayerManager; }
+    public CombatLogManager getCombatLogManager() { return combatLogManager; }
 }

@@ -26,6 +26,10 @@ commands:
     description: Admin Command to unlink a Minecraft account
     usage: /adminunlink <player>
 
+  lifesteallevel:
+    description: Check or manage lifesteal levels
+    aliases: [ lslevel, level ]
+
   commandhologram:
     description: Creates a command-based hologram.
     permission: mineaurora.command.hologram

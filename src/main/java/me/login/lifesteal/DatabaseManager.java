@@ -31,7 +31,6 @@ public class DatabaseManager {
         // Set the file path to be inside the database folder
         this.dbFile = new File(dbFolder, "lifesteal.db");
     }
-    // --- END MODIFICATION ---
 
     // --- Connection Management ---
 
@@ -47,9 +46,7 @@ public class DatabaseManager {
 
             Class.forName("org.sqlite.JDBC");
             connection = DriverManager.getConnection("jdbc:sqlite:" + dbFile.getPath());
-            // --- MODIFICATION: Updated log message to show correct path ---
             plugin.getLogger().info("Lifesteal SQLite database connected successfully (at " + dbFile.getAbsolutePath() + ").");
-            // --- END MODIFICATION ---
 
             return true;
 
@@ -90,10 +87,16 @@ public class DatabaseManager {
                 "username TEXT NOT NULL" +
                 ");";
 
-        // --- FIX: Connection is no longer in try-with-resources ---
+        // --- NEW PRESTIGE TABLE ---
+        String createPrestigeTable = "CREATE TABLE IF NOT EXISTS player_prestige (" +
+                "uuid TEXT PRIMARY KEY," +
+                "level INTEGER NOT NULL" +
+                ");";
+
         try (Statement stmt = getConnection().createStatement()) {
             stmt.execute(createHeartsTable);
             stmt.execute(createDeadPlayersTable);
+            stmt.execute(createPrestigeTable);
             plugin.getLogger().info("Lifesteal tables created or verified.");
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Could not create database tables!", e);
@@ -106,7 +109,6 @@ public class DatabaseManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             String sql = "SELECT hearts FROM player_hearts WHERE uuid = ?;";
 
-            // --- FIX: Connection is no longer in try-with-resources ---
             try (PreparedStatement pstmt = getConnection().prepareStatement(sql)) {
                 pstmt.setString(1, uuid.toString());
                 ResultSet rs = pstmt.executeQuery();
@@ -115,11 +117,10 @@ public class DatabaseManager {
                 if (rs.next()) {
                     hearts = rs.getInt("hearts");
                 } else {
-                    setHearts(uuid, DEFAULT_HEARTS); // This will now call the modified sync method
+                    setHearts(uuid, DEFAULT_HEARTS);
                 }
 
                 final int finalHeartsToCallback = hearts;
-
                 Bukkit.getScheduler().runTask(plugin, () -> callback.accept(finalHeartsToCallback));
 
             } catch (SQLException e) {
@@ -132,7 +133,6 @@ public class DatabaseManager {
     public int getHeartsSync(UUID uuid) {
         String sql = "SELECT hearts FROM player_hearts WHERE uuid = ?;";
 
-        // --- FIX: Connection is no longer in try-with-resources ---
         try (PreparedStatement pstmt = getConnection().prepareStatement(sql)) {
             pstmt.setString(1, uuid.toString());
             ResultSet rs = pstmt.executeQuery();
@@ -149,19 +149,13 @@ public class DatabaseManager {
         }
     }
 
-    // --- FIX FOR onDisable ERROR ---
-    // Removed the BukkitRunnable wrapper. This method now runs synchronously
-    // on whatever thread it was called from.
     public void setHearts(UUID uuid, int hearts) {
         setHeartsSync(uuid, hearts);
     }
-    // --- END FIX ---
 
-    // This was line 155
     private void setHeartsSync(UUID uuid, int hearts) {
         String sql = "INSERT OR REPLACE INTO player_hearts (uuid, hearts) VALUES (?, ?);";
 
-        // --- FIX: Connection is no longer in try-with-resources ---
         try (PreparedStatement pstmt = getConnection().prepareStatement(sql)) {
             pstmt.setString(1, uuid.toString());
             pstmt.setInt(2, hearts);
@@ -173,12 +167,10 @@ public class DatabaseManager {
 
     // --- Dead Players Data (DeadPlayerManager) ---
 
-    // This was line 171
     public Map<UUID, String> getDeadPlayersMapSync() {
         Map<UUID, String> deadPlayers = new HashMap<>();
         String sql = "SELECT uuid, username FROM dead_players;";
 
-        // --- FIX: Connection is no longer in try-with-resources ---
         try (PreparedStatement pstmt = getConnection().prepareStatement(sql);
              ResultSet rs = pstmt.executeQuery()) {
 
@@ -201,7 +193,6 @@ public class DatabaseManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             String sql = "INSERT OR IGNORE INTO dead_players (uuid, username) VALUES (?, ?);";
 
-            // --- FIX: Connection is no longer in try-with-resources ---
             try (PreparedStatement pstmt = getConnection().prepareStatement(sql)) {
                 pstmt.setString(1, uuid.toString());
                 pstmt.setString(2, username);
@@ -216,12 +207,49 @@ public class DatabaseManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             String sql = "DELETE FROM dead_players WHERE uuid = ?;";
 
-            // --- FIX: Connection is no longer in try-with-resources ---
             try (PreparedStatement pstmt = getConnection().prepareStatement(sql)) {
                 pstmt.setString(1, uuid.toString());
                 pstmt.executeUpdate();
             } catch (SQLException e) {
                 plugin.getLogger().log(Level.WARNING, "Could not remove dead player " + uuid, e);
+            }
+        });
+    }
+
+    // --- Prestige Data (Heart Prestige) ---
+
+    public void getPrestigeLevel(UUID uuid, java.util.function.Consumer<Integer> callback) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            String sql = "SELECT level FROM player_prestige WHERE uuid = ?;";
+            try (PreparedStatement pstmt = getConnection().prepareStatement(sql)) {
+                pstmt.setString(1, uuid.toString());
+                ResultSet rs = pstmt.executeQuery();
+
+                int level = 0;
+                if (rs.next()) {
+                    level = rs.getInt("level");
+                }
+
+                final int finalLevel = level;
+                Bukkit.getScheduler().runTask(plugin, () -> callback.accept(finalLevel));
+            } catch (SQLException e) {
+                plugin.getLogger().log(Level.WARNING, "Could not get prestige for " + uuid, e);
+                Bukkit.getScheduler().runTask(plugin, () -> callback.accept(0));
+            }
+        });
+    }
+
+    public void setPrestigeLevel(UUID uuid, int level) {
+        // Runs mostly sync to ensure cache update consistency, but SQL can be async if needed.
+        // For safety/consistency like hearts, we keep it simple or async.
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            String sql = "INSERT OR REPLACE INTO player_prestige (uuid, level) VALUES (?, ?);";
+            try (PreparedStatement pstmt = getConnection().prepareStatement(sql)) {
+                pstmt.setString(1, uuid.toString());
+                pstmt.setInt(2, level);
+                pstmt.executeUpdate();
+            } catch (SQLException e) {
+                plugin.getLogger().log(Level.WARNING, "Could not set prestige for " + uuid, e);
             }
         });
     }

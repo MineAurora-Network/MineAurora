@@ -14,7 +14,7 @@ import me.login.misc.playtimerewards.PlaytimeRewardModule;
 import me.login.misc.tab.TabManager;
 import me.login.misc.tokens.TokenManager;
 import me.login.misc.tokens.TokenModule;
-// --- FIX 1: Updated Import ---
+import me.login.misc.milestones.MilestoneModule;
 import me.login.premiumfeatures.creatorcode.CreatorCodeModule;
 import me.login.misc.rank.RankManager;
 import me.login.misc.rank.RankModule;
@@ -67,9 +67,9 @@ import me.login.items.CustomArmorModule;
 import net.luckperms.api.LuckPerms;
 
 public class Login extends JavaPlugin implements Listener {
+    private me.login.level.LevelModule levelModule;
     private DungeonModule dungeonModule;
     private me.login.misc.hub.HubHeadModule hubHeadModule;
-    // --- FIX 2: Correct Package Usage ---
     private me.login.premiumfeatures.credits.CreditsModule creditsModule;
     private QuestsModule questsModule;
     private HologramModule hologramModule;
@@ -112,6 +112,7 @@ public class Login extends JavaPlugin implements Listener {
     private String serverPrefix;
     private File itemsFile;
     private FileConfiguration itemsConfig;
+    private MilestoneModule milestoneModule;
 
     @Override
     public void onEnable() {
@@ -217,6 +218,9 @@ public class Login extends JavaPlugin implements Listener {
         hubHeadModule = new me.login.misc.hub.HubHeadModule(this);
         hubHeadModule.enable();
 
+        levelModule = new me.login.level.LevelModule(Login.this);
+        levelModule.init();
+
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!isEnabled() || Bukkit.isStopping()) {
                 getLogger().warning("Plugin disabled before Discord startup. Skipping bot init.");
@@ -307,6 +311,10 @@ public class Login extends JavaPlugin implements Listener {
                         }
                         tokenManager = tokenModule.getTokenManager();
 
+                        getLogger().info("Initializing MilestoneModule...");
+                        milestoneModule = new MilestoneModule(Login.this);
+                        milestoneModule.init();
+
                         getLogger().info("Initializing DailyRewardModule...");
                         dailyRewardModule = new DailyRewardModule(Login.this, vaultEconomy, dailyRewardDatabase, tokenManager);
                         if (!dailyRewardModule.init()) {
@@ -383,7 +391,6 @@ public class Login extends JavaPlugin implements Listener {
         getLogger().info(getName() + " v" + getDescription().getVersion() + " Enabled Successfully!");
     }
 
-    // --- Methods for items.yml ---
     public void reloadItems() {
         if (itemsFile == null) {
             itemsFile = new File(getDataFolder(), "items.yml");
@@ -506,6 +513,7 @@ public class Login extends JavaPlugin implements Listener {
             }
 
             if (leaderboardModule != null) leaderboardModule.shutdown();
+            if (levelModule != null) levelModule.shutdown();
             if (lagClearModule != null) lagClearModule.shutdown();
             if (lifestealModule != null) lifestealModule.shutdown();
             if (dailyRewardModule != null) dailyRewardModule.shutdown();
@@ -513,6 +521,7 @@ public class Login extends JavaPlugin implements Listener {
             if (genModule != null) genModule.shutdown();
             if (tokenModule != null) tokenModule.shutdown();
             if (creatorCodeModule != null) creatorCodeModule.shutdown();
+            if (milestoneModule != null) milestoneModule.shutdown();
             if (rankModule != null) rankModule.shutdown();
             if (ticketModule != null) ticketModule.shutdown();
             if (petsModule != null) petsModule.shutdown();
@@ -628,7 +637,6 @@ public class Login extends JavaPlugin implements Listener {
         return this.tokenModule;
     }
 
-    // --- FIX 5: Updated Getter with correct package return type ---
     public me.login.premiumfeatures.credits.CreditsModule getCreditsModule() {
         return this.creditsModule;
     }
@@ -647,6 +655,10 @@ public class Login extends JavaPlugin implements Listener {
 
     public LagClearConfig getLagClearConfig() {
         return (lagClearModule != null) ? lagClearModule.getLagClearConfig() : null;
+    }
+
+    public MilestoneModule getMilestoneModule() {
+        return this.milestoneModule;
     }
 
     public LagClearLogger getLagClearLogger() {
