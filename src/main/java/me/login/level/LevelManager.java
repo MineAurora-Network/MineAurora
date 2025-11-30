@@ -6,6 +6,8 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.title.Title;
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.model.user.User;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.PermissionAttachmentInfo;
@@ -21,27 +23,26 @@ public class LevelManager {
     private final LevelDatabase database;
     private final LevelLogger logger;
     private final MiniMessage mm;
+    private final LuckPerms luckPerms;
 
     private final Map<UUID, Integer> levelCache = new HashMap<>();
     private final Map<UUID, Integer> xpCache = new HashMap<>();
 
     private final int MAX_LEVEL = 130;
     private final int BASE_XP_REQ = 100;
-    private final int XP_INCREMENT = 50; // XP required increases by 50 each level
+    private final int XP_INCREMENT = 50;
 
-    public LevelManager(Login plugin, LevelDatabase database, LevelLogger logger) {
+    public LevelManager(Login plugin, LevelDatabase database, LevelLogger logger, LuckPerms luckPerms) {
         this.plugin = plugin;
         this.database = database;
         this.logger = logger;
+        this.luckPerms = luckPerms;
         this.mm = MiniMessage.miniMessage();
     }
 
     // --- XP & Level Logic ---
 
     public int getXpRequiredForNextLevel(int currentLevel) {
-        // Formula: 100 + (CurrentLevel * 50)
-        // Level 0 -> 1: 100 XP
-        // Level 1 -> 2: 150 XP
         return BASE_XP_REQ + (currentLevel * XP_INCREMENT);
     }
 
@@ -70,8 +71,6 @@ public class LevelManager {
             handleLevelUp(player, newLevel);
         } else {
             setXp(player, newXp);
-            // Send action bar for feedback? (Optional, maybe too spammy)
-            // player.sendActionBar(mm.deserialize("<green>+" + finalAmount + " XP"));
         }
     }
 
@@ -86,7 +85,6 @@ public class LevelManager {
     }
 
     private void handleLevelUp(Player player, int newLevel) {
-        // Use legacy prefix for Title as requested
         String legacyPrefix = plugin.getConfig().getString("server_prefix_2", "&cServer: ");
 
         Component mainTitle = LegacyComponentSerializer.legacyAmpersand().deserialize(legacyPrefix + "&aLevel Up!");
@@ -101,7 +99,6 @@ public class LevelManager {
         updateTabName(player);
         logger.logLevelUp(player.getName(), newLevel);
 
-        // Save immediately on level up
         saveData(player.getUniqueId());
     }
 
@@ -129,7 +126,11 @@ public class LevelManager {
     }
 
     public int getLevel(Player player) {
-        return levelCache.getOrDefault(player.getUniqueId(), 0);
+        return getLevel(player.getUniqueId());
+    }
+
+    public int getLevel(UUID uuid) {
+        return levelCache.getOrDefault(uuid, 0);
     }
 
     public int getXp(Player player) {
@@ -164,26 +165,37 @@ public class LevelManager {
         return multiplier;
     }
 
+    // Format: %player's_rank% %playername% %player_level%
     public void updateTabName(Player player) {
+        Component rankPrefix = getRankPrefixComponent(player);
+        Component levelSuffix = getLevelPrefixComponent(player); // Reusing the "[Lvl]" component as suffix logic for Tab
+
+        // We construct: Rank + Space + Name + Space + Level
+        Component tabName = rankPrefix
+                .append(Component.space())
+                .append(player.displayName())
+                .append(Component.space())
+                .append(levelSuffix);
+
+        player.playerListName(tabName);
+    }
+
+    public Component getLevelPrefixComponent(Player player) {
         int level = getLevel(player);
         String color = getLevelColor(level);
+        // Chat Format logic uses this: %player_level% (e.g. "[10]")
+        return LegacyComponentSerializer.legacyAmpersand().deserialize("&8[" + color + level + "&8]");
+    }
 
-        // Format: &8[&f%level%&8] %player's rank% %playername%
-        // We need Vault/LuckPerms for rank prefix ideally, assuming stored in displayname or we fetch it.
-        // For now, we will prepend the level to their current display name.
+    public Component getRankPrefixComponent(Player player) {
+        if (luckPerms == null) return Component.empty();
+        User user = luckPerms.getUserManager().getUser(player.getUniqueId());
+        if (user == null) return Component.empty();
 
-        String levelPrefix = "&8[" + color + level + "&8] ";
+        String prefix = user.getCachedData().getMetaData().getPrefix();
+        if (prefix == null) return Component.empty();
 
-        // Note: Changing PlayerListName usually works best with Legacy strings in simple setups
-        // Ideally hook into TabManager if you have one, but here is a direct set:
-        // Assuming current player list name has the rank already.
-
-        // If we want exact format "&8[%level&8] %player's rank% %playername%&7"
-        // We can try to preserve existing team prefix/suffix if using a scoreboard plugin,
-        // or just prepend. Safest is prepend.
-
-        Component levelComp = LegacyComponentSerializer.legacyAmpersand().deserialize(levelPrefix);
-        player.playerListName(levelComp.append(player.displayName()));
+        return LegacyComponentSerializer.legacyAmpersand().deserialize(prefix);
     }
 
     public String getLevelColor(int level) {

@@ -18,11 +18,10 @@ import java.util.UUID;
 public class HologramListener implements Listener {
 
     private final HologramManager manager;
-    private final RTPHologramInteraction rtpInteraction;
+    // Removed RTPHologramInteraction field
 
-    public HologramListener(HologramModule module, RTPHologramInteraction rtpInteraction) {
+    public HologramListener(HologramModule module) {
         this.manager = module.getHologramManager();
-        this.rtpInteraction = rtpInteraction;
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -37,45 +36,19 @@ public class HologramListener implements Listener {
         // Prevent default interaction (e.g., armor stand GUI)
         event.setCancelled(true);
 
-        // Check which hologram was clicked and delegate
-        if (hologram.getName().equalsIgnoreCase("rtp")) {
-            rtpInteraction.handleClick(player, hologram, entityUUID);
-        }
-        // ... add other hologram interactions here if needed
+        // Removed logic for checking "rtp" hologram name and delegating to interaction handler
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // Clear player page cache
-        rtpInteraction.clearPlayerPage(event.getPlayer());
+        // Removed interaction clearing
     }
 
-    /**
-     * This handler is modified because ChunkUnloadEvent is not cancellable on Spigot
-     * and hologram entities are non-persistent by design, so they are *supposed*
-     * to be removed when the chunk unloads. They are respawned in onChunkLoad.
-     */
     @EventHandler
     public void onChunkUnload(ChunkUnloadEvent event) {
-        // The error "cannot find symbol: method setCancelled(boolean)" is because
-        // this event is not cancellable on Spigot.
-        // We remove the problematic code. The entities will unload with the chunk,
-        // which is correct.
-        /*
-        for (Entity entity : event.getChunk().getEntities()) {
-            Hologram hologram = manager.getHologramByEntity(entity.getUniqueId());
-            if (hologram != null) {
-                // This was the error:
-                // event.setCancelled(true);
-                return;
-            }
-        }
-        */
+        // Existing logic for chunk unload handling (empty in original to prevent errors)
     }
 
-    /**
-     * Respawn holograms when their chunk loads if they are missing.
-     */
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
         // Iterate over active holograms
@@ -90,7 +63,6 @@ public class HologramListener implements Listener {
                     holoLoc.getBlockZ() >> 4 == event.getChunk().getZ()) {
 
                 // Hologram is in this chunk. Check if its entities are loaded.
-                // We'll check the first entity.
                 UUID firstEntityUUID = hologram.getAllEntityUUIDs().stream().findFirst().orElse(null);
                 if (firstEntityUUID != null) {
                     Entity entity = Bukkit.getEntity(firstEntityUUID);

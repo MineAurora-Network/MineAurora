@@ -3,6 +3,7 @@ package me.login;
 import me.login.discord.store.TicketModule;
 import me.login.discord.linking.*;
 import me.login.discord.moderation.DiscordModConfig;
+import me.login.level.LevelModule;
 import me.login.loginsystem.*;
 import me.login.dungeon.DungeonModule;
 import me.login.misc.hologram.HologramModule;
@@ -691,6 +692,10 @@ public class Login extends JavaPlugin implements Listener {
 
     public DatabaseManager getDatabaseManager() {
         return (lifestealModule != null) ? lifestealModule.getDatabaseManager() : null;
+    }
+
+    public LevelModule getLevelModule() {
+        return levelModule;
     }
 
     public ItemManager getItemManager() {

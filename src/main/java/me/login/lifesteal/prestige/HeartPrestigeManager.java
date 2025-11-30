@@ -3,12 +3,12 @@ package me.login.lifesteal.prestige;
 import me.login.Login;
 import me.login.lifesteal.ItemManager;
 import me.login.lifesteal.LifestealManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
+
+import java.util.UUID;
 
 public class HeartPrestigeManager {
 
@@ -17,11 +17,6 @@ public class HeartPrestigeManager {
     private final ItemManager itemManager;
     private final HeartPrestigeLogger logger;
 
-    // Config: Base cost 25, +5 per level
-    private final int STARTING_COST = 25;
-    private final int COST_INCREMENT = 5;
-    private final int MAX_PRESTIGE_LEVEL = 7; // Slots 10-16 = 7 levels
-
     public HeartPrestigeManager(Login plugin, LifestealManager lifestealManager, ItemManager itemManager, HeartPrestigeLogger logger) {
         this.plugin = plugin;
         this.lifestealManager = lifestealManager;
@@ -29,87 +24,95 @@ public class HeartPrestigeManager {
         this.logger = logger;
     }
 
+    public int getPrestigeLevel(UUID uuid) {
+        return lifestealManager.getPrestigeLevel(uuid);
+    }
+
     public int getPrestigeLevel(Player player) {
-        return lifestealManager.getPrestigeLevel(player.getUniqueId());
+        return getPrestigeLevel(player.getUniqueId());
     }
 
-    public int getCostForNextLevel(int currentLevel) {
-        return STARTING_COST + (currentLevel * COST_INCREMENT);
-    }
+    public void attemptPrestige(Player player, int targetTier) {
+        UUID uuid = player.getUniqueId();
+        int currentLevel = getPrestigeLevel(uuid);
 
-    public boolean canPrestige(Player player) {
-        return getPrestigeLevel(player) < MAX_PRESTIGE_LEVEL;
-    }
-
-    public void attemptPrestige(Player player) {
-        int currentLevel = getPrestigeLevel(player);
-
-        if (currentLevel >= MAX_PRESTIGE_LEVEL) {
-            player.sendMessage(itemManager.formatMessage("<red>You have reached the maximum prestige level!"));
+        // Ensure they are buying the next immediate level
+        if (targetTier != currentLevel + 1) {
+            player.sendMessage(itemManager.formatMessage("<red>Invalid prestige attempt."));
             return;
         }
 
-        int nextLevel = currentLevel + 1;
-        int heartItemCost = getCostForNextLevel(currentLevel);
+        int cost = getCostForNextLevel(targetTier);
 
-        // Check inventory for Heart Items
-        if (!hasEnoughHearts(player, heartItemCost)) {
-            Component msg = Component.text("You do not have enough heart items!", NamedTextColor.RED)
-                    .append(Component.newline())
-                    .append(Component.text("Required: " + heartItemCost + " Hearts in inventory.", NamedTextColor.YELLOW));
-            player.sendMessage(itemManager.formatMessage(msg));
-            return;
+        // --- INVENTORY CHECK LOGIC ---
+        int heartsFound = countHeartsInInventory(player);
+
+        if (heartsFound >= cost) {
+            // Remove Items
+            if (removeHeartsFromInventory(player, cost)) {
+                // Set new prestige level
+                lifestealManager.setPrestigeLevel(uuid, targetTier);
+
+                // Increase the max heart limit and update health immediately
+                lifestealManager.updatePlayerHealth(player);
+
+                player.sendMessage(itemManager.formatMessage("<green><bold>PRESTIGE UP!</bold> <gray>You are now Prestige Level <white>" + targetTier + "<gray>!"));
+                player.sendMessage(itemManager.formatMessage("<green>Your max heart limit is now " + lifestealManager.getMaxHearts(uuid) + "!"));
+
+                if (logger != null) {
+                    logger.logPrestige(player.getName(), targetTier, cost);
+                }
+            }
+        } else {
+            player.sendMessage(itemManager.formatMessage("<red>You do not have enough Heart items in your inventory! (Need " + cost + ", Have " + heartsFound + ")"));
         }
-
-        // Proceed with Prestige
-        removeHeartItems(player, heartItemCost);
-
-        // Update Level
-        lifestealManager.setPrestigeLevel(player.getUniqueId(), nextLevel);
-
-        // Effect: Max Health Cap increases automatically in LifestealManager.getMaxHearts()
-        // We also grant 1 heart immediately as a "reward" or fill the new slot?
-        // "increase 1 from max heart limit" -> done via logic.
-        // "add 5 hearts per slot" -> handled in cost logic.
-
-        // Give feedback
-        Component successMsg = Component.text("Prestige Successful!", NamedTextColor.GREEN)
-                .append(Component.newline())
-                .append(Component.text("New Max Heart Limit: ", NamedTextColor.GRAY))
-                .append(Component.text((lifestealManager.getMaxHearts(player.getUniqueId())), NamedTextColor.GOLD));
-
-        player.sendMessage(itemManager.formatMessage(successMsg));
-
-        logger.logPrestige(player.getName(), nextLevel, heartItemCost);
     }
 
-    private boolean hasEnoughHearts(Player player, int amount) {
+    private int countHeartsInInventory(Player player) {
         int count = 0;
         for (ItemStack item : player.getInventory().getContents()) {
-            if (item != null && item.getType() != Material.AIR && item.hasItemMeta()) {
-                if (item.getItemMeta().getPersistentDataContainer().has(itemManager.heartItemKey, PersistentDataType.BYTE)) {
-                    count += item.getAmount();
-                }
+            if (isHeartItem(item)) {
+                count += item.getAmount();
             }
         }
-        return count >= amount;
+        return count;
     }
 
-    private void removeHeartItems(Player player, int amount) {
-        int remaining = amount;
-        for (ItemStack item : player.getInventory().getContents()) {
-            if (item != null && item.getType() != Material.AIR && item.hasItemMeta()) {
-                if (item.getItemMeta().getPersistentDataContainer().has(itemManager.heartItemKey, PersistentDataType.BYTE)) {
-                    if (item.getAmount() <= remaining) {
-                        remaining -= item.getAmount();
-                        item.setAmount(0);
-                    } else {
-                        item.setAmount(item.getAmount() - remaining);
-                        remaining = 0;
-                    }
-                    if (remaining <= 0) break;
+    private boolean removeHeartsFromInventory(Player player, int amountToRemove) {
+        int remaining = amountToRemove;
+        ItemStack[] contents = player.getInventory().getContents();
+
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack item = contents[i];
+            if (isHeartItem(item)) {
+                if (item.getAmount() <= remaining) {
+                    remaining -= item.getAmount();
+                    player.getInventory().setItem(i, null); // Remove stack
+                } else {
+                    item.setAmount(item.getAmount() - remaining);
+                    remaining = 0;
                 }
             }
+            if (remaining <= 0) break;
         }
+        return remaining == 0;
+    }
+
+    private boolean isHeartItem(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) return false;
+        if (!item.hasItemMeta()) return false;
+        // Check for the specific PersistentData tag assigned in ItemManager to identify real hearts
+        return item.getItemMeta().getPersistentDataContainer().has(itemManager.heartItemKey, PersistentDataType.BYTE);
+    }
+
+    // Logic to calculate cost
+    public int getCostForNextLevel(int tier) {
+        // Base 25 hearts for first prestige, +5 for each subsequent level
+        // Tier 1 = 25, Tier 2 = 30, etc.
+        return 25 + ((tier - 1) * 5);
+    }
+
+    public LifestealManager getLifestealManager() {
+        return lifestealManager;
     }
 }

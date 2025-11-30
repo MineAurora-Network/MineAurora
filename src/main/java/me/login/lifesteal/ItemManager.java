@@ -1,9 +1,9 @@
 package me.login.lifesteal;
 
-// --- IMPORT ADDED ---
 import me.login.utility.TextureToHead;
 import me.login.Login;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration; // <-- Import TextDecoration
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
@@ -66,7 +66,6 @@ public class ItemManager {
     }
 
     public ItemStack getHeartItem(int amount) {
-        // --- MODIFIED (Request 2) ---
         String materialName = itemsConfig.getString("heart-item.material", "RED_DYE").toUpperCase();
         Material material;
         try {
@@ -82,9 +81,8 @@ public class ItemManager {
                 itemsConfig.getString("heart-item.name", "<red>Heart</red>"),
                 itemsConfig.getStringList("heart-item.lore"),
                 heartItemKey,
-                itemsConfig.getString("heart-item.texture") // Pass texture URL
+                itemsConfig.getString("heart-item.texture")
         );
-        // --- END MODIFICATION ---
     }
 
     public ItemStack getReviveBeaconItem(int amount) {
@@ -94,47 +92,33 @@ public class ItemManager {
                 itemsConfig.getString("revive-beacon.name", "<aqua>Revive Beacon</aqua>"),
                 itemsConfig.getStringList("revive-beacon.lore"),
                 beaconItemKey,
-                null // Pass null for texture
+                null
         );
     }
 
-    // --- MODIFIED (Request 2) & FIXED (Attempt 3) ---
     private ItemStack createItem(Material material, int amount, String name, List<String> lore, NamespacedKey key, String textureUrl) {
         ItemStack item = new ItemStack(material, amount);
         ItemMeta meta = item.getItemMeta();
-        if (meta == null) return item; // Return item, even if meta is somehow null
+        if (meta == null) return item;
 
-        // --- NEW FIX ---
-        // Deserialize the MiniMessage name *once*
-        Component componentName = miniMessage.deserialize(name);
-
-        // 1. Set the MODERN (Adventure) display name. This is what players see.
+        // 1. Set Display Name (Remove Italics)
+        Component componentName = miniMessage.deserialize(name).decoration(TextDecoration.ITALIC, false);
         meta.displayName(componentName);
-
-        // 2. Set the LEGACY (String) display name.
-        // This is what the TextureToHead.java utility
-        // is trying to read with 'headMeta.getDisplayName()'.
-        // This ensures the GameProfile name is not null.
         meta.setDisplayName(ItemManager.toLegacy(componentName));
-        // --- END NEW FIX ---
 
-
+        // 2. Set Lore (Remove Italics)
         List<Component> componentLore = lore.stream()
-                .map(miniMessage::deserialize)
+                .map(line -> miniMessage.deserialize(line).decoration(TextDecoration.ITALIC, false)) // Force no italics
                 .collect(Collectors.toList());
         meta.lore(componentLore);
 
         meta.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
 
-        // Set the meta (display name, lore) FIRST.
         item.setItemMeta(meta);
 
-        // THEN, apply the texture.
         if (material == Material.PLAYER_HEAD && textureUrl != null && !textureUrl.isEmpty()) {
             try {
-                // Now, when applyTexture calls head.getItemMeta().getDisplayName(),
-                // it will get the legacy string we just set.
                 item = TextureToHead.applyTexture(item, textureUrl);
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to apply texture '" + textureUrl + "': " + e.getMessage());
@@ -143,9 +127,7 @@ public class ItemManager {
 
         return item;
     }
-    // --- END MODIFICATION ---
 
-    // --- Adventure Component Helpers ---
     public static String toLegacy(Component component) {
         return LegacyComponentSerializer.legacySection().serialize(component);
     }

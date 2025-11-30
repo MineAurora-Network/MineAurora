@@ -6,7 +6,6 @@ import me.login.utility.TextureToHead;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -28,7 +27,7 @@ public class HeartPrestigeGUI implements Listener {
     private final HeartPrestigeManager manager;
     private final ItemManager itemManager;
     private final String HEAD_TEXTURE = "http://textures.minecraft.net/texture/33d1e94bcadcb9a165978937ce030122fccb06341f693f91b53a59fc8252adfa";
-    private final String GUI_TITLE = "<gradient:#FF5555:#AA0000>Heart Prestige</gradient>";
+    private final String GUI_TITLE = "<dark_gray>Heart Prestige";
 
     public HeartPrestigeGUI(Login plugin, HeartPrestigeManager manager, ItemManager itemManager) {
         this.plugin = plugin;
@@ -41,7 +40,6 @@ public class HeartPrestigeGUI implements Listener {
         Inventory gui = Bukkit.createInventory(null, 27, ItemManager.toLegacy(title));
 
         // Fill Background with Dark Gray
-        // In 1.13+, GRAY_STAINED_GLASS_PANE is Dark Gray. LIGHT_GRAY is the silver one.
         ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta fillerMeta = filler.getItemMeta();
         fillerMeta.displayName(Component.empty());
@@ -70,7 +68,7 @@ public class HeartPrestigeGUI implements Listener {
 
         boolean unlocked = playerCurrentLevel >= tier;
         boolean isNext = playerCurrentLevel == (tier - 1);
-        int cost = manager.getCostForNextLevel(tier - 1);
+        int cost = manager.getCostForNextLevel(tier);
 
         String nameColor = unlocked ? "<green>" : (isNext ? "<yellow>" : "<red>");
         String status = unlocked ? "UNLOCKED" : (isNext ? "CLICK TO PRESTIGE" : "LOCKED");
@@ -82,12 +80,13 @@ public class HeartPrestigeGUI implements Listener {
         lore.add(Component.text("Cost: ", NamedTextColor.GRAY).append(Component.text(cost + " Heart Items", NamedTextColor.RED)).decoration(TextDecoration.ITALIC, false));
         lore.add(Component.text("Reward: ", NamedTextColor.GRAY).append(Component.text("+1 Max Heart Limit", NamedTextColor.GOLD)).decoration(TextDecoration.ITALIC, false));
         lore.add(Component.empty());
-        lore.add(itemManager.getMiniMessage().deserialize(nameColor + "<bold>" + status).decoration(TextDecoration.ITALIC, false));
 
         if (isNext) {
-            lore.add(Component.empty());
             lore.add(Component.text("Requires " + cost + " hearts in inventory!", NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.empty());
         }
+
+        lore.add(itemManager.getMiniMessage().deserialize(nameColor + "<bold>" + status).decoration(TextDecoration.ITALIC, false));
 
         meta.lore(lore);
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
@@ -95,16 +94,11 @@ public class HeartPrestigeGUI implements Listener {
         return item;
     }
 
-    // --- THIS IS THE CLICK MANAGER ---
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
-
-        // Check Title to confirm this is the Prestige Menu
-        if (!event.getView().title().toString().contains("Heart Prestige") &&
-                !event.getView().getTitle().contains("Heart Prestige")) return;
-
-        event.setCancelled(true); // Stop taking items
+        if (!event.getView().getTitle().contains("Heart Prestige")) return;
+        event.setCancelled(true);
 
         if (event.getClickedInventory() == null || event.getClickedInventory().getHolder() != null) return;
 
@@ -117,7 +111,7 @@ public class HeartPrestigeGUI implements Listener {
                 player.sendMessage(itemManager.formatMessage("<red>You have already unlocked this prestige tier!"));
             } else if (currentLevel == (tier - 1)) {
                 // Attempt purchase via Manager
-                manager.attemptPrestige(player);
+                manager.attemptPrestige(player, tier);
                 open(player); // Re-open to update icons
             } else {
                 player.sendMessage(itemManager.formatMessage("<red>You must unlock the previous tier first!"));

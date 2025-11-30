@@ -20,9 +20,9 @@ public class LifestealManager {
     private LifestealLogger logger;
 
     private final Map<UUID, Integer> heartCache = new HashMap<>();
-    private final Map<UUID, Integer> prestigeCache = new HashMap<>(); // <-- NEW
+    private final Map<UUID, Integer> prestigeCache = new HashMap<>();
 
-    private final int BASE_MAX_HEARTS = 25; // Renamed from MAX_HEARTS
+    private final int BASE_MAX_HEARTS = 25; // Default max hearts without prestige
     private final int MIN_HEARTS = 1;
     public final int DEFAULT_HEARTS = 10;
 
@@ -31,6 +31,7 @@ public class LifestealManager {
             "normal_world",
             "end",
             "nether",
+            "dungeon",
             "arena"
     );
 
@@ -68,13 +69,8 @@ public class LifestealManager {
             heartCache.remove(uuid);
         }
         if (prestigeCache.containsKey(uuid)) {
-            // Prestige is usually saved instantly on rank up, but good to have safety
-            // We don't remove from cache here usually if we want to keep data,
-            // but onQuit implies cleanup.
             prestigeCache.remove(uuid);
         }
-        // Reset max health attribute to avoid lingering effects if they join non-LS world next?
-        // Actually better to leave it, handled by onJoin.
     }
 
     public void saveAllOnlinePlayerData() {
@@ -100,7 +96,7 @@ public class LifestealManager {
     }
 
     public int getMaxHearts(UUID uuid) {
-        // Base 25 + Prestige Level (1 per level)
+        // Base 25 + Prestige Level (1 heart per prestige level)
         return BASE_MAX_HEARTS + getPrestigeLevel(uuid);
     }
     // ----------------------
@@ -111,6 +107,7 @@ public class LifestealManager {
 
     public int setHearts(UUID uuid, int hearts) {
         int max = getMaxHearts(uuid); // Dynamic max
+        // Ensure hearts don't exceed the calculated max
         int clampedHearts = Math.max(MIN_HEARTS, Math.min(max, hearts));
 
         heartCache.put(uuid, clampedHearts);
@@ -143,39 +140,38 @@ public class LifestealManager {
             hearts = DEFAULT_HEARTS;
         }
 
-        // Calculate dynamic max health based on prestige
+        // Calculate standard max health based on prestige
         int maxHeartsLimit = getMaxHearts(player.getUniqueId());
 
-        // Safety check to ensure Attribute isn't null (some custom worlds/plugins)
+        // --- FIX FOR OP BYPASS PERSISTENCE ---
+        // If the player currently has MORE hearts than the standard limit (e.g. from OP bypass),
+        // we allow the limit to stretch to their current heart count.
+        // This ensures that when they switch worlds, the attribute isn't clamped down to the prestige limit.
+        if (hearts > maxHeartsLimit) {
+            maxHeartsLimit = hearts;
+        }
+        // -------------------------------------
+
+        // Safety check to ensure Attribute isn't null
         var maxHealthAttr = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
         if (maxHealthAttr != null) {
-            maxHealthAttr.setBaseValue(maxHeartsLimit * 2.0); // Set the container limit
+            // Set the container limit (Base Value)
+            maxHealthAttr.setBaseValue(maxHeartsLimit * 2.0);
         }
 
-        // Current health cannot exceed current container limit
-        double healthVal = hearts * 2.0;
-
-        // Also clamp against the attribute we just set
-        if (healthVal > maxHeartsLimit * 2.0) {
-            healthVal = maxHeartsLimit * 2.0;
+        // Ensure current hearts doesn't exceed the limit visually
+        if (hearts > maxHeartsLimit) {
+            hearts = maxHeartsLimit;
         }
 
-        player.setMaxHealth(maxHeartsLimit * 2.0); // Deprecated but often needed for immediate client sync
-        if (player.getHealth() > healthVal) {
-            player.setHealth(healthVal);
-        }
-        // If we want to force them to the heart value (e.g. healing them up to their heart count)
-        // logic suggests current hearts = current health.
-        // But standard MC allows taking damage.
-        // Lifesteal usually syncs Max Health to Hearts.
-        // So we set MaxHealth = Hearts * 2.
-        // And let current health fill up naturally or stay damaged.
-        if (maxHealthAttr != null) {
-            maxHealthAttr.setBaseValue(hearts * 2.0);
+        // Set actual health logic
+        double maxHealthVal = maxHeartsLimit * 2.0;
+        if (player.getHealth() > maxHealthVal) {
+            player.setHealth(maxHealthVal);
         }
     }
 
-    public int getMaxHearts() { return BASE_MAX_HEARTS; } // Legacy getter for base
+    public int getMaxHearts() { return BASE_MAX_HEARTS; }
     public int getMinHearts() { return MIN_HEARTS; }
 
     public Set<String> getLifestealWorlds() {
@@ -211,11 +207,27 @@ public class LifestealManager {
 
     public boolean useHeart(Player player) {
         int currentHearts = getHearts(player.getUniqueId());
-        int max = getMaxHearts(player.getUniqueId()); // Use dynamic max
+        int max = getMaxHearts(player.getUniqueId());
 
-        if (currentHearts >= max) {
+        if (currentHearts >= max && !player.isOp()) {
             player.sendMessage(itemManager.formatMessage("<red>You are already at the maximum heart limit (" + max + ")!"));
             return false;
+        }
+
+        // OP Bypass Logic
+        if (player.isOp() && currentHearts >= max) {
+            // Manually update cache and DB to bypass the clamp in setHearts()
+            int newAmount = currentHearts + 1;
+            heartCache.put(player.getUniqueId(), newAmount);
+            databaseManager.setHearts(player.getUniqueId(), newAmount);
+
+            // Update attribute to accommodate the extra heart
+            // Note: updatePlayerHealth(player) is better here to keep logic centralized,
+            // now that updatePlayerHealth handles the bypass correctly.
+            updatePlayerHealth(player);
+
+            player.sendMessage(itemManager.formatMessage("<green>You redeemed a heart (OP Bypass)! New total: " + newAmount));
+            return true;
         }
 
         setHearts(player.getUniqueId(), currentHearts + 1);

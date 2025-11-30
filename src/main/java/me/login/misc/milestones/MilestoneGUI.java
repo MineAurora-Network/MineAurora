@@ -33,11 +33,11 @@ public class MilestoneGUI implements Listener {
     }
 
     public void open(Player player) {
-        Component title = mm.deserialize(plugin.getServerPrefix().trim() + " <dark_gray>Milestones");
+        // Changed title: Removed prefix, set to Dark Gray
+        Component title = mm.deserialize("<dark_gray>Milestones");
         Inventory gui = Bukkit.createInventory(null, 27, title); // 3 rows
 
         // Fill background with Dark Gray
-        // In 1.13+, GRAY_STAINED_GLASS_PANE is Dark Gray.
         ItemStack filler = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta fillerMeta = filler.getItemMeta();
         fillerMeta.displayName(Component.empty());
