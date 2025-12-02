@@ -1,13 +1,9 @@
 package me.login.discord.linking;
 
 import me.login.Login;
-import me.login.discord.moderation.DiscordCommandLogger;
-import me.login.discord.moderation.DiscordCommandManager;
-import me.login.discord.moderation.DiscordCommandRegistrar;
-import me.login.discord.moderation.DiscordModConfig;
-import me.login.discord.moderation.DiscordModCommands;
-import me.login.discord.moderation.DiscordRankCommand;
-import me.login.misc.rank.RankManager; // <-- IMPORT
+import me.login.discord.moderation.*;
+import me.login.misc.rank.RankManager;
+import me.login.moderation.ModerationModule;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
@@ -16,9 +12,6 @@ import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberJoinEvent;
 import net.dv8tion.jda.api.events.guild.member.GuildMemberRemoveEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.exceptions.ErrorResponseException;
-import net.dv8tion.jda.api.exceptions.HierarchyException;
-import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
@@ -34,12 +27,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.awt.Color;
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -50,20 +38,19 @@ public class DiscordLinking extends ListenerAdapter {
     private JDA jda;
     private final DiscordModConfig modConfig;
     private final DiscordLinkLogger logger;
+    private final RankManager rankManager;
     private final Component prefix;
-    private final RankManager rankManager; // <-- ADD
 
     private final Map<String, UUID> verificationCodes = new ConcurrentHashMap<>();
     private final Map<UUID, Long> linkedAccounts = new ConcurrentHashMap<>();
     private final Map<Long, UUID> reverseLinkedAccounts = new ConcurrentHashMap<>();
     private final Map<UUID, Long> codeCooldowns = new ConcurrentHashMap<>();
 
-    // --- UPDATED CONSTRUCTOR ---
     public DiscordLinking(Login plugin, DiscordModConfig modConfig, DiscordLinkLogger logger, RankManager rankManager) {
         this.plugin = plugin;
         this.modConfig = modConfig;
         this.logger = logger;
-        this.rankManager = rankManager; // <-- ADD
+        this.rankManager = rankManager;
 
         String prefixStr = plugin.getConfig().getString("server_prefix");
         if (prefixStr == null || prefixStr.isEmpty()) {
@@ -77,13 +64,11 @@ public class DiscordLinking extends ListenerAdapter {
         }
     }
 
-    public JDA getJDA() { return jda; }
-
-    public DiscordLinkLogger getLogger() {
-        return this.logger;
-    }
-
-    public JDA startBot(String token, DiscordCommandLogger commandLogger) {
+    /**
+     * Starts the Main Bot using 'bot-token'.
+     * Passes ModerationModule to ensure Discord commands write to the SAME database as in-game commands.
+     */
+    public JDA startBot(String token, DiscordCommandLogger commandLogger, ModerationModule moderationModule) {
         try {
             JDABuilder builder = JDABuilder.createLight(token)
                     .enableIntents(GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
@@ -97,32 +82,46 @@ public class DiscordLinking extends ListenerAdapter {
                             CacheFlag.SCHEDULED_EVENTS
                     ))
                     .addEventListeners(
-                            this,
-                            new DiscordCommandManager(plugin, commandLogger),
-                            new DiscordModCommands(plugin, modConfig, commandLogger),
-                            new DiscordRankCommand(plugin, rankManager) // <-- PASS RANK MANAGER
+                            this, // Linking Logic
+                            new DiscordCommandManager(plugin, commandLogger), // Utility commands
+                            // Critical: Pass ModerationModule here for shared DB access
+                            new DiscordModCommands(plugin, modConfig, commandLogger, this, moderationModule),
+                            new DiscordRankCommand(plugin, rankManager)
                     );
 
             jda = builder.build().awaitReady();
-            plugin.getLogger().info("Discord bot connected successfully and ready!");
+            plugin.getLogger().info("Main Discord Bot connected!");
 
-            plugin.getDatabase().loadAllLinks().forEach((discordId, uuid) -> {
+            // Load existing links into memory
+            plugin.getDiscordLinkDatabase().loadAllLinks().forEach((discordId, uuid) -> {
                 linkedAccounts.put(uuid, discordId);
                 reverseLinkedAccounts.put(discordId, uuid);
             });
-            plugin.getLogger().info("Loaded " + linkedAccounts.size() + " links.");
+            plugin.getLogger().info("Loaded " + linkedAccounts.size() + " linked accounts.");
+
             return jda;
         } catch (Exception e) {
-            plugin.getLogger().severe("Error during JDA startup: " + e.getMessage());
+            plugin.getLogger().severe("Error during Main Discord Bot startup: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
     }
 
-    public void shutdown() { if (jda != null) jda.shutdownNow(); }
+    public void shutdown() {
+        if (jda != null) jda.shutdownNow();
+    }
+
+    public JDA getJDA() { return jda; }
+
+    public DiscordLinkLogger getLogger() {
+        return this.logger;
+    }
+
+    // --- Linking Logic ---
 
     public String generateCode(UUID uuid, String playerName) {
-        Random random = new Random(); String code;
+        Random random = new Random();
+        String code;
         do { code = String.format("%04d", random.nextInt(10000)); } while (verificationCodes.containsKey(code));
         final String finalCode = code;
 
@@ -131,11 +130,8 @@ public class DiscordLinking extends ListenerAdapter {
         long expirySeconds = plugin.getConfig().getLong("code-expiry-seconds", 60);
 
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            boolean removedCode = verificationCodes.remove(finalCode, uuid);
-            boolean removedCooldown = codeCooldowns.remove(uuid) != null;
-            if (removedCode || removedCooldown) {
-                plugin.getLogger().info("[DEBUG] Expired code '" + finalCode + "' for " + playerName + " (RCd: " + removedCode + ", RCld: " + removedCooldown + ")");
-            }
+            verificationCodes.remove(finalCode, uuid);
+            codeCooldowns.remove(uuid);
         }, 20L * expirySeconds);
 
         return code;
@@ -144,18 +140,17 @@ public class DiscordLinking extends ListenerAdapter {
     public boolean hasActiveCode(UUID uuid) { return codeCooldowns.containsKey(uuid); }
     public UUID getPlayerByCode(String code) { return verificationCodes.get(code); }
     public Long getLinkedDiscordId(UUID uuid) { return linkedAccounts.get(uuid); }
-
-    public UUID getLinkedUuid(long discordId) {
-        return reverseLinkedAccounts.get(discordId);
-    }
+    public UUID getLinkedUuid(long discordId) { return reverseLinkedAccounts.get(discordId); }
 
     public List<Role> linkUser(UUID uuid, long discordId, Member member) {
         List<Role> assignedRoles = new ArrayList<>();
 
-        plugin.getDatabase().linkUser(discordId, uuid); // Use correct DB instance
+        // 1. Save to DB
+        plugin.getDiscordLinkDatabase().linkUser(discordId, uuid);
         linkedAccounts.put(uuid, discordId);
         reverseLinkedAccounts.put(discordId, uuid);
 
+        // 2. Assign Basic Roles
         Guild guild = member.getGuild();
         long verifiedRoleId = plugin.getConfig().getLong("verified-role-id");
         long unverifiedRoleId = plugin.getConfig().getLong("unverified-role-id");
@@ -163,54 +158,74 @@ public class DiscordLinking extends ListenerAdapter {
         Role unverifiedRole = guild.getRoleById(unverifiedRoleId);
 
         if (verifiedRole != null) {
-            guild.addRoleToMember(member, verifiedRole).queue(s -> assignedRoles.add(verifiedRole), e -> {});
-        } else { plugin.getLogger().warning("Verified Role ID invalid!"); }
+            guild.addRoleToMember(member, verifiedRole).queue(s -> assignedRoles.add(verifiedRole));
+        }
         if (unverifiedRole != null) {
             guild.removeRoleFromMember(member, unverifiedRole).queue();
-        } else { plugin.getLogger().warning("Unverified Role ID invalid!"); }
+        }
 
+        // 3. Sync Ranks based on Permissions
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null && player.isOnline()) {
-                ConfigurationSection ranksSection = plugin.getConfig().getConfigurationSection("ranks");
-                if (ranksSection != null) {
-                    for (String rankName : ranksSection.getKeys(false)) {
-                        long roleId = ranksSection.getLong(rankName);
-                        if (player.hasPermission("rank." + rankName)) {
-                            Role role = guild.getRoleById(roleId);
-                            if (role != null) guild.addRoleToMember(member, role)
-                                    .queue(s -> assignedRoles.add(role), e -> plugin.getLogger().warning("Failed add rank role " + rankName + ": " + e.getMessage()));
+                // Get the section 'rank_role_id' from config
+                ConfigurationSection rolesSection = plugin.getConfig().getConfigurationSection("rank_role_id");
+
+                if (rolesSection != null) {
+                    for (String rankKey : rolesSection.getKeys(false)) {
+                        // Check if player has "rank.<key>" (e.g. rank.ace)
+                        if (player.hasPermission("rank." + rankKey)) {
+                            long roleId = rolesSection.getLong(rankKey);
+                            Role rankRole = guild.getRoleById(roleId);
+
+                            if (rankRole != null) {
+                                guild.addRoleToMember(member, rankRole).queue(
+                                        s -> assignedRoles.add(rankRole),
+                                        e -> plugin.getLogger().warning("Failed to add rank role for " + rankKey + ": " + e.getMessage())
+                                );
+                            } else {
+                                plugin.getLogger().warning("Rank role ID for '" + rankKey + "' is invalid in config.");
+                            }
                         }
                     }
                 }
             }
         });
 
+        // 4. Update Nickname & Log
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 OfflinePlayer offlinePlayer = plugin.getServer().getOfflinePlayer(uuid);
                 String mcName = offlinePlayer.getName() != null ? offlinePlayer.getName() : "Player";
-                member.modifyNickname(mcName).queue((v) -> {}, (error) -> {
-                    if (error instanceof HierarchyException) plugin.getLogger().warning("Failed set nick (Hierarchy): " + member.getUser().getName());
-                    else plugin.getLogger().warning("Failed set nick: " + error.getMessage());
-                });
+
+                member.modifyNickname(mcName).queue(
+                        null,
+                        error -> plugin.getLogger().warning("Could not set nickname for " + member.getUser().getAsTag() + ": " + error.getMessage())
+                );
+
                 logger.sendLog("✅ **" + member.getUser().getAsTag() + "** linked to **" + mcName + "** (UUID: `" + uuid + "`)");
-            } catch (Exception e) { plugin.getLogger().severe("[DEBUG] Error in async linkUser name/log:"); e.printStackTrace(); }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         });
         return assignedRoles;
     }
 
     public void unlinkUser(long discordId) {
-        plugin.getDatabase().unlinkUser(discordId); // Use correct DB instance
+        plugin.getDiscordLinkDatabase().unlinkUser(discordId);
         UUID uuid = reverseLinkedAccounts.remove(discordId);
         if (uuid != null) linkedAccounts.remove(uuid);
     }
+
+    // --- JDA Event Listeners ---
 
     @Override
     public void onGuildMemberJoin(GuildMemberJoinEvent event) {
         long unverifiedRoleId = plugin.getConfig().getLong("unverified-role-id");
         Role unverifiedRole = event.getGuild().getRoleById(unverifiedRoleId);
-        if (unverifiedRole != null) event.getGuild().addRoleToMember(event.getMember(), unverifiedRole).queue();
+        if (unverifiedRole != null) {
+            event.getGuild().addRoleToMember(event.getMember(), unverifiedRole).queue();
+        }
     }
 
     @Override
@@ -249,40 +264,34 @@ public class DiscordLinking extends ListenerAdapter {
         }
 
         codeCooldowns.remove(playerUUID);
-
         long discordId = member.getIdLong();
 
         if (linkedAccounts.containsKey(playerUUID)) {
-            EmbedBuilder eb = new EmbedBuilder().setColor(Color.ORANGE).setTitle("⚠️ Verification Issue")
-                    .setDescription(event.getAuthor().getAsMention() + ", MC account already linked!");
-            channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(15, TimeUnit.SECONDS));
+            sendError(channel, event.getAuthor(), "MC account already linked!");
             return;
         }
         if (reverseLinkedAccounts.containsKey(discordId)) {
-            EmbedBuilder eb = new EmbedBuilder().setColor(Color.ORANGE).setTitle("⚠️ Verification Issue")
-                    .setDescription(event.getAuthor().getAsMention() + ", Discord account already linked!");
-            channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(15, TimeUnit.SECONDS));
+            sendError(channel, event.getAuthor(), "Discord account already linked!");
             return;
         }
 
+        // Perform Link
         List<Role> intendedRoles = linkUser(playerUUID, discordId, member);
 
+        // Success Logic
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             OfflinePlayer offlinePlayer = plugin.getServer().getOfflinePlayer(playerUUID);
             String mcName = offlinePlayer.getName() != null ? offlinePlayer.getName() : "Player";
 
-            try {
-                EmbedBuilder dmEmbed = new EmbedBuilder()
-                        .setColor(Color.GREEN)
-                        .setTitle("✅ Account Linked!")
-                        .setDescription("Your Discord account has been successfully linked to the Minecraft account: **" + mcName + "**.")
-                        .setFooter(member.getGuild().getName(), member.getGuild().getIconUrl());
-                sendPrivateEmbed(member.getUser(), dmEmbed.build());
-            } catch (Exception e) {
-                plugin.getLogger().warning("Failed to send private message during link: " + e.getMessage());
-            }
+            // DM User
+            EmbedBuilder dmEmbed = new EmbedBuilder()
+                    .setColor(Color.GREEN)
+                    .setTitle("✅ Account Linked!")
+                    .setDescription("Your Discord account has been successfully linked to **" + mcName + "**.")
+                    .setFooter(member.getGuild().getName(), member.getGuild().getIconUrl());
+            sendPrivateEmbed(member.getUser(), dmEmbed.build());
 
-
+            // Public Confirm
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
                 EmbedBuilder eb = new EmbedBuilder().setColor(Color.GREEN).setTitle("✅ Verification Successful!")
                         .setDescription(member.getAsMention() + " linked to **" + mcName + "**.");
@@ -293,17 +302,14 @@ public class DiscordLinking extends ListenerAdapter {
                             .map(Role::getName)
                             .collect(Collectors.joining(", "));
                     if (!rolesString.isEmpty()) eb.addField("Roles Updated", "`" + rolesString + "`", false);
-                    else eb.addField("Roles Updated", "`Verified` (check profile)", false);
-                    eb.setFooter("Welcome!");
-                    channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(15, TimeUnit.SECONDS));
-                }, failure -> {
-                    eb.addField("Roles Updated", "`Verified` (check profile)", false);
+                    else eb.addField("Roles Updated", "Synced (Check Profile)", false);
                     eb.setFooter("Welcome!");
                     channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(15, TimeUnit.SECONDS));
                 });
             }, 20L);
         });
 
+        // In-Game Message
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             Player player = Bukkit.getPlayer(playerUUID);
             if (player != null && player.isOnline()) {
@@ -313,6 +319,13 @@ public class DiscordLinking extends ListenerAdapter {
         });
     }
 
-    private void sendPrivateMessage(User user, String message) { user.openPrivateChannel().queue( c -> c.sendMessage(message).queue(), e -> {}); }
-    public void sendPrivateEmbed(User user, MessageEmbed embed) { user.openPrivateChannel().queue( c -> c.sendMessageEmbeds(embed).queue(), e -> {}); }
+    private void sendError(GuildMessageChannel channel, User author, String reason) {
+        EmbedBuilder eb = new EmbedBuilder().setColor(Color.ORANGE).setTitle("⚠️ Verification Issue")
+                .setDescription(author.getAsMention() + ", " + reason);
+        channel.sendMessageEmbeds(eb.build()).queue(msg -> msg.delete().queueAfter(15, TimeUnit.SECONDS));
+    }
+
+    public void sendPrivateEmbed(User user, MessageEmbed embed) {
+        user.openPrivateChannel().queue(c -> c.sendMessageEmbeds(embed).queue(null, e -> {}), e -> {});
+    }
 }

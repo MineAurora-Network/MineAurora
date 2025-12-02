@@ -24,8 +24,9 @@ public class LifestealManager {
 
     private final int BASE_MAX_HEARTS = 25; // Default max hearts without prestige
     private final int MIN_HEARTS = 1;
-    public final int DEFAULT_HEARTS = 10;
+    public final int DEFAULT_HEARTS = 10; // 10 Hearts = 20 HP (Normal Vanilla)
 
+    // Worlds where Lifesteal logic applies
     private final Set<String> lifestealWorlds = Set.of(
             "lifesteal",
             "normal_world",
@@ -105,10 +106,24 @@ public class LifestealManager {
         return heartCache.getOrDefault(uuid, databaseManager.getHeartsSync(uuid));
     }
 
-    public int setHearts(UUID uuid, int hearts) {
-        int max = getMaxHearts(uuid); // Dynamic max
-        // Ensure hearts don't exceed the calculated max
-        int clampedHearts = Math.max(MIN_HEARTS, Math.min(max, hearts));
+    /**
+     * Sets the player's hearts.
+     * @param uuid Player UUID
+     * @param hearts Amount of hearts
+     * @param ignoreLimit If true, allows setting hearts ABOVE the calculated max limit (Operator Bypass).
+     * @return The actual amount of hearts set (after potential clamping).
+     */
+    public int setHearts(UUID uuid, int hearts, boolean ignoreLimit) {
+        int max = getMaxHearts(uuid); // Dynamic max based on Prestige
+        int clampedHearts;
+
+        if (ignoreLimit) {
+            // If ignoring limit (OP/Admin), we only ensure they don't drop below minimum
+            clampedHearts = Math.max(MIN_HEARTS, hearts);
+        } else {
+            // Standard gameplay logic: Clamp between Min and Max
+            clampedHearts = Math.max(MIN_HEARTS, Math.min(max, hearts));
+        }
 
         heartCache.put(uuid, clampedHearts);
         databaseManager.setHearts(uuid, clampedHearts);
@@ -118,6 +133,11 @@ public class LifestealManager {
             updatePlayerHealth(player);
         }
         return clampedHearts;
+    }
+
+    // Default overload for gameplay (kills, etc.) which respects limits
+    public int setHearts(UUID uuid, int hearts) {
+        return setHearts(uuid, hearts, false);
     }
 
     public int addHearts(UUID uuid, int amount) {
@@ -134,9 +154,11 @@ public class LifestealManager {
         String worldName = player.getWorld().getName();
         int hearts;
 
+        // Sync Logic: Only use Lifesteal hearts in specific worlds
         if (lifestealWorlds.contains(worldName)) {
             hearts = getHearts(player.getUniqueId());
         } else {
+            // In other worlds, revert to Normal/Vanilla hearts (10 Hearts / 20 HP)
             hearts = DEFAULT_HEARTS;
         }
 
@@ -144,9 +166,9 @@ public class LifestealManager {
         int maxHeartsLimit = getMaxHearts(player.getUniqueId());
 
         // --- FIX FOR OP BYPASS PERSISTENCE ---
-        // If the player currently has MORE hearts than the standard limit (e.g. from OP bypass),
+        // If the player currently has MORE hearts than the standard limit (e.g. from OP bypass or Admin set),
         // we allow the limit to stretch to their current heart count.
-        // This ensures that when they switch worlds, the attribute isn't clamped down to the prestige limit.
+        // This ensures the attribute isn't clamped down, preventing the "denying hearts" bug.
         if (hearts > maxHeartsLimit) {
             maxHeartsLimit = hearts;
         }
@@ -156,18 +178,35 @@ public class LifestealManager {
         var maxHealthAttr = player.getAttribute(Attribute.GENERIC_MAX_HEALTH);
         if (maxHealthAttr != null) {
             // Set the container limit (Base Value)
-            maxHealthAttr.setBaseValue(maxHeartsLimit * 2.0);
+            // If in non-lifesteal world, hearts is 10, so maxHeartsLimit (if lower) won't matter much
+            // as we want to force 20.0 HP.
+            // But usually, maxHeartsLimit is at least 25.
+            // If in non-lifesteal world, we just set the attribute to match the hearts we want (10).
+            if (!lifestealWorlds.contains(worldName)) {
+                maxHealthAttr.setBaseValue(DEFAULT_HEARTS * 2.0);
+            } else {
+                maxHealthAttr.setBaseValue(maxHeartsLimit * 2.0);
+            }
         }
 
         // Ensure current hearts doesn't exceed the limit visually
+        // (This is redundant if we adjusted maxHeartsLimit above, but good for safety)
         if (hearts > maxHeartsLimit) {
             hearts = maxHeartsLimit;
         }
 
-        // Set actual health logic
-        double maxHealthVal = maxHeartsLimit * 2.0;
-        if (player.getHealth() > maxHealthVal) {
-            player.setHealth(maxHealthVal);
+        // Apply the health
+        double maxHealthVal = (lifestealWorlds.contains(worldName)) ? maxHeartsLimit * 2.0 : DEFAULT_HEARTS * 2.0;
+
+        // Ensure player is alive before setting health
+        if (!player.isDead()) {
+            // If health is higher than new max, clamp it down.
+            // If it is lower, we don't usually heal them automatically to prevent abuse,
+            // BUT if we are switching worlds, we might want to ensure consistency.
+            // For now, standard Bukkit behavior:
+            if (player.getHealth() > maxHealthVal) {
+                player.setHealth(maxHealthVal);
+            }
         }
     }
 
@@ -195,6 +234,7 @@ public class LifestealManager {
             return false;
         }
 
+        // Withdraw uses standard setHearts (respects limits, though we checked min above)
         setHearts(player.getUniqueId(), currentHearts - amount);
         player.getInventory().addItem(itemManager.getHeartItem(amount));
         player.sendMessage(itemManager.formatMessage("<green>You withdrew " + amount + " heart(s)."));
@@ -209,29 +249,21 @@ public class LifestealManager {
         int currentHearts = getHearts(player.getUniqueId());
         int max = getMaxHearts(player.getUniqueId());
 
+        // Check if player is at max AND is NOT an operator
         if (currentHearts >= max && !player.isOp()) {
             player.sendMessage(itemManager.formatMessage("<red>You are already at the maximum heart limit (" + max + ")!"));
             return false;
         }
 
-        // OP Bypass Logic
+        // OP Bypass Logic & Normal Redeem
+        // If player is OP, ignoreLimit = true. If not, ignoreLimit = false.
+        setHearts(player.getUniqueId(), currentHearts + 1, player.isOp());
+
         if (player.isOp() && currentHearts >= max) {
-            // Manually update cache and DB to bypass the clamp in setHearts()
-            int newAmount = currentHearts + 1;
-            heartCache.put(player.getUniqueId(), newAmount);
-            databaseManager.setHearts(player.getUniqueId(), newAmount);
-
-            // Update attribute to accommodate the extra heart
-            // Note: updatePlayerHealth(player) is better here to keep logic centralized,
-            // now that updatePlayerHealth handles the bypass correctly.
-            updatePlayerHealth(player);
-
-            player.sendMessage(itemManager.formatMessage("<green>You redeemed a heart (OP Bypass)! New total: " + newAmount));
-            return true;
+            player.sendMessage(itemManager.formatMessage("<green>You redeemed a heart (OP Bypass)! New total: " + (currentHearts + 1)));
+        } else {
+            player.sendMessage(itemManager.formatMessage("<green>You redeemed a heart! New total: " + (currentHearts + 1)));
         }
-
-        setHearts(player.getUniqueId(), currentHearts + 1);
-        player.sendMessage(itemManager.formatMessage("<green>You redeemed a heart! New total: " + (currentHearts + 1)));
 
         if (logger != null) {
             logger.logNormal("Player `" + player.getName() + "` redeemed a heart.");

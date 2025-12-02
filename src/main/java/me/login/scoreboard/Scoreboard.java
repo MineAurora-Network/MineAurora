@@ -9,6 +9,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Statistic;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
@@ -92,13 +93,21 @@ public class Scoreboard {
         }
         String tokens = String.valueOf(cachedTokens);
 
+        // Playtime Logic
+        long ticks = player.getStatistic(Statistic.PLAY_ONE_MINUTE);
+        long hours = ticks / 72000;
+        String playtimeString = hours + "h";
+
         int lineIndex = 0;
 
         for (String line : rawLines) {
-            String parsed = PlaceholderAPI.setPlaceholders(player, line);
+            String tempLine = line.replace("%statistic_time_played%", playtimeString);
 
-            parsed = parsed.replace("{credits." + uuid + "}", credits);
-            parsed = parsed.replace("{lifesteal_level_" + uuid + "}", level);
+            String parsed = PlaceholderAPI.setPlaceholders(player, tempLine);
+
+            // --- REMOVED OLD SKRIPT PARSING LINES HERE ---
+            // The lines that manually replaced "{credits." + uuid + "}" are gone.
+            // ---------------------------------------------
 
             parsed = parsed.replace("%tokens%", tokens);
             parsed = parsed.replace("%credits%", credits);

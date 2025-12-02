@@ -1,12 +1,6 @@
-//
-// File: me/login/moderation/commands/MuteCommand.java
-// (Updated with new mute message format)
-//
 package me.login.moderation;
 
 import me.login.Login;
-import me.login.moderation.ModerationDatabase;
-import me.login.moderation.Utils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -15,7 +9,6 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -24,159 +17,91 @@ public class MuteCommand implements CommandExecutor {
 
     private final Login plugin;
     private final ModerationDatabase database;
+    private final ModerationLogger logger;
 
-    public MuteCommand(Login plugin, ModerationDatabase database) {
+    public MuteCommand(Login plugin, ModerationDatabase database, ModerationLogger logger) {
         this.plugin = plugin;
         this.database = database;
+        this.logger = logger;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-
-        // /mute <player> <duration> <reason>
+        // --- MUTE ---
         if (label.equalsIgnoreCase("mute")) {
-            if (!sender.hasPermission("staff.mute")) {
-                sender.sendMessage(Utils.color("&cYou do not have permission to use this command."));
-                return true;
-            }
-            if (args.length < 3) {
-                sender.sendMessage(Utils.color("&cUsage: /mute <player> <duration> <reason>"));
-                return true;
-            }
+            if (!sender.hasPermission("staff.mute")) return noPerm(sender);
+            if (args.length < 3) return usage(sender, "/mute <player> <duration> <reason>");
 
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-            if (!target.hasPlayedBefore() && !target.isOnline()) {
-                sender.sendMessage(Utils.color("&cPlayer not found."));
+
+            if (!Utils.canPunish(sender, target)) {
+                sender.sendMessage(Utils.color("&cYou cannot mute this player (Higher rank/Equal rank/Self)."));
                 return true;
             }
-
-            // --- Self-punish check ---
-            if (sender instanceof Player && ((Player) sender).getUniqueId().equals(target.getUniqueId())) {
-                sender.sendMessage(Utils.color("&cYou cannot mute yourself."));
-                return true;
-            }
-
-            // --- Hierarchy check ---
-            if (sender instanceof Player) {
-                int senderWeight = Utils.getLuckPermsRankWeight((Player) sender);
-                int targetWeight = Utils.getLuckPermsRankWeight(target);
-
-                if (senderWeight > 0 && senderWeight <= targetWeight) {
-                    sender.sendMessage(Utils.color("&cYou cannot punish a player with an equal or higher rank."));
-                    return true;
-                }
-            } // Console (sender not instanceof Player) bypasses this check
 
             long duration = Utils.parseDuration(args[1]);
-            if (duration == 0) {
-                sender.sendMessage(Utils.color("&cInvalid duration format. Use 'perm' or units like s, m, h, d."));
-                return true;
-            }
+            if (duration == 0) { sender.sendMessage(Utils.color("&cInvalid duration.")); return true; }
 
             String reason = String.join(" ", Arrays.copyOfRange(args, 2, args.length));
-            UUID staffUUID = (sender instanceof Player) ? ((Player) sender).getUniqueId() : UUID.fromString("00000000-0000-0000-0000-000000000000"); // Console UUID
-            String staffName = sender.getName();
+            UUID staffUUID = (sender instanceof Player) ? ((Player) sender).getUniqueId() : UUID.fromString("00000000-0000-0000-0000-000000000000");
 
-            boolean success = database.mutePlayer(target.getUniqueId(), target.getName(), staffUUID, staffName, reason, duration);
+            if (database.mutePlayer(target.getUniqueId(), target.getName(), staffUUID, sender.getName(), reason, duration)) {
+                String durStr = Utils.formatDuration(duration);
+                Utils.broadcastToStaff(String.format("&b%s &fwas muted by &b%s&f for &e%s &f(&e%s&f).", target.getName(), sender.getName(), reason, durStr));
 
-            if (success) {
-                String durationStr = Utils.formatDuration(duration);
-                // Staff broadcast uses simple legacy prefix
-                String msg = String.format("&b%s &fwas muted by &b%s&f for &e%s &f(&e%s&f).", target.getName(), staffName, reason, durationStr);
-                Utils.broadcastToStaff(msg);
+                // Log MUTE
+                logger.log(ModerationLogger.LogType.MUTE, "🔇 **MUTE** | " + target.getName() + " was muted by " + sender.getName() + " for: `" + reason + "` (" + durStr + ")");
 
-                plugin.sendStaffLog(sender.getName() + " muted " + target.getName() + " for " + durationStr + ". Reason: " + reason);
-
-                if (target.isOnline()) {
-                    // --- UPDATED MESSAGE FORMAT ---
-                    Player targetPlayer = target.getPlayer();
-                    String timeLeft = Utils.formatDurationShort(duration); // Use new method
-                    String discordLink = plugin.getConfig().getString("discord-server-link", "your-discord.gg");
-
-                    String message = "&c▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n" +
-                            "&cYou are currently muted for &f" + reason + "&c on the server.\n" +
-                            "&7Your mute will expire in &f" + timeLeft + "\n" +
-                            "&7Appeal at: &f" + discordLink + "\n" +
+                if (target.isOnline() && target.getPlayer() != null) {
+                    String timeLeft = Utils.formatDurationShort(duration);
+                    String msg = "&c▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n" +
+                            "&cYou are currently muted for &f" + reason + "&c.\n" +
+                            "&7Expires in &f" + timeLeft + "\n" +
                             " &c▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬";
-
-                    targetPlayer.sendMessage(Utils.color(message));
-                    // --- END UPDATE ---
+                    target.getPlayer().sendMessage(Utils.color(msg));
                 }
-            } else {
-                sender.sendMessage(Utils.color("&cAn error occurred while muting the player."));
             }
             return true;
         }
 
-        // /muteinfo <player>
-        if (label.equalsIgnoreCase("muteinfo")) {
-            if (!sender.hasPermission("staff.muteinfo")) {
-                sender.sendMessage(Utils.color("&cYou do not have permission to use this command."));
-                return true;
-            }
-            if (args.length < 1) {
-                sender.sendMessage(Utils.color("&cUsage: /muteinfo <player>"));
-                return true;
-            }
-
-            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-            if (!target.hasPlayedBefore() && !target.isOnline()) {
-                sender.sendMessage(Utils.color("&cPlayer not found."));
-                return true;
-            }
-
-            Map<String, Object> info = database.getActiveMuteInfo(target.getUniqueId());
-            Component prefix = Utils.getServerPrefix(plugin); // Use server prefix for info commands
-
-            if (info == null) {
-                Utils.sendComponent(sender, prefix.append(Component.text("Player " + target.getName() + " is not currently muted.", NamedTextColor.GREEN)));
-                return true;
-            }
-
-            Utils.sendComponent(sender, prefix.append(Component.text("Mute Info for " + target.getName() + ":", NamedTextColor.YELLOW)));
-            Utils.sendComponent(sender, Component.text("  Muted by: ", NamedTextColor.GRAY).append(Component.text((String) info.get("staff_name"), NamedTextColor.WHITE)));
-            Utils.sendComponent(sender, Component.text("  Reason: ", NamedTextColor.GRAY).append(Component.text((String) info.get("reason"), NamedTextColor.WHITE)));
-            Utils.sendComponent(sender, Component.text("  Time Left: ", NamedTextColor.GRAY).append(Component.text(Utils.formatTimeLeft((long) info.get("end_time")), NamedTextColor.WHITE)));
-            return true;
-        }
-
-        // /unmute <player>
+        // --- UNMUTE ---
         if (label.equalsIgnoreCase("unmute")) {
-            if (!sender.hasPermission("staff.unmute")) {
-                sender.sendMessage(Utils.color("&cYou do not have permission to use this command."));
-                return true;
-            }
-            if (args.length < 1) {
-                sender.sendMessage(Utils.color("&cUsage: /unmute <player>"));
-                return true;
-            }
-
+            if (!sender.hasPermission("staff.unmute")) return noPerm(sender);
+            if (args.length < 1) return usage(sender, "/unmute <player>");
             OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
-            if (!target.hasPlayedBefore() && !target.isOnline()) {
-                sender.sendMessage(Utils.color("&cPlayer not found."));
-                return true;
-            }
+            if (database.unmutePlayer(target.getUniqueId())) {
+                Utils.broadcastToStaff(String.format("&b%s &fwas unmuted by &b%s&f.", target.getName(), sender.getName()));
+                // Log UNMUTE
+                logger.log(ModerationLogger.LogType.UNMUTE, "🔊 **UNMUTE** | " + target.getName() + " was unmuted by " + sender.getName());
 
-            boolean wasMuted = database.unmutePlayer(target.getUniqueId());
+                sender.sendMessage(Utils.color("&aUnmuted " + target.getName()));
+                if(target.isOnline()) target.getPlayer().sendMessage(Utils.color("&aYou have been unmuted."));
+            } else {
+                sender.sendMessage(Utils.color("&cPlayer is not muted."));
+            }
+            return true;
+        }
+
+        // --- MUTE INFO ---
+        if (label.equalsIgnoreCase("muteinfo")) {
+            if (!sender.hasPermission("staff.muteinfo")) return noPerm(sender);
+            if (args.length < 1) return usage(sender, "/muteinfo <player>");
+            OfflinePlayer target = Bukkit.getOfflinePlayer(args[0]);
+            Map<String, Object> info = database.getActiveMuteInfo(target.getUniqueId());
             Component prefix = Utils.getServerPrefix(plugin);
 
-            if (wasMuted) {
-                // Staff broadcast
-                String msg = String.format("&b%s &fwas unmuted by &b%s&f.", target.getName(), sender.getName());
-                Utils.broadcastToStaff(msg);
-                plugin.sendStaffLog(sender.getName() + " unmuted " + target.getName());
-
-                if (target.isOnline()) {
-                    // Player message
-                    target.getPlayer().sendMessage(prefix.append(Component.text("You have been unmuted.", NamedTextColor.GREEN)));
-                }
-                Utils.sendComponent(sender, prefix.append(Component.text(target.getName() + " has been unmuted.", NamedTextColor.GREEN)));
+            if (info != null) {
+                Utils.sendComponent(sender, prefix.append(Component.text("Mute Info for " + target.getName() + ":", NamedTextColor.YELLOW)));
+                Utils.sendComponent(sender, Component.text("  Muted by: ", NamedTextColor.GRAY).append(Component.text((String) info.get("staff_name"), NamedTextColor.WHITE)));
+                Utils.sendComponent(sender, Component.text("  Reason: ", NamedTextColor.GRAY).append(Component.text((String) info.get("reason"), NamedTextColor.WHITE)));
+                Utils.sendComponent(sender, Component.text("  Time Left: ", NamedTextColor.GRAY).append(Component.text(Utils.formatTimeLeft((long) info.get("end_time")), NamedTextColor.WHITE)));
             } else {
-                Utils.sendComponent(sender, prefix.append(Component.text("Player " + target.getName() + " is not muted.", NamedTextColor.RED)));
+                Utils.sendComponent(sender, prefix.append(Component.text(target.getName() + " is not muted.", NamedTextColor.GREEN)));
             }
             return true;
         }
-
         return false;
     }
+    private boolean noPerm(CommandSender s) { s.sendMessage(Utils.color("&cNo permission.")); return true; }
+    private boolean usage(CommandSender s, String u) { s.sendMessage(Utils.color("&cUsage: " + u)); return true; }
 }

@@ -1,14 +1,10 @@
 package me.login.moderation;
 
 import me.login.Login;
-import org.bukkit.entity.Player;
-
 import java.io.File;
 import java.io.IOException;
 import java.sql.*;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.logging.Level;
 
 public class ModerationDatabase {
@@ -19,17 +15,20 @@ public class ModerationDatabase {
 
     public ModerationDatabase(Login plugin) {
         this.plugin = plugin;
-        this.dbPath = plugin.getDataFolder().getAbsolutePath() + File.separator + "moderation.db";
+        this.dbPath = new File(plugin.getDataFolder(), "database").getAbsolutePath() + File.separator + "moderation.db";
         initializeDatabase();
     }
 
     private Connection getSQLConnection() {
-        File dataFolder = new File(dbPath);
-        if (!dataFolder.exists()) {
+        File dbFile = new File(dbPath);
+        if (!dbFile.getParentFile().exists()) {
+            dbFile.getParentFile().mkdirs();
+        }
+
+        if (!dbFile.exists()) {
             try {
-                // Create the file if it doesn't exist
-                if (!dataFolder.createNewFile()) {
-                    plugin.getLogger().log(Level.SEVERE, "Could not create database file!");
+                if (!dbFile.createNewFile()) {
+                    plugin.getLogger().severe("Could not create moderation database file!");
                     return null;
                 }
             } catch (IOException e) {
@@ -67,311 +66,226 @@ public class ModerationDatabase {
                     "`active` BOOLEAN DEFAULT 1" +
                     ");");
 
-            // Bans table (for both player and IP bans)
+            // Bans table
             s.executeUpdate("CREATE TABLE IF NOT EXISTS bans (" +
                     "`id` INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "`player_uuid` VARCHAR(36)," + // Nullable for IP bans
-                    "`player_name` VARCHAR(16)," + // Nullable for IP bans
-                    "`ip_address` VARCHAR(45)," + // Nullable for player bans
+                    "`player_uuid` VARCHAR(36)," +
+                    "`player_name` VARCHAR(16)," +
+                    "`ip_address` VARCHAR(45)," +
                     "`staff_uuid` VARCHAR(36) NOT NULL," +
                     "`staff_name` VARCHAR(16) NOT NULL," +
                     "`reason` TEXT NOT NULL," +
                     "`start_time` BIGINT NOT NULL," +
                     "`end_time` BIGINT NOT NULL," +
-                    "`type` VARCHAR(10) NOT NULL," + // 'BAN' or 'IPBAN'
+                    "`type` VARCHAR(10) NOT NULL," +
                     "`active` BOOLEAN DEFAULT 1" +
                     ");");
+
+            // Reports Table (THIS IS WHAT WAS MISSING)
+            s.executeUpdate("CREATE TABLE IF NOT EXISTS reports (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "`reporter_uuid` VARCHAR(36) NOT NULL," +
+                    "`reporter_name` VARCHAR(16) NOT NULL," +
+                    "`reported_uuid` VARCHAR(36) NOT NULL," +
+                    "`reported_name` VARCHAR(16) NOT NULL," +
+                    "`reason` TEXT NOT NULL," +
+                    "`timestamp` BIGINT NOT NULL" +
+                    ");");
+
             s.close();
         } catch (SQLException e) {
             plugin.getLogger().log(Level.SEVERE, "Error creating database tables", e);
         }
     }
 
-    /**
-     * Mute a player.
-     *
-     * @param playerUUID  UUID of the muted player
-     * @param playerName  Name of the muted player
-     * @param staffUUID   UUID of the staff member
-     * @param staffName   Name of the staff member
-     * @param reason      Reason for the mute
-     * @param duration    Duration of the mute in milliseconds (-1 for permanent)
-     * @return true if successful, false otherwise
-     */
+    // --- Mute/Ban Methods (Required for other commands) ---
+
+    public List<Map<String, Object>> getMuteHistory(UUID playerUUID) {
+        return getHistory("mutes", playerUUID);
+    }
+
+    public List<Map<String, Object>> getBanHistory(UUID playerUUID) {
+        return getHistory("bans", playerUUID); // Fixed: Bans table uses 'type' filter usually, simplified here
+    }
+
+    private List<Map<String, Object>> getHistory(String table, UUID uuid) {
+        List<Map<String, Object>> history = new ArrayList<>();
+        String sql = "SELECT * FROM " + table + " WHERE player_uuid = ? ORDER BY start_time DESC LIMIT 10";
+        if (table.equals("bans")) {
+            sql = "SELECT * FROM bans WHERE player_uuid = ? AND type = 'BAN' ORDER BY start_time DESC LIMIT 10";
+        }
+
+        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("staff_name", rs.getString("staff_name"));
+                entry.put("reason", rs.getString("reason"));
+                entry.put("start_time", rs.getLong("start_time"));
+                entry.put("end_time", rs.getLong("end_time"));
+                entry.put("active", rs.getBoolean("active"));
+                history.add(entry);
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+        return history;
+    }
+
     public boolean mutePlayer(UUID playerUUID, String playerName, UUID staffUUID, String staffName, String reason, long duration) {
         long startTime = System.currentTimeMillis();
         long endTime = (duration == -1) ? -1 : startTime + duration;
-
-        // Deactivate old active mutes for this player
         deactivatePastMutes(playerUUID);
 
         String sql = "INSERT INTO mutes(player_uuid, player_name, staff_uuid, staff_name, reason, start_time, end_time, active) VALUES(?,?,?,?,?,?,?,1)";
         try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, playerUUID.toString());
-            ps.setString(2, playerName);
-            ps.setString(3, staffUUID.toString());
-            ps.setString(4, staffName);
-            ps.setString(5, reason);
-            ps.setLong(6, startTime);
-            ps.setLong(7, endTime);
-            ps.executeUpdate();
-            return true;
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error muting player", ex);
-            return false;
-        }
+            ps.setString(1, playerUUID.toString()); ps.setString(2, playerName); ps.setString(3, staffUUID.toString());
+            ps.setString(4, staffName); ps.setString(5, reason); ps.setLong(6, startTime); ps.setLong(7, endTime);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) { return false; }
     }
 
-    /**
-     * Ban a player by UUID.
-     *
-     * @return true if successful, false otherwise
-     */
     public boolean banPlayer(UUID playerUUID, String playerName, UUID staffUUID, String staffName, String reason, long duration) {
         long startTime = System.currentTimeMillis();
         long endTime = (duration == -1) ? -1 : startTime + duration;
-
         deactivatePastBans(playerUUID);
 
         String sql = "INSERT INTO bans(player_uuid, player_name, staff_uuid, staff_name, reason, start_time, end_time, type, active) VALUES(?,?,?,?,?,?,?,'BAN',1)";
         try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, playerUUID.toString());
-            ps.setString(2, playerName);
-            ps.setString(3, staffUUID.toString());
-            ps.setString(4, staffName);
-            ps.setString(5, reason);
-            ps.setLong(6, startTime);
-            ps.setLong(7, endTime);
-            ps.executeUpdate();
-            return true;
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error banning player", ex);
-            return false;
-        }
+            ps.setString(1, playerUUID.toString()); ps.setString(2, playerName); ps.setString(3, staffUUID.toString());
+            ps.setString(4, staffName); ps.setString(5, reason); ps.setLong(6, startTime); ps.setLong(7, endTime);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) { return false; }
     }
 
-    /**
-     * Ban a player by IP.
-     *
-     * @return true if successful, false otherwise
-     */
-    public boolean ipBanPlayer(String ipAddress, UUID staffUUID, String staffName, String reason, long duration, UUID playerUUID, String playerName) {
+    public boolean ipBanPlayer(String ip, UUID staffUUID, String staffName, String reason, long duration, UUID playerUUID, String playerName) {
         long startTime = System.currentTimeMillis();
         long endTime = (duration == -1) ? -1 : startTime + duration;
-
-        deactivatePastIpBans(ipAddress);
-
+        deactivatePastIpBans(ip);
         String sql = "INSERT INTO bans(ip_address, staff_uuid, staff_name, reason, start_time, end_time, type, active, player_uuid, player_name) VALUES(?,?,?,?,?,?,'IPBAN',1,?,?)";
         try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, ipAddress);
-            ps.setString(2, staffUUID.toString());
-            ps.setString(3, staffName);
-            ps.setString(4, reason);
-            ps.setLong(5, startTime);
-            ps.setLong(6, endTime);
-            ps.setString(7, playerUUID != null ? playerUUID.toString() : null);
-            ps.setString(8, playerName);
-            ps.executeUpdate();
-            return true;
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error IP banning player", ex);
-            return false;
-        }
+            ps.setString(1, ip); ps.setString(2, staffUUID.toString()); ps.setString(3, staffName);
+            ps.setString(4, reason); ps.setLong(5, startTime); ps.setLong(6, endTime);
+            ps.setString(7, playerUUID != null ? playerUUID.toString() : null); ps.setString(8, playerName);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) { return false; }
     }
 
-    /**
-     * Gets active mute info for a player.
-     *
-     * @param playerUUID UUID of the player
-     * @return Map containing mute details, or null if not actively muted.
-     */
-    public Map<String, Object> getActiveMuteInfo(UUID playerUUID) {
-        String sql = "SELECT * FROM mutes WHERE player_uuid = ? AND active = 1";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, playerUUID.toString());
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                long endTime = rs.getLong("end_time");
-                if (endTime != -1 && System.currentTimeMillis() > endTime) {
-                    // Mute expired, deactivate it
-                    deactivateMute(rs.getInt("id"));
-                    return null;
-                }
+    public Map<String, Object> getActiveMuteInfo(UUID uuid) { return getActiveInfo("mutes", uuid, null); }
+    public Map<String, Object> getActiveBanInfo(UUID uuid) { return getActiveInfo("bans", uuid, "BAN"); }
+    public Map<String, Object> getActiveIpBanInfo(String ip) {
+        try(PreparedStatement ps=getSQLConnection().prepareStatement("SELECT * FROM bans WHERE ip_address=? AND type='IPBAN' AND active=1")){
+            ps.setString(1,ip); return processResultSet(ps);
+        }catch(SQLException e){return null;}
+    }
 
-                Map<String, Object> info = new HashMap<>();
-                info.put("staff_name", rs.getString("staff_name"));
-                info.put("reason", rs.getString("reason"));
-                info.put("end_time", endTime);
-                info.put("start_time", rs.getLong("start_time"));
-                return info;
+    private Map<String, Object> getActiveInfo(String table, UUID uuid, String type) {
+        String sql = "SELECT * FROM " + table + " WHERE player_uuid = ? AND active = 1" + (type != null ? " AND type = ?" : "");
+        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            if (type != null) ps.setString(2, type);
+            return processResultSet(ps);
+        } catch (SQLException ex) { return null; }
+    }
+
+    private Map<String, Object> processResultSet(PreparedStatement ps) throws SQLException {
+        ResultSet rs = ps.executeQuery();
+        if (rs.next()) {
+            long endTime = rs.getLong("end_time");
+            if (endTime != -1 && System.currentTimeMillis() > endTime) {
+                try(PreparedStatement up = getSQLConnection().prepareStatement("UPDATE " + rs.getMetaData().getTableName(1) + " SET active=0 WHERE id=?")) {
+                    up.setInt(1, rs.getInt("id")); up.executeUpdate();
+                }
+                return null;
             }
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error fetching mute info", ex);
+            Map<String, Object> info = new HashMap<>();
+            info.put("staff_name", rs.getString("staff_name"));
+            info.put("reason", rs.getString("reason"));
+            info.put("end_time", endTime);
+            info.put("start_time", rs.getLong("start_time"));
+            return info;
         }
         return null;
     }
 
-    /**
-     * Gets active ban info for a player (UUID based).
-     *
-     * @param playerUUID UUID of the player
-     * @return Map containing ban details, or null if not actively banned.
-     */
-    public Map<String, Object> getActiveBanInfo(UUID playerUUID) {
-        String sql = "SELECT * FROM bans WHERE player_uuid = ? AND type = 'BAN' AND active = 1";
+    public boolean unmutePlayer(UUID uuid) { return deactivatePastMutes(uuid); }
+    public boolean unbanPlayer(UUID uuid) { return deactivatePastBans(uuid); }
+    public boolean unbanIp(String ip) { return deactivatePastIpBans(ip); }
+
+    private boolean deactivatePastMutes(UUID uuid) { return executeUpdate("UPDATE mutes SET active=0 WHERE player_uuid=?", uuid.toString()); }
+    private boolean deactivatePastBans(UUID uuid) { return executeUpdate("UPDATE bans SET active=0 WHERE player_uuid=? AND type='BAN'", uuid.toString()); }
+    private boolean deactivatePastIpBans(String ip) { return executeUpdate("UPDATE bans SET active=0 WHERE ip_address=? AND type='IPBAN'", ip); }
+    private boolean executeUpdate(String sql, String arg) {
+        try(PreparedStatement ps = getSQLConnection().prepareStatement(sql)){ ps.setString(1,arg); return ps.executeUpdate()>0; }catch(SQLException e){return false;}
+    }
+
+    // --- REPORT SYSTEM METHODS (THESE WERE MISSING) ---
+
+    public void addReport(UUID reporterId, String reporterName, UUID reportedId, String reportedName, String reason) {
+        String sql = "INSERT INTO reports(reporter_uuid, reporter_name, reported_uuid, reported_name, reason, timestamp) VALUES(?,?,?,?,?,?)";
         try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, playerUUID.toString());
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                long endTime = rs.getLong("end_time");
-                if (endTime != -1 && System.currentTimeMillis() > endTime) {
-                    // Ban expired
-                    deactivateBan(rs.getInt("id"));
-                    return null;
-                }
-                return createBanInfoMap(rs);
-            }
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error fetching ban info", ex);
-        }
-        return null;
-    }
-
-    /**
-     * Gets active IP ban info for an IP address.
-     *
-     * @param ipAddress IP address
-     * @return Map containing ban details, or null if not actively IP banned.
-     */
-    public Map<String, Object> getActiveIpBanInfo(String ipAddress) {
-        String sql = "SELECT * FROM bans WHERE ip_address = ? AND type = 'IPBAN' AND active = 1";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, ipAddress);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                long endTime = rs.getLong("end_time");
-                if (endTime != -1 && System.currentTimeMillis() > endTime) {
-                    // Ban expired
-                    deactivateBan(rs.getInt("id"));
-                    return null;
-                }
-                return createBanInfoMap(rs);
-            }
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error fetching IP ban info", ex);
-        }
-        return null;
-    }
-
-    private Map<String, Object> createBanInfoMap(ResultSet rs) throws SQLException {
-        Map<String, Object> info = new HashMap<>();
-        info.put("staff_name", rs.getString("staff_name"));
-        info.put("reason", rs.getString("reason"));
-        info.put("end_time", rs.getLong("end_time"));
-        info.put("start_time", rs.getLong("start_time"));
-        info.put("type", rs.getString("type"));
-        info.put("player_name", rs.getString("player_name")); // Name associated with ban
-        return info;
-    }
-
-    /**
-     * Unmutes a player by deactivating all their active mutes.
-     *
-     * @param playerUUID UUID of the player
-     * @return true if an active mute was found and deactivated, false otherwise
-     */
-    public boolean unmutePlayer(UUID playerUUID) {
-        return deactivatePastMutes(playerUUID);
-    }
-
-    /**
-     * Unbans a player by deactivating all their active UUID-based bans.
-     *
-     * @param playerUUID UUID of the player
-     * @return true if an active ban was found and deactivated, false otherwise
-     */
-    public boolean unbanPlayer(UUID playerUUID) {
-        return deactivatePastBans(playerUUID);
-    }
-
-    /**
-     * Unbans an IP by deactivating all active bans for that IP.
-     *
-     * @param ipAddress IP address
-     * @return true if an active IP ban was found and deactivated, false otherwise
-     */
-    public boolean unbanIp(String ipAddress) {
-        return deactivatePastIpBans(ipAddress);
-    }
-
-    // --- Helper methods to deactivate punishments ---
-
-    private void deactivateMute(int muteId) {
-        String sql = "UPDATE mutes SET active = 0 WHERE id = ?";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setInt(1, muteId);
+            ps.setString(1, reporterId.toString());
+            ps.setString(2, reporterName);
+            ps.setString(3, reportedId.toString());
+            ps.setString(4, reportedName);
+            ps.setString(5, reason);
+            ps.setLong(6, System.currentTimeMillis());
             ps.executeUpdate();
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error deactivating mute", ex);
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
-    private boolean deactivatePastMutes(UUID playerUUID) {
-        String sql = "UPDATE mutes SET active = 0 WHERE player_uuid = ? AND active = 1";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, playerUUID.toString());
-            int rowsAffected = ps.executeUpdate();
-            return rowsAffected > 0;
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error deactivating past mutes", ex);
-            return false;
-        }
-    }
-
-    private void deactivateBan(int banId) {
-        String sql = "UPDATE bans SET active = 0 WHERE id = ?";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setInt(1, banId);
-            ps.executeUpdate();
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error deactivating ban", ex);
-        }
-    }
-
-    private boolean deactivatePastBans(UUID playerUUID) {
-        String sql = "UPDATE bans SET active = 0 WHERE player_uuid = ? AND type = 'BAN' AND active = 1";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, playerUUID.toString());
-            int rowsAffected = ps.executeUpdate();
-            return rowsAffected > 0;
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error deactivating past bans", ex);
-            return false;
-        }
-    }
-
-    private boolean deactivatePastIpBans(String ipAddress) {
-        String sql = "UPDATE bans SET active = 0 WHERE ip_address = ? AND type = 'IPBAN' AND active = 1";
-        try (PreparedStatement ps = getSQLConnection().prepareStatement(sql)) {
-            ps.setString(1, ipAddress);
-            int rowsAffected = ps.executeUpdate();
-            return rowsAffected > 0;
-        } catch (SQLException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Error deactivating past IP bans", ex);
-            return false;
-        }
-    }
-
-    /**
-     * Closes the database connection.
-     */
-    public void closeConnection() {
-        try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
+    public List<Map<String, Object>> getAllReports() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        try (Statement s = getSQLConnection().createStatement();
+             ResultSet rs = s.executeQuery("SELECT * FROM reports ORDER BY timestamp DESC")) {
+            while (rs.next()) {
+                list.add(mapReport(rs));
             }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Error closing database connection", e);
+            e.printStackTrace();
         }
+        return list;
+    }
+
+    public List<Map<String, Object>> getReportsForPlayer(UUID reportedUuid) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        try (PreparedStatement ps = getSQLConnection().prepareStatement("SELECT * FROM reports WHERE reported_uuid = ? ORDER BY timestamp DESC")) {
+            ps.setString(1, reportedUuid.toString());
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(mapReport(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public boolean deleteReport(UUID reportedUuid, int id) {
+        try (PreparedStatement ps = getSQLConnection().prepareStatement("DELETE FROM reports WHERE id = ? AND reported_uuid = ?")) {
+            ps.setInt(1, id);
+            ps.setString(2, reportedUuid.toString());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private Map<String, Object> mapReport(ResultSet rs) throws SQLException {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", rs.getInt("id"));
+        map.put("reporter_name", rs.getString("reporter_name"));
+        map.put("reported_name", rs.getString("reported_name"));
+        map.put("reason", rs.getString("reason"));
+        map.put("timestamp", rs.getLong("timestamp"));
+        return map;
+    }
+
+    public void closeConnection() {
+        try { if (connection != null && !connection.isClosed()) connection.close(); } catch (SQLException e) {}
     }
 }

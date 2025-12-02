@@ -35,18 +35,34 @@ commands:
     permission: mineaurora.command.hologram
     permission-message: You do not have permission to use this command.
 
-  schedule:
-    description: Schedules a server maintenance or restart.
-    permission: login.admin.schedule
-    usage: /schedule <maintenance|restart> <time>
+  staff:
+    description: Toggle staff notifications.
+    permission: staff.staff
+  staffchat:
+    description: Send message to staff chat.
+    aliases: [ sc ]
+    permission: staff.chat
   maintenance:
-    description: Turns off maintenance mode.
-    permission: login.admin.maintenance
-    usage: /maintenance off
-  worldmanager:
-    description: Locks or unlocks a world.
-    permission: login.admin.worldmanager
-    usage: /worldmanager <lock|unlock> <worldname>
+    description: Toggle global maintenance.
+    permission: staff.command.maintenance
+  worldmaintenance:
+    description: Toggle world lock.
+    permission: staff.command.worldmaintenance
+  schedulerestart:
+    description: Schedule server restart.
+    permission: staff.command.schedulerestart
+  vanish:
+    description: Toggle vanish mode.
+    permission: staff.command.vanish
+    aliases: [ v ]
+  report:
+    description: Report a player.
+  reportlist:
+    description: List reports.
+    permission: staff.command.report
+  reportclear:
+    description: Clear a report.
+    permission: staff.command.report
 
   login:
     description: Login to the server
@@ -147,6 +163,18 @@ commands:
     description: Opens a view of a player's inventory, allowing item removal.
     usage: /admincheckinv <player>
     permission: staff.admincheckinv
+  kick:
+    description: Kick a player.
+    usage: /kick <player> <reason>
+    permission: staff.kick
+  mutehistory:
+    description: View mute history.
+    usage: /mutehistory <player>
+    permission: staff.mutehistory
+  banhistory:
+    description: View ban history.
+    usage: /banhistory <player>
+    permission: staff.banhistory
 
   withdrawhearts:
     description: Withdraws hearts as items.
@@ -305,6 +333,18 @@ permissions:
     default: op
   staff.admincheckinv:
     description: Allows admin inventory checks (item removal).
+    default: op
+  staff.kick:
+    description: Allows kicking players.
+    default: op
+  staff.mutehistory:
+    description: Allows viewing mute history.
+    default: op
+  staff.banhistory:
+    description: Allows viewing ban history.
+    default: op
+  staff.vanish.see:
+    description: Allows seeing vanished players.
     default: op
 
   lifesteal.withdraw:

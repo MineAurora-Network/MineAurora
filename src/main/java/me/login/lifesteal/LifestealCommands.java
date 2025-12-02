@@ -197,7 +197,7 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        // --- NEW: LuckPerms Rank Weight Check ---
+        // --- LuckPerms Rank Weight Check ---
         if (luckPermsApi != null && sender instanceof Player admin) {
             // Self-targeting is allowed
             if (!admin.getUniqueId().equals(target.getUniqueId())) {
@@ -227,7 +227,9 @@ public class LifestealCommands implements CommandExecutor, TabCompleter {
         }
         // ----------------------------------------
 
-        int actualAmount = lifestealManager.setHearts(target.getUniqueId(), amount);
+        // --- UPDATED: Pass 'true' for ignoreLimit to allow Admins/OPs to set hearts beyond limit ---
+        int actualAmount = lifestealManager.setHearts(target.getUniqueId(), amount, true);
+
         sender.sendMessage(ItemManager.toLegacy(itemManager.formatMessage(
                 "<green>Set " + target.getName() + "'s hearts to " + actualAmount + "."
         )));
