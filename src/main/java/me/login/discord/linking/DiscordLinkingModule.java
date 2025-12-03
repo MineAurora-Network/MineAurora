@@ -4,8 +4,9 @@ import me.login.Login;
 import me.login.clearlag.LagClearLogger;
 import me.login.discord.moderation.DiscordCommandLogger;
 import me.login.discord.moderation.DiscordCommandRegistrar;
-import me.login.discord.moderation.DiscordModConfig;
-import me.login.misc.rank.RankManager;
+import me.login.discord.moderation.discord.DiscordModConfig;
+import me.login.discord.moderation.discord.DiscordModDatabase;
+import me.login.misc.rank.RankModule;
 import me.login.moderation.ModerationModule;
 import net.dv8tion.jda.api.JDA;
 import org.bukkit.Bukkit;
@@ -18,13 +19,12 @@ public class DiscordLinkingModule {
     private DiscordLinkLogger discordLinkLogger;
     private JDA mainBotJda;
     private DiscordCommandLogger discordCommandLogger;
-    private RankManager rankManager;
 
     public DiscordLinkingModule(Login plugin) {
         this.plugin = plugin;
     }
 
-    public boolean init(LagClearLogger lagClearLogger, DiscordModConfig discordModConfig, RankManager rankManager, ModerationModule moderationModule) {
+    public boolean init(LagClearLogger lagClearLogger, DiscordModConfig discordModConfig, DiscordModDatabase modDatabase, RankModule rankModule, ModerationModule moderationModule) {
         plugin.getLogger().info("Initializing DiscordLinking components...");
 
         this.discordLinkDatabase = new DiscordLinkDatabase(plugin);
@@ -35,10 +35,9 @@ public class DiscordLinkingModule {
 
         this.discordLinkLogger = new DiscordLinkLogger(plugin, sharedJda);
         this.discordCommandLogger = new DiscordCommandLogger(plugin, sharedJda);
-        this.rankManager = rankManager;
 
-        // Initialize Main Bot Class
-        this.discordLinking = new DiscordLinking(plugin, discordModConfig, discordLinkLogger, rankManager);
+        // Pass ModDatabase
+        this.discordLinking = new DiscordLinking(plugin, discordModConfig, modDatabase, discordLinkLogger, rankModule, moderationModule);
 
         // Start Bot and Register Commands
         String token = plugin.getConfig().getString("bot-token");
@@ -46,7 +45,8 @@ public class DiscordLinkingModule {
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                this.mainBotJda = discordLinking.startBot(token, discordCommandLogger, moderationModule);
+                // Pass Database to startBot
+                this.mainBotJda = discordLinking.startBot(token, discordCommandLogger, moderationModule, rankModule, modDatabase);
                 if (this.mainBotJda != null) {
                     DiscordCommandRegistrar.register(mainBotJda, plugin, discordCommandLogger);
                 }
@@ -55,7 +55,6 @@ public class DiscordLinkingModule {
             }
         });
 
-        // Register Bukkit Commands
         DiscordLinkCmd discordCmd = new DiscordLinkCmd(plugin, this);
         plugin.getCommand("discord").setExecutor(discordCmd);
         plugin.getCommand("unlink").setExecutor(discordCmd);

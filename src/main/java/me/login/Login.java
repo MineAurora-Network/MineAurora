@@ -3,8 +3,9 @@ package me.login;
 import me.login.discord.DiscordModule;
 import me.login.discord.linking.DiscordLinkDatabase;
 import me.login.discord.linking.DiscordLinking;
-import me.login.discord.store.TicketModule;
-import me.login.discord.moderation.DiscordModConfig;
+// --- CHANGED IMPORT ---
+import me.login.discord.moderation.discord.DiscordModConfig;
+// ----------------------
 import me.login.level.LevelModule;
 import me.login.loginsystem.*;
 import me.login.dungeon.DungeonModule;
@@ -66,7 +67,7 @@ import net.luckperms.api.LuckPerms;
 
 public class Login extends JavaPlugin implements Listener {
     private DiscordModule discordModule;
-    private TicketModule ticketModule;
+    // private TicketModule ticketModule; // REMOVED: Managed by DiscordModule
     private ModerationModule moderationModule;
     private LevelModule levelModule;
     private DungeonModule dungeonModule;
@@ -485,7 +486,7 @@ public class Login extends JavaPlugin implements Listener {
             if (creatorCodeModule != null) creatorCodeModule.shutdown();
             if (milestoneModule != null) milestoneModule.shutdown();
             if (rankModule != null) rankModule.shutdown();
-            if (ticketModule != null) ticketModule.shutdown();
+            // if (ticketModule != null) ticketModule.shutdown(); // REMOVED: Handled by DiscordModule
             if (petsModule != null) petsModule.shutdown();
             if (firesaleModule != null) firesaleModule.disable();
             if (tabManager != null) tabManager.stopUpdater();
@@ -527,9 +528,11 @@ public class Login extends JavaPlugin implements Listener {
                 : null;
     }
 
+    // --- CHANGED RETURN TYPE ---
     public DiscordModConfig getDiscordModConfig() {
         return (discordModule != null) ? discordModule.getModConfig() : null;
     }
+    // ---------------------------
 
     public OrderMenu getOrderMenu() { return (orderModule != null) ? orderModule.getOrderMenu() : null; }
     public LoginDatabase getLoginDatabase() { return (loginModule != null) ? loginModule.getLoginDatabase() : null; }
